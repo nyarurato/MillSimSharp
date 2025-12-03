@@ -5,16 +5,89 @@ using System.Numerics;
 namespace MillSimSharp.Geometry
 {
     /// <summary>
-    /// Represents a 3D voxel grid for material simulation.
+    /// Sparse Voxel Octree Node
+    /// </summary>
+    public class SVONode
+    {
+        public SVONode[] children;
+        public bool isLeaf;
+        public bool value;
+
+        public SVONode()
+        {
+            children = new SVONode[8];
+            isLeaf = false;
+            value = false;
+        }
+
+        public bool Get(int x, int y, int z, int level, int maxLevel)
+        {
+            if (isLeaf)
+                return value; // true if empty
+
+            if (level >= maxLevel)
+                return false; // not empty
+
+            int childIndex = ((x >> (maxLevel - level - 1)) & 1) |
+                             (((y >> (maxLevel - level - 1)) & 1) << 1) |
+                             (((z >> (maxLevel - level - 1)) & 1) << 2);
+
+            if (children[childIndex] == null)
+                return false; // not empty
+
+            return children[childIndex].Get(x, y, z, level + 1, maxLevel);
+        }
+
+        public void Set(int x, int y, int z, bool val, int level, int maxLevel)
+        {
+            if (level >= maxLevel)
+            {
+                isLeaf = true;
+                value = val; // true for empty
+                return;
+            }
+
+            int childIndex = ((x >> (maxLevel - level - 1)) & 1) |
+                             (((y >> (maxLevel - level - 1)) & 1) << 1) |
+                             (((z >> (maxLevel - level - 1)) & 1) << 2);
+
+            if (children[childIndex] == null)
+                children[childIndex] = new SVONode();
+
+            children[childIndex].Set(x, y, z, val, level + 1, maxLevel);
+        }
+
+        public int CountEmpty(int level, int maxLevel)
+        {
+            if (isLeaf)
+                return value ? 1 : 0;
+
+            if (level >= maxLevel)
+                return 0;
+
+            int count = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                if (children[i] != null)
+                    count += children[i].CountEmpty(level + 1, maxLevel);
+            }
+            return count;
+        }
+    }
+
+    /// <summary>
+    /// Represents a 3D voxel grid for material simulation using Sparse Voxel Octree.
     /// </summary>
     public class VoxelGrid
     {
-        private readonly BitArray _voxels;
+        private SVONode? _root;
         private readonly int _sizeX;
         private readonly int _sizeY;
         private readonly int _sizeZ;
         private readonly float _resolution;
         private readonly BoundingBox _bounds;
+        private readonly int _maxLevel;
+        private readonly int _totalVoxels;
 
         /// <summary>
         /// Gets the resolution (voxel size) in millimeters.
@@ -50,9 +123,14 @@ namespace MillSimSharp.Geometry
             _sizeY = (int)Math.Ceiling(size.Y / resolution);
             _sizeZ = (int)Math.Ceiling(size.Z / resolution);
 
-            // Initialize all voxels as material (true)
-            int totalVoxels = _sizeX * _sizeY * _sizeZ;
-            _voxels = new BitArray(totalVoxels, true);
+            // Calculate max level for SVO
+            int maxDim = Math.Max(_sizeX, Math.Max(_sizeY, _sizeZ));
+            _maxLevel = (int)Math.Ceiling(Math.Log(maxDim, 2));
+
+            _totalVoxels = _sizeX * _sizeY * _sizeZ;
+
+            // Root is null initially, meaning all voxels are material (true)
+            _root = null;
         }
 
         /// <summary>
@@ -107,7 +185,10 @@ namespace MillSimSharp.Geometry
             if (!IsValidIndex(x, y, z))
                 return false;
 
-            return _voxels[GetIndex(x, y, z)];
+            if (_root == null)
+                return true; // default material
+
+            return !_root.Get(x, y, z, 0, _maxLevel); // Get returns true if empty, so ! for material
         }
 
         /// <summary>
@@ -119,7 +200,9 @@ namespace MillSimSharp.Geometry
             if (!IsValidIndex(x, y, z))
                 return;
 
-            _voxels[GetIndex(x, y, z)] = isMaterial;
+            if (_root == null)
+                _root = new SVONode();
+            _root.Set(x, y, z, !isMaterial, 0, _maxLevel); // !isMaterial: true for empty, false for material
         }
 
         /// <summary>
@@ -343,12 +426,9 @@ namespace MillSimSharp.Geometry
             }
         }
 
-        /// <summary>
-        /// Fills the entire grid with material.
-        /// </summary>
         public void Clear()
         {
-            _voxels.SetAll(true);
+            _root = null;
         }
 
         /// <summary>
@@ -356,13 +436,7 @@ namespace MillSimSharp.Geometry
         /// </summary>
         public int CountMaterialVoxels()
         {
-            int count = 0;
-            for (int i = 0; i < _voxels.Length; i++)
-            {
-                if (_voxels[i])
-                    count++;
-            }
-            return count;
+            return _totalVoxels - (_root?.CountEmpty(0, _maxLevel) ?? 0);
         }
 
         /// <summary>

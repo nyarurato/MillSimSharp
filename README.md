@@ -15,7 +15,6 @@ MillSimSharp is a library designed to simulate CNC milling operations using a vo
 **Default Configuration:**
 - Voxel resolution: 0.5mm
 - Work area: 100×100×100mm  
-- Memory usage: ~1MB for default settings
 
 ## Installation
 
