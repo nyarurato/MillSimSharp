@@ -161,16 +161,49 @@ namespace MillSimSharp.Geometry
 
             float radiusSquared = radius * radius;
 
-            for (int z = minZ; z <= maxZ; z++)
+            // Calculate volume to process
+            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+            
+            // Use parallel processing for larger volumes (threshold: 1000 voxels)
+            if (volumeSize > 1000)
             {
-                for (int y = minY; y <= maxY; y++)
+                System.Threading.Tasks.Parallel.For(minZ, maxZ + 1, z =>
                 {
-                    for (int x = minX; x <= maxX; x++)
+                    for (int y = minY; y <= maxY; y++)
                     {
-                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                        if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
+                        // Early rejection: skip Y slice if too far from center
+                        float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
+                        if (yDist > radius) continue;
+
+                        for (int x = minX; x <= maxX; x++)
                         {
-                            SetVoxel(x, y, z, false);
+                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
+                            if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
+                            {
+                                SetVoxel(x, y, z, false);
+                            }
+                        }
+                    }
+                });
+            }
+            else
+            {
+                // Sequential processing for small volumes
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    for (int y = minY; y <= maxY; y++)
+                    {
+                        // Early rejection: skip Y slice if too far from center
+                        float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
+                        if (yDist > radius) continue;
+
+                        for (int x = minX; x <= maxX; x++)
+                        {
+                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
+                            if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
+                            {
+                                SetVoxel(x, y, z, false);
+                            }
                         }
                     }
                 }
@@ -223,38 +256,86 @@ namespace MillSimSharp.Geometry
 
             float radiusSquared = radius * radius;
 
-            for (int z = minZ; z <= maxZ; z++)
+            // Calculate volume to process
+            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+
+            // Use parallel processing for larger volumes
+            if (volumeSize > 1000)
             {
-                for (int y = minY; y <= maxY; y++)
+                System.Threading.Tasks.Parallel.For(minZ, maxZ + 1, z =>
                 {
-                    for (int x = minX; x <= maxX; x++)
+                    for (int y = minY; y <= maxY; y++)
                     {
-                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                        
-                        // Calculate distance from voxel to cylinder axis
-                        Vector3 toVoxel = voxelCenter - start;
-                        float projectionLength = Vector3.Dot(toVoxel, axisDir);
-                        
-                        // Check if projection is within cylinder length with tolerance
-                        if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
+                        for (int x = minX; x <= maxX; x++)
                         {
-                            Vector3 closestPoint = start + axisDir * projectionLength;
-                            float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
+                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
                             
-                            if (distanceSquared <= radiusSquared)
+                            // Calculate distance from voxel to cylinder axis
+                            Vector3 toVoxel = voxelCenter - start;
+                            float projectionLength = Vector3.Dot(toVoxel, axisDir);
+                            
+                            // Check if projection is within cylinder length with tolerance
+                            if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
                             {
-                                SetVoxel(x, y, z, false);
+                                Vector3 closestPoint = start + axisDir * projectionLength;
+                                float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
+                                
+                                if (distanceSquared <= radiusSquared)
+                                {
+                                    SetVoxel(x, y, z, false);
+                                }
+                            }
+                            else if (!flatEnds)
+                            {
+                                // Check distance to end caps (spheres)
+                                float distToStart = Vector3.DistanceSquared(voxelCenter, start);
+                                float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
+                                
+                                if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
+                                {
+                                    SetVoxel(x, y, z, false);
+                                }
                             }
                         }
-                        else if (!flatEnds)
+                    }
+                });
+            }
+            else
+            {
+                // Sequential processing for small volumes
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    for (int y = minY; y <= maxY; y++)
+                    {
+                        for (int x = minX; x <= maxX; x++)
                         {
-                            // Check distance to end caps (spheres)
-                            float distToStart = Vector3.DistanceSquared(voxelCenter, start);
-                            float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
+                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
                             
-                            if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
+                            // Calculate distance from voxel to cylinder axis
+                            Vector3 toVoxel = voxelCenter - start;
+                            float projectionLength = Vector3.Dot(toVoxel, axisDir);
+                            
+                            // Check if projection is within cylinder length with tolerance
+                            if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
                             {
-                                SetVoxel(x, y, z, false);
+                                Vector3 closestPoint = start + axisDir * projectionLength;
+                                float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
+                                
+                                if (distanceSquared <= radiusSquared)
+                                {
+                                    SetVoxel(x, y, z, false);
+                                }
+                            }
+                            else if (!flatEnds)
+                            {
+                                // Check distance to end caps (spheres)
+                                float distToStart = Vector3.DistanceSquared(voxelCenter, start);
+                                float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
+                                
+                                if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
+                                {
+                                    SetVoxel(x, y, z, false);
+                                }
                             }
                         }
                     }
@@ -282,6 +363,15 @@ namespace MillSimSharp.Geometry
                     count++;
             }
             return count;
+        }
+
+        /// <summary>
+        /// Convert this VoxelGrid into a Mesh using the marching cubes algorithm.
+        /// </summary>
+        /// <returns>A Mesh representing the surface of the material in the voxel grid.</returns>
+        public Mesh ToMesh()
+        {
+            return MeshConverter.ConvertToMesh(this);
         }
     }
 }

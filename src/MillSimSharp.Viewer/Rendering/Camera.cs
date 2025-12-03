@@ -9,8 +9,8 @@ namespace MillSimSharp.Viewer.Rendering
     {
         public OpenTK.Mathematics.Vector3 Target { get; set; } = OpenTK.Mathematics.Vector3.Zero;
         public float Distance { get; set; } = 150.0f;
-        public float Yaw { get; set; } = 45.0f;      // Rotation around Y axis (degrees)
-        public float Pitch { get; set; } = 30.0f;    // Rotation around X axis (degrees)
+        public float Yaw { get; set; } = 45.0f;      // Rotation around Z axis (degrees) (azimuth)
+        public float Pitch { get; set; } = 30.0f;    // Elevation angle from XY plane (degrees)
 
         private const float MinDistance = 10.0f;
         private const float MaxDistance = 500.0f;
@@ -23,21 +23,23 @@ namespace MillSimSharp.Viewer.Rendering
             float yawRad = MathHelper.DegreesToRadians(Yaw);
             float pitchRad = MathHelper.DegreesToRadians(Pitch);
 
+            // Recompute using Z-up convention (Z is vertical axis)
             OpenTK.Mathematics.Vector3 position = new OpenTK.Mathematics.Vector3(
-                Distance * MathF.Cos(pitchRad) * MathF.Cos(yawRad),
-                Distance * MathF.Sin(pitchRad),
-                Distance * MathF.Cos(pitchRad) * MathF.Sin(yawRad)
+                Distance * MathF.Cos(pitchRad) * MathF.Cos(yawRad), // X
+                Distance * MathF.Cos(pitchRad) * MathF.Sin(yawRad), // Y
+                Distance * MathF.Sin(pitchRad)                      // Z
             );
 
             position += Target;
 
-            return Matrix4.LookAt(position, Target, OpenTK.Mathematics.Vector3.UnitY);
+            return Matrix4.LookAt(position, Target, OpenTK.Mathematics.Vector3.UnitZ);
         }
 
         public void ProcessMouseMove(float deltaX, float deltaY, float sensitivity = 0.2f)
         {
             Yaw += deltaX * sensitivity;
-            Pitch -= deltaY * sensitivity; // Inverted for natural feel
+            // Flip vertical direction relative to previous behavior (user requested inverted up/down)
+            Pitch += deltaY * sensitivity;
 
             // Clamp pitch to prevent flipping
             Pitch = Math.Clamp(Pitch, MinPitch, MaxPitch);

@@ -34,6 +34,8 @@
 	  <Folder Include="Toolpath\" />
 	  <Folder Include="Simulation\" />
 	  <Folder Include="Util\" />
+	  <Folder Include="Config\" />
+	  <Folder Include="IO\" />
 	</ItemGroup>
 
 </Project>

@@ -49,6 +49,10 @@ grid.RemoveVoxelsInCylinder(start, end, toolRadius);
 
 // Export to STL
 StlExporter.Export(grid, "output.stl");
+
+## Viewer
+
+The `MillSimSharp.Viewer` application automatically looks for a G-code file under `src/MillSimSharp.Viewer/gcodes/test.nc` at startup and, if present, parses it and simulates the toolpath on the voxel grid. Otherwise the viewer falls back to the demo scene.
 ```
 
 ## Requirements

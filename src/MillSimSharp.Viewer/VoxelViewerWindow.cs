@@ -5,6 +5,8 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using MillSimSharp.Geometry;
 using MillSimSharp.Viewer.Rendering;
+using MillSimSharp.Simulation;
+using MillSimSharp.Toolpath;
 using System;
 using System.IO;
 using SysVector3 = System.Numerics.Vector3;
@@ -17,7 +19,11 @@ namespace MillSimSharp.Viewer
         private AxisRenderer? _axisRenderer;
         private Camera? _camera;
         private Shader? _voxelShader;
+        private Shader? _lineShader;
+        private MeshRenderer? _meshRenderer;
+        private Shader? _meshShader;
         private VoxelGrid? _voxelGrid;
+        private ToolpathRenderer? _toolpathRenderer;
 
         private Vector2 _lastMousePos;
         private bool _isMouseDragging;
@@ -48,6 +54,16 @@ namespace MillSimSharp.Viewer
                 Path.Combine(baseDir, "Shaders/voxel.frag")
             );
 
+            _lineShader = new Shader(
+                Path.Combine(baseDir, "Shaders/line.vert"),
+                Path.Combine(baseDir, "Shaders/line.frag")
+            );
+
+            _meshShader = new Shader(
+                Path.Combine(baseDir, "Shaders/mesh.vert"),
+                Path.Combine(baseDir, "Shaders/mesh.frag")
+            );
+
             // Initialize camera
             _camera = new Camera
             {
@@ -57,16 +73,62 @@ namespace MillSimSharp.Viewer
                 Pitch = 30.0f
             };
 
-            // Create demo voxel scene
-            CreateDemoScene();
+            // First try to load a gcodes/test.nc file and run it; otherwise fall back to demo scene
+            string gcodeFile = Path.Combine(baseDir, "gcodes", "test.nc");
+            if (File.Exists(gcodeFile))
+            {
+                // Create a work area that covers reasonable size for the demo G-code
+                var bbox = BoundingBox.FromCenterAndSize(
+                    SysVector3.Zero,
+                    new SysVector3(200, 200, 200)
+                );
+                _voxelGrid = new VoxelGrid(bbox, resolution: 1.0f);
+
+                // Fill keeps material; implement removal via executing toolpath
+                var startPos = new System.Numerics.Vector3(0, 0, 10);
+                List<MillSimSharp.Toolpath.IToolpathCommand>? commands = null;
+                try
+                {
+                    commands = GcodeToPath.ParseFromFile(gcodeFile, new System.Numerics.Vector3(0, 0, 10));
+                    Console.WriteLine($"Loaded G-code file: {gcodeFile}. Commands: {commands.Count}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to parse G-code: {ex.Message}");
+                }
+
+                var simulator = new CutterSimulator(_voxelGrid);
+                var tool = new EndMill(diameter: 10.0f, length: 10.0f, isBallEnd: true);
+                var executor = new ToolpathExecutor(simulator, tool, startPos);
+                if (commands != null)
+                {
+                    executor.ExecuteCommands(commands);
+                }
+
+                if (_toolpathRenderer != null && commands != null)
+                {
+                    _toolpathRenderer.UpdateFromCommands(commands, startPos);
+                }
+            }
+            else
+            {
+                // Create demo voxel scene
+                CreateDemoScene();
+            }
 
             // Initialize renderer
             _renderer = new VoxelRenderer();
             _axisRenderer = new AxisRenderer();
-            if (_voxelGrid != null)
+            _toolpathRenderer = new ToolpathRenderer();
+            _meshRenderer = new MeshRenderer();
+                if (_voxelGrid != null)
             {
                 _renderer.UpdateVoxelData(_voxelGrid);
+                    // Generate a mesh from the voxel grid and update mesh renderer
+                    var mesh = MillSimSharp.Geometry.MeshConverter.ConvertToMesh(_voxelGrid);
+                    _meshRenderer?.UpdateMesh(mesh);
             }
+
 
             Console.WriteLine($"Voxel Viewer initialized");
             Console.WriteLine($"Voxels: {_voxelGrid?.CountMaterialVoxels() ?? 0}");
@@ -139,11 +201,32 @@ namespace MillSimSharp.Viewer
             lightDir.Normalize();
             _voxelShader.SetVector3("uLightDir", lightDir);
 
-            // Render voxels
-            _renderer.Render();
+            // Render mesh if available, otherwise render instanced voxels
+            if (_meshShader != null && _meshRenderer != null)
+            {
+                _meshShader.Use();
+                _meshShader.SetMatrix4("uView", view);
+                _meshShader.SetMatrix4("uProjection", projection);
+                _meshShader.SetVector3("uLightDir", lightDir);
+
+                _meshRenderer.Render();
+            }
+            else
+            {
+                _renderer.Render();
+            }
 
             // Render axes
             _axisRenderer?.Render(view, projection);
+
+            // Render toolpath lines (overlay)
+            if (_lineShader != null && _toolpathRenderer != null)
+            {
+                _lineShader.Use();
+                _lineShader.SetMatrix4("uView", view);
+                _lineShader.SetMatrix4("uProjection", projection);
+                _toolpathRenderer.Render();
+            }
 
             // Swap buffers
             SwapBuffers();
@@ -239,6 +322,10 @@ namespace MillSimSharp.Viewer
             _renderer?.Dispose();
             _axisRenderer?.Dispose();
             _voxelShader?.Dispose();
+            _lineShader?.Dispose();
+            _meshShader?.Dispose();
+            _toolpathRenderer?.Dispose();
+            _meshRenderer?.Dispose();
         }
     }
 }

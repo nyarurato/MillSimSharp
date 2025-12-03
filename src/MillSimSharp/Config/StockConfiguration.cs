@@ -64,6 +64,17 @@ namespace MillSimSharp.Config
         [XmlElement("Z")]
         public float Z { get; set; }
 
+        public Vector3Data()
+        {
+        }
+
+        public Vector3Data(float x, float y, float z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+        }
+
         public Vector3 ToVector3()
         {
             return new Vector3(X, Y, Z);
