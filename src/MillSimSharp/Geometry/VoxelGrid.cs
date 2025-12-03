@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace MillSimSharp.Geometry
@@ -432,11 +433,77 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Returns a dense 3D array of voxel material states for fast access.
+        /// </summary>
+        public bool[][][] ToDenseArray()
+        {
+            bool[][][] dense = new bool[_sizeX][][];
+            for (int x = 0; x < _sizeX; x++)
+            {
+                dense[x] = new bool[_sizeY][];
+                for (int y = 0; y < _sizeY; y++)
+                {
+                    dense[x][y] = new bool[_sizeZ];
+                    for (int z = 0; z < _sizeZ; z++)
+                    {
+                        dense[x][y][z] = GetVoxel(x, y, z);
+                    }
+                }
+            }
+            return dense;
+        }
+
+        /// <summary>
         /// Counts the number of voxels containing material.
         /// </summary>
         public int CountMaterialVoxels()
         {
             return _totalVoxels - (_root?.CountEmpty(0, _maxLevel) ?? 0);
+        }
+
+        /// <summary>
+        /// Get list of occupied voxel coordinates.
+        /// </summary>
+        public List<(int x, int y, int z)> GetOccupiedVoxels()
+        {
+            var list = new List<(int x, int y, int z)>();
+            if (_root == null)
+            {
+                // All voxels are occupied
+                for (int z = 0; z < _sizeZ; z++)
+                for (int y = 0; y < _sizeY; y++)
+                for (int x = 0; x < _sizeX; x++)
+                {
+                    list.Add((x, y, z));
+                }
+            }
+            else
+            {
+                TraverseOccupied(_root, 0, 0, 0, 0, _maxLevel, list);
+            }
+            return list;
+        }
+
+        private void TraverseOccupied(SVONode? node, int x, int y, int z, int level, int maxLevel, List<(int, int, int)> list)
+        {
+            if (level >= maxLevel)
+            {
+                // Leaf level, add the voxel if occupied
+                if (node == null || !node.value)
+                {
+                    list.Add((x, y, z));
+                }
+                return;
+            }
+            int childSize = 1 << (maxLevel - level - 1);
+            for (int i = 0; i < 8; i++)
+            {
+                int cx = x + ((i & 1) != 0 ? childSize : 0);
+                int cy = y + ((i & 2) != 0 ? childSize : 0);
+                int cz = z + ((i & 4) != 0 ? childSize : 0);
+                SVONode child = node?.children[i];
+                TraverseOccupied(child, cx, cy, cz, level + 1, maxLevel, list);
+            }
         }
 
         /// <summary>

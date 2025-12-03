@@ -91,7 +91,7 @@ namespace MillSimSharp.Viewer.Rendering
                 return;
 
             GL.BindVertexArray(_vao);
-            GL.LineWidth(2.0f);
+            GL.LineWidth(3.0f);
             GL.DrawArrays(PrimitiveType.Lines, 0, _vertexCount);
             GL.BindVertexArray(0);
         }

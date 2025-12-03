@@ -7,8 +7,7 @@ using MillSimSharp.Geometry;
 using MillSimSharp.Viewer.Rendering;
 using MillSimSharp.Simulation;
 using MillSimSharp.Toolpath;
-using System;
-using System.IO;
+using System.Diagnostics;
 using SysVector3 = System.Numerics.Vector3;
 
 namespace MillSimSharp.Viewer
@@ -24,6 +23,8 @@ namespace MillSimSharp.Viewer
         private Shader? _meshShader;
         private VoxelGrid? _voxelGrid;
         private ToolpathRenderer? _toolpathRenderer;
+        private List<IToolpathCommand>? _pendingToolpathCommands;
+        private SysVector3 _pendingToolpathStartPos;
 
         private Vector2 _lastMousePos;
         private bool _isMouseDragging;
@@ -35,6 +36,9 @@ namespace MillSimSharp.Viewer
 
         protected override void OnLoad()
         {
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+
             base.OnLoad();
 
             // Set clear color
@@ -82,32 +86,46 @@ namespace MillSimSharp.Viewer
                     SysVector3.Zero,
                     new SysVector3(200, 200, 200)
                 );
+                var gridStopwatch = new Stopwatch();
+                gridStopwatch.Start();
                 _voxelGrid = new VoxelGrid(bbox, resolution: 1.0f);
+                gridStopwatch.Stop();
+                Console.WriteLine($"Voxel grid creation time: {gridStopwatch.ElapsedMilliseconds} ms");
 
                 // Fill keeps material; implement removal via executing toolpath
                 var startPos = new System.Numerics.Vector3(0, 0, 10);
                 List<MillSimSharp.Toolpath.IToolpathCommand>? commands = null;
+                var parseStopwatch = new Stopwatch();
+                parseStopwatch.Start();
                 try
                 {
                     commands = GcodeToPath.ParseFromFile(gcodeFile, new System.Numerics.Vector3(0, 0, 10));
-                    Console.WriteLine($"Loaded G-code file: {gcodeFile}. Commands: {commands.Count}");
+                    parseStopwatch.Stop();
+                    Console.WriteLine($"Loaded G-code file: {gcodeFile}. Commands: {commands.Count}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to parse G-code: {ex.Message}");
+                    parseStopwatch.Stop();
+                    Console.WriteLine($"Failed to parse G-code: {ex.Message}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
 
                 var simulator = new CutterSimulator(_voxelGrid);
                 var tool = new EndMill(diameter: 10.0f, length: 10.0f, isBallEnd: true);
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
+                var execStopwatch = new Stopwatch();
+                execStopwatch.Start();
                 if (commands != null)
                 {
                     executor.ExecuteCommands(commands);
                 }
+                execStopwatch.Stop();
+                Console.WriteLine($"Toolpath execution time: {execStopwatch.ElapsedMilliseconds} ms");
 
-                if (_toolpathRenderer != null && commands != null)
+                // Store commands to update toolpath renderer later
+                if (commands != null)
                 {
-                    _toolpathRenderer.UpdateFromCommands(commands, startPos);
+                    _pendingToolpathCommands = commands;
+                    _pendingToolpathStartPos = startPos;
                 }
             }
             else
@@ -121,21 +139,34 @@ namespace MillSimSharp.Viewer
             _axisRenderer = new AxisRenderer();
             _toolpathRenderer = new ToolpathRenderer();
             _meshRenderer = new MeshRenderer();
-                if (_voxelGrid != null)
+            
+            // Update toolpath renderer if we have pending commands
+            if (_toolpathRenderer != null && _pendingToolpathCommands != null)
+            {
+                _toolpathRenderer.UpdateFromCommands(_pendingToolpathCommands, _pendingToolpathStartPos);
+                Console.WriteLine($"Toolpath segments loaded: {_pendingToolpathCommands.Count}");
+            }
+            
+            if (_voxelGrid != null)
             {
                 _renderer.UpdateVoxelData(_voxelGrid);
-                    // Generate a mesh from the voxel grid and update mesh renderer
-                    var mesh = MillSimSharp.Geometry.MeshConverter.ConvertToMesh(_voxelGrid);
-                    _meshRenderer?.UpdateMesh(mesh);
+                // Generate a mesh from the voxel grid and update mesh renderer
+                var meshStopwatch = new Stopwatch();
+                meshStopwatch.Start();
+                var mesh = MillSimSharp.Geometry.MeshConverter.ConvertToMesh(_voxelGrid);
+                meshStopwatch.Stop();
+                Console.WriteLine($"Mesh conversion time: {meshStopwatch.ElapsedMilliseconds} ms");
+                _meshRenderer?.UpdateMesh(mesh);
             }
-
-
             Console.WriteLine($"Voxel Viewer initialized");
             Console.WriteLine($"Voxels: {_voxelGrid?.CountMaterialVoxels() ?? 0}");
             Console.WriteLine($"Controls:");
             Console.WriteLine($"  - Mouse drag: Rotate camera");
             Console.WriteLine($"  - Mouse wheel: Zoom in/out");
             Console.WriteLine($"  - ESC: Exit");
+
+            stopwatch.Stop();
+            Console.WriteLine($"OnLoad took {stopwatch.ElapsedMilliseconds} ms");
         }
 
         private void CreateDemoScene()
