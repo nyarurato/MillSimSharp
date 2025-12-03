@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;netstandard2.1;</TargetFrameworks>
@@ -28,5 +28,12 @@
 	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|AnyCPU'">
 	  <Optimize>False</Optimize>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <Folder Include="Geometry\" />
+	  <Folder Include="Toolpath\" />
+	  <Folder Include="Simulation\" />
+	  <Folder Include="Util\" />
+	</ItemGroup>
 
 </Project>

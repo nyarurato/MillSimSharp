@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<stock>
+    <WorkOrigin>
+        <X>0</X>
+        <Y>0</Y>
+        <Z>0</Z>
+    </WorkOrigin>
+    <WorkSize>
+        <X>100</X>
+        <Y>100</Y>
+        <Z>100</Z>
+    </WorkSize>
+</stock>

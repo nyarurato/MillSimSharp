@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<tool>
+    <diameter>10</diameter>
+    <length>50</length>
+    <isBallEnd>false</isBallEnd>
+</tool>

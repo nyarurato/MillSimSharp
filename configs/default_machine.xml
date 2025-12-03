@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<machine>
+    <name>Default Machine</name>
+    <axes>
+        <axis>
+            <name>X</name>
+            <min>0</min>
+            <max>100</max>
+        </axis>
+        <axis>
+            <name>Y</name>
+            <min>0</min>
+            <max>100</max>
+        </axis>
+        <axis>
+            <name>Z</name>
+            <min>0</min>
+            <max>100</max>
+        </axis>
+    </axes>
+</machine>
