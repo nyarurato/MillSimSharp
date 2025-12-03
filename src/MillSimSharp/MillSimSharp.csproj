@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.1;</TargetFrameworks>
+    <ImplicitUsings>false</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <LangVersion>latest</LangVersion>
+    <PackageId>MillSimSharp</PackageId>
+    <Title>Mill Sim Sharp</Title>
+    <Authors>kyano</Authors>
+    <Copyright>Copyright (c) kyano 2025</Copyright>
+  </PropertyGroup>
+  
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<DefineConstants>NET8_OR_GREATER</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+		<DefineConstants>NETSTANDARD2_1</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|netstandard2.1|AnyCPU'">
+	  <Optimize>False</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net8.0|AnyCPU'">
+	  <Optimize>False</Optimize>
+	</PropertyGroup>
+
+</Project>
