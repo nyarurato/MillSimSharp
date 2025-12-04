@@ -56,6 +56,7 @@ StlExporter.Export(grid, "output.stl");
 ## Viewer (sample app)
 
 The `MillSimSharp.Viewer` project is a lightweight sample application and visualizer to demonstrate library usage. It is a demo tool and not intended to be a full GUI for production.
+<img width="993" height="583" alt="image" src="https://github.com/user-attachments/assets/da6a58c2-e7e0-47b4-b52d-f8fc8da48fba" />
 
 To run the viewer locally:
 
