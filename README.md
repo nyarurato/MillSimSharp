@@ -1,6 +1,6 @@
 # MillSimSharp
 
-A voxel-based milling simulation library for .NET.
+A voxel-based milling simulation library for .NET — the core library provides a voxel-based representation, SDF generation, and mesh exporting utilities. The project contains a small viewer sample app for demonstrations.
 
 ## Overview
 
@@ -18,11 +18,14 @@ MillSimSharp is a library designed to simulate CNC milling operations using a vo
 
 ## Installation
 
+The library is published to NuGet (GitHub Packages) via CI.   
+you can install it with:
+
 ```bash
 dotnet add package MillSimSharp
 ```
 
-## Quick Start
+## Quick Start (Core library)
 
 ```csharp
 using MillSimSharp.Geometry;
@@ -48,17 +51,29 @@ grid.RemoveVoxelsInCylinder(start, end, toolRadius);
 
 // Export to STL
 StlExporter.Export(grid, "output.stl");
+```
 
+## Viewer (sample app)
 
-## Viewer（Sample App）
+The `MillSimSharp.Viewer` project is a lightweight sample application and visualizer to demonstrate library usage. It is a demo tool and not intended to be a full GUI for production.
 
-`MillSimSharp.Viewer` is provided as a sample application that demonstrates the library usage and offers a visual debugging surface. The core MillSimSharp library is the main project; the viewer is intended for demos and development/testing only.
+To run the viewer locally:
 
-How to use:
+```powershell
+dotnet run --project src\MillSimSharp.Viewer
+```
 
-- The viewer looks for a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc` and, if present, will load and simulate it. Otherwise a demo scene is shown.
+If you have a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc`, the viewer will load and simulate it; otherwise it will run the demo scene.
 
 For more detailed developer information and debugging tips, see `docs/SDF.md` and `docs/DEVELOPER.md`.
+
+## Build and Test (local)
+
+To build and run tests locally
+
+```powershell
+dotnet build
+dotnet test
 ```
 
 ## Requirements
@@ -71,4 +86,7 @@ MIT
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions are welcome!
+- Open an issue to discuss larger feature changes before coding.
+
+Please include unit tests for any behavioral changes.
