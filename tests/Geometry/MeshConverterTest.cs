@@ -186,13 +186,7 @@ namespace MillSimSharp.Tests.Geometry
                 if (Math.Abs(v.Z - smallBbox.Min.Z) < tol) minZ++;
                 if (Math.Abs(v.Z - smallBbox.Max.Z) < tol) maxZ++;
             }
-            // debug prints removed
-            // Print sample vertex positions near the max X boundary for inspection
-            foreach (var v in smallMesh.Vertices)
-            {
-                if (Math.Abs(v.X - smallBbox.Max.X) < 1.0f)
-                    Console.WriteLine($"maxX-vertex: {v}");
-            }
+            
             Assert.That(minX, Is.GreaterThan(0));
             Assert.That(maxX, Is.GreaterThan(0));
             Assert.That(minY, Is.GreaterThan(0));

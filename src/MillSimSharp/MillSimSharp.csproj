@@ -7,10 +7,11 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
-    <PackageId>MillSimSharp</PackageId>
+	<PackageId>MillSimSharp</PackageId>
     <Title>Mill Sim Sharp</Title>
     <Authors>kyano</Authors>
     <Copyright>Copyright (c) kyano 2025</Copyright>
+		<MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
   </PropertyGroup>
   
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
@@ -30,6 +31,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <!-- MinVer tool for automatic versioning from Git --><PackageReference Include="MinVer" Version="2.4.0" PrivateAssets="All" />
 	  <Folder Include="Geometry\" />
 	  <Folder Include="Toolpath\" />
 	  <Folder Include="Simulation\" />
