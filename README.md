@@ -1,6 +1,6 @@
 # Mill Sim Sharp
 
-A voxel-based milling simulation library for .NET — the core library provides a voxel-based representation, SDF generation, and mesh exporting utilities. The project contains a small viewer sample app for demonstrations.
+A voxel-based milling simulation dependency-free library for .NET — the core library provides a voxel-based representation, SDF generation, and mesh exporting utilities. The project contains a small viewer sample app for demonstrations.
 
 ## Overview
 

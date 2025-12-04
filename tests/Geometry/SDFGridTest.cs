@@ -83,16 +83,18 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(sdf, Is.Not.Null);
             Assert.That(sdf.Resolution, Is.EqualTo(0.5f));
             
-            // Test distance at center (should be negative and close to -radius)
+            // Test distance at center
+            // NOTE: Our SDF convention: negative = empty (removed), positive = material
+            // Since we removed a sphere, the center should have negative distance
             float distCenter = sdf.GetDistance(Vector3.Zero);
             
-            Assert.That(distCenter, Is.LessThan(0), "Center should be inside (negative)");
+            Assert.That(distCenter, Is.LessThan(0), "Center should be in empty space (negative)");
             Assert.That(distCenter, Is.GreaterThan(-radius - 1.0f), "Distance should be reasonable");
 
-            // Test distance outside (should be positive)
+            // Test distance outside the removed sphere (should be positive = material)
             Vector3 outsidePoint = new Vector3(radius + 2.0f, 0, 0);
             float distOutside = sdf.GetDistance(outsidePoint);
-            Assert.That(distOutside, Is.GreaterThan(0), "Outside point should have positive distance");
+            Assert.That(distOutside, Is.GreaterThan(0), "Outside point should be in material (positive)");
         }
 
         [Test]

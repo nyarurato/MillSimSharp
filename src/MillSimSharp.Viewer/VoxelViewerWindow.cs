@@ -71,6 +71,7 @@ namespace MillSimSharp.Viewer
             // Enable backface culling
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
+            GL.FrontFace(FrontFaceDirection.Cw);  // Set clockwise as front-facing
 
             // Load shaders
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;

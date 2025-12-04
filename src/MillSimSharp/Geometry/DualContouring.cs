@@ -107,10 +107,13 @@ namespace MillSimSharp.Geometry
             }
 
             // Build cube index
+            // NOTE: Our SDF convention: negative = empty (removed), positive = material
+            // Standard DC expects: negative = material, positive = empty
+            // So we invert the sign check: positive values set the bit
             int cubeIndex = 0;
             for (int i = 0; i < 8; i++)
             {
-                if (cornerVals[i] < 0) cubeIndex |= (1 << i);
+                if (cornerVals[i] > 0) cubeIndex |= (1 << i);
             }
 
             // Skip if all inside or all outside
