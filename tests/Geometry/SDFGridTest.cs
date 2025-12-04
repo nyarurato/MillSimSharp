@@ -85,6 +85,8 @@ namespace MillSimSharp.Tests.Geometry
 
             // Test distance at center (should be negative and close to -radius)
             float distCenter = sdf.GetDistance(Vector3.Zero);
+            
+            Console.WriteLine($"DEBUG: distCenter = {distCenter}");
             Assert.That(distCenter, Is.LessThan(0), "Center should be inside (negative)");
             Assert.That(distCenter, Is.GreaterThan(-radius - 1.0f), "Distance should be reasonable");
 

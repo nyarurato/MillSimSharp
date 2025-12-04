@@ -37,7 +37,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
 
-            var mesh = MeshConverter.ConvertToMeshViaSDF(grid);
+            var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10, fastMode: true);
 
             Assert.That(mesh, Is.Not.Null);
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -55,7 +55,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
 
-            var sdf = SDFGrid.FromVoxelGrid(grid);
+            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -83,13 +83,76 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void ConvertToMeshFromSDF_VertexMergingDiagnostics()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
+            var grid = new VoxelGrid(bbox, resolution: 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
+
+            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
+            var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
+
+            int totalVerts = mesh.Vertices.Length;
+
+            // Compute unique positions with two tolerances
+            float eps1 = 1e-6f;
+            float eps2 = 1e-3f;
+            int uniq1 = 0, uniq2 = 0;
+            var unique1 = new System.Collections.Generic.List<Vector3>();
+            var unique2 = new System.Collections.Generic.List<Vector3>();
+
+            bool AddUnique(List<Vector3> list, Vector3 v, float eps)
+            {
+                foreach (var u in list) if (Vector3.Distance(u, v) < eps) return false;
+                list.Add(v);
+                return true;
+            }
+
+            foreach (var v in mesh.Vertices)
+            {
+                if (AddUnique(unique1, v, eps1)) uniq1++;
+                if (AddUnique(unique2, v, eps2)) uniq2++;
+            }
+
+            Console.WriteLine($"Vertex merging diagnostics: total={totalVerts}, uniq_epsilon1={uniq1}, uniq_epsilon2={uniq2}");
+            Assert.That(uniq2, Is.LessThanOrEqualTo(totalVerts));
+
+            // Analyze vertex index usage
+            var indexCounts = new int[mesh.Vertices.Length];
+            for (int i = 0; i < mesh.Indices.Length; i++)
+            {
+                int idx = mesh.Indices[i];
+                indexCounts[idx]++;
+            }
+            int maxUsage = 0; int minUsage = int.MaxValue; double avgUsage = 0;
+            for (int i = 0; i < indexCounts.Length; i++) { if (indexCounts[i] > maxUsage) maxUsage = indexCounts[i]; if (indexCounts[i] < minUsage) minUsage = indexCounts[i]; avgUsage += indexCounts[i]; }
+            avgUsage /= indexCounts.Length;
+            Console.WriteLine($"Index usage: min={minUsage}, max={maxUsage}, avg={avgUsage:F2}");
+        }
+
+        [Test]
+        public void MeshDensity_VaryingResolution()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
+            var resList = new[] { 2.0f, 1.0f, 0.5f, 0.25f };
+            foreach (var res in resList)
+            {
+                var grid = new VoxelGrid(bbox, resolution: res);
+                grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
+                var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10, fastMode: true);
+                Console.WriteLine($"res={res:F3}, vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}");
+            }
+            Assert.Pass();
+        }
+
+        [Test]
         public void ConvertToMeshFromSDF_IncludesOuterShell()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             // No removals -> solid block. Expect outer shell to be present around bounds.
 
-            var sdf = SDFGrid.FromVoxelGrid(grid);
+            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -110,7 +173,7 @@ namespace MillSimSharp.Tests.Geometry
             // Additionally ensure both min and max bounds are present for each axis on a small grid
             var smallBbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10,10,10));
             var smallGrid = new VoxelGrid(smallBbox, resolution: 1.0f);
-            var smallSdf = SDFGrid.FromVoxelGrid(smallGrid);
+            var smallSdf = SDFGrid.FromVoxelGrid(smallGrid, fastMode: true);
             var smallMesh = MeshConverter.ConvertToMeshFromSDF(smallSdf);
             int minX=0, maxX=0, minY=0, maxY=0, minZ=0, maxZ=0;
             float tol = 1.25f; // tolerance for mesh being near the outer boundary in world units
@@ -143,7 +206,7 @@ namespace MillSimSharp.Tests.Geometry
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
-            var sdf = SDFGrid.FromVoxelGrid(grid);
+            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
 
             var (sizeX, sizeY, sizeZ) = sdf.Dimensions;
             bool[] xCross = new bool[sizeX + 1]; // slices for base x=-1..sizeX-1

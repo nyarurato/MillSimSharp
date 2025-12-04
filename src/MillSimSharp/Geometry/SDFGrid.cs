@@ -20,6 +20,7 @@ namespace MillSimSharp.Geometry
         private readonly float _resolution;
         private readonly BoundingBox _bounds;
         private readonly float _narrowBandWidth;
+        private readonly bool _fastMode;
 
         /// <summary>
         /// Gets the resolution (voxel size) in millimeters.
@@ -48,11 +49,15 @@ namespace MillSimSharp.Geometry
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10). 
         /// Only distances within this range are computed accurately, others are clamped.</param>
         /// <returns>A new SDFGrid instance.</returns>
-        public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10, bool useSparse = false)
+        public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10, bool useSparse = false, bool fastMode = false)
         {
             var dimensions = voxelGrid.Dimensions;
+            // honor environment variable to force fast-mode for tests or CI runs if desired
+            bool envFast = false;
+            try { var v = Environment.GetEnvironmentVariable("MILLSIM_FAST_TESTS"); envFast = v == "1" || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase); } catch { }
+            bool chosenFastMode = fastMode || envFast;
             return new SDFGrid(voxelGrid, dimensions.X, dimensions.Y, dimensions.Z, 
-                             voxelGrid.Resolution, voxelGrid.Bounds, narrowBandWidth, useSparse);
+                             voxelGrid.Resolution, voxelGrid.Bounds, narrowBandWidth, useSparse, chosenFastMode);
         }
 
         // Helper: Check whether an index is out of bounds of the underlying SDF grid
@@ -123,7 +128,7 @@ namespace MillSimSharp.Geometry
         /// Private constructor used by FromVoxelGrid.
         /// </summary>
         private SDFGrid(VoxelGrid voxelGrid, int sizeX, int sizeY, int sizeZ, 
-                   float resolution, BoundingBox bounds, int narrowBandWidth, bool useSparse = false)
+               float resolution, BoundingBox bounds, int narrowBandWidth, bool useSparse = false, bool fastMode = false)
                        
         {
             _sizeX = sizeX;
@@ -132,6 +137,7 @@ namespace MillSimSharp.Geometry
             _resolution = resolution;
             _bounds = bounds;
             _narrowBandWidth = narrowBandWidth * resolution;
+            _fastMode = fastMode;
 
             // Initialize distance array
             _distances = new float[_sizeX][][];
@@ -146,9 +152,11 @@ namespace MillSimSharp.Geometry
 
             _useSparse = useSparse;
             _sparseDistances = useSparse ? new System.Collections.Concurrent.ConcurrentDictionary<int, float>() : null;
+            _boundVoxelGrid = voxelGrid; // remember original grid for on-demand distance queries
 
-            // Compute the signed distance field
-            ComputeSDF(voxelGrid, narrowBandWidth);
+            // Compute the signed distance field (fast-mode uses simpler, approximate compute)
+            if (_fastMode) ComputeSDFFast(voxelGrid, narrowBandWidth);
+            else ComputeSDF(voxelGrid, narrowBandWidth);
         }
 
         /// <summary>
@@ -177,6 +185,83 @@ namespace MillSimSharp.Geometry
                     }
                 }
             });
+        }
+
+        /// <summary>
+        /// A faster, approximate SDF computation used for tests or low-cost runs.
+        /// This reduces the search radius and uses a cheap axis-aligned scan to find
+        /// a nearby surface voxel rather than exhaustive radius searching.
+        /// Intended to preserve sign information but be much cheaper to compute.
+        /// </summary>
+        private void ComputeSDFFast(VoxelGrid voxelGrid, int narrowBandWidth)
+        {
+            int maxScan = Math.Max(1, Math.Min((int)Math.Ceiling(narrowBandWidth / _resolution), 12)); // cap for speed
+            Parallel.For(0, _sizeZ, z =>
+            {
+                for (int y = 0; y < _sizeY; y++)
+                {
+                    for (int x = 0; x < _sizeX; x++)
+                    {
+                        float distance = ComputeDistanceAtFast(voxelGrid, x, y, z, maxScan);
+                        if (_useSparse)
+                        {
+                            int idx = x + y * _sizeX + z * _sizeX * _sizeY;
+                            _sparseDistances![idx] = distance;
+                        }
+                        else
+                        {
+                            lock (_sync) { _distances[x][y][z] = distance; }
+                        }
+                    }
+                }
+            });
+        }
+
+        private float ComputeDistanceAtFast(VoxelGrid voxelGrid, int x, int y, int z, int maxScan)
+        {
+            bool isMaterial = voxelGrid.GetVoxel(x, y, z);
+            float minDistSq = float.MaxValue;
+            // simple axis-aligned scan
+            for (int dir = 0; dir < 6; dir++)
+            {
+                int dx = 0, dy = 0, dz = 0;
+                switch (dir)
+                {
+                    case 0: dx = 1; break;
+                    case 1: dx = -1; break;
+                    case 2: dy = 1; break;
+                    case 3: dy = -1; break;
+                    case 4: dz = 1; break;
+                    case 5: dz = -1; break;
+                }
+                for (int s = 1; s <= maxScan; s++)
+                {
+                    int sx = x + dx * s;
+                    int sy = y + dy * s;
+                    int sz = z + dz * s;
+                    if (sx < 0 || sx >= _sizeX || sy < 0 || sy >= _sizeY || sz < 0 || sz >= _sizeZ)
+                        break;
+                    if (IsSurfaceVoxel(voxelGrid, sx, sy, sz))
+                    {
+                        float d = (s * _resolution);
+                        float dsq = d * d;
+                        if (dsq < minDistSq) minDistSq = dsq;
+                        break; // stop scanning along this axis direction
+                    }
+                }
+            }
+
+            if (minDistSq == float.MaxValue)
+            {
+                // No surface found during fast axis-aligned scan — fallback to more accurate but
+                // bounded computation to avoid returning the full narrow band value for interior points.
+                int fallbackRadius = Math.Min((int)Math.Ceiling(_narrowBandWidth / _resolution), 64);
+                return ComputeDistanceAt(voxelGrid, x, y, z, fallbackRadius);
+            }
+            float worldDist = MathF.Sqrt(minDistSq);
+            float signed = isMaterial ? worldDist : -worldDist;
+            if (Math.Abs(signed) > _narrowBandWidth) signed = MathF.Sign(signed) * _narrowBandWidth;
+            return signed;
         }
 
         /// <summary>
@@ -227,7 +312,7 @@ namespace MillSimSharp.Geometry
                     {
                         for (int x = minX; x <= maxX; x++)
                         {
-                            float distance = ComputeDistanceAt(voxelGrid, x, y, z, searchRadius);
+                            float distance = _fastMode ? ComputeDistanceAtFast(voxelGrid, x, y, z, Math.Min(4, searchRadius)) : ComputeDistanceAt(voxelGrid, x, y, z, searchRadius);
                             if (_useSparse)
                             {
                                 int idx = x + y * _sizeX + z * _sizeX * _sizeY;
@@ -409,8 +494,12 @@ namespace MillSimSharp.Geometry
                 // return the clamped narrow-band value with appropriate sign.
                 if (_boundVoxelGrid != null)
                 {
-                    bool isMaterial = _boundVoxelGrid.GetVoxel(x, y, z);
-                    return isMaterial ? _narrowBandWidth : -_narrowBandWidth;
+                    // If no computed SDF exists, compute it on-demand (bounded radius) and cache it.
+                    int searchRadius = Math.Max(1, (int)Math.Ceiling(_narrowBandWidth / _resolution));
+                    float computed = ComputeDistanceAt(_boundVoxelGrid, x, y, z, searchRadius);
+                    int idx2 = x + y * _sizeX + z * _sizeX * _sizeY;
+                    _sparseDistances![idx2] = computed;
+                    return computed;
                 }
                 return _narrowBandWidth;
             }

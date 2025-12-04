@@ -99,7 +99,9 @@ namespace MillSimSharp.Geometry
 
         private class Vector3Comparer : IEqualityComparer<Vector3>
         {
-            private const float Epsilon = 1e-6f;
+            // Increase epsilon so very close positions are considered equal and merged.
+            // This reduces per-vertex duplication from float rounding of edge interpolation.
+            private const float Epsilon = 1e-3f;
 
             public bool Equals(Vector3 a, Vector3 b)
             {
@@ -126,6 +128,7 @@ namespace MillSimSharp.Geometry
             public List<int> Indices;
             public Dictionary<Vector3, int> VertexMap;
             public Dictionary<Vector3, (Vector3 sum, int count)> NormalSums;
+            public Dictionary<int, float> SdfCache; // per-thread cache for SDF queries (by voxel index)
         }
 
         /// <summary>
@@ -153,7 +156,8 @@ namespace MillSimSharp.Geometry
                     Normals = new List<Vector3>(),
                     Indices = new List<int>(),
                     VertexMap = new Dictionary<Vector3, int>(new Vector3Comparer()),
-                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new Vector3Comparer())
+                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new Vector3Comparer()),
+                    SdfCache = new Dictionary<int, float>()
                 };
             },
             (z, loopState, data) =>
@@ -315,6 +319,8 @@ namespace MillSimSharp.Geometry
                     Indices = new List<int>(),
                     VertexMap = new Dictionary<Vector3, int>(new Vector3Comparer()),
                     NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new Vector3Comparer())
+                    ,
+                    SdfCache = new Dictionary<int, float>()
                 };
             },
             (z, loopState, data) =>
@@ -349,7 +355,23 @@ namespace MillSimSharp.Geometry
                         Vector3[] cornerPos = GetCubeCornerPositions(basePos, res);
                         for (int i = 0; i < cornerPos.Length; i++)
                         {
-                            val[i] = sdf.GetDistance(cornerPos[i]);
+                            // cache SDF samples at grid node positions to avoid re-evaluating expensive calls
+                            int xi = (int)Math.Floor((cornerPos[i].X - sdf.Bounds.Min.X) / res + 1e-6f);
+                            int yi = (int)Math.Floor((cornerPos[i].Y - sdf.Bounds.Min.Y) / res + 1e-6f);
+                            int zi = (int)Math.Floor((cornerPos[i].Z - sdf.Bounds.Min.Z) / res + 1e-6f);
+                            // Clamp indices to valid range to avoid negative or out-of-range keys
+                            xi = Math.Clamp(xi, -1, sizeX); // allow -1..sizeX for boundary samples
+                            yi = Math.Clamp(yi, -1, sizeY);
+                            zi = Math.Clamp(zi, -1, sizeZ);
+                            int strideX = sizeX + 2; // allow -1..sizeX -> mapped to 0..sizeX+1
+                            int strideY = sizeY + 2;
+                            int key = (xi + 1) + (yi + 1) * strideX + (zi + 1) * strideX * strideY;
+                            if (!data.SdfCache.TryGetValue(key, out float cachedVal))
+                            {
+                                cachedVal = sdf.GetDistance(cornerPos[i]);
+                                data.SdfCache[key] = cachedVal;
+                            }
+                            val[i] = cachedVal;
                         }
 
                         // Determine cube index
@@ -453,9 +475,9 @@ namespace MillSimSharp.Geometry
         /// <summary>
         /// Convenience method to convert voxel grid to SDF then to mesh.
         /// </summary>
-        public static Mesh ConvertToMeshViaSDF(VoxelGrid grid, int narrowBandWidth = 10)
+        public static Mesh ConvertToMeshViaSDF(VoxelGrid grid, int narrowBandWidth = 10, bool fastMode = false)
         {
-            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth);
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth, false, fastMode);
             return ConvertToMeshFromSDF(sdf);
         }
     }

@@ -31,6 +31,7 @@ namespace MillSimSharp.Viewer
         private bool _sKeyPrev = false;
         private bool _rKeyPrev = false;
         private bool _nKeyPrev = false;
+        private bool _cKeyPrev = false;
         private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
         private VoxelGrid? _voxelGrid;
@@ -384,6 +385,24 @@ namespace MillSimSharp.Viewer
                 Console.WriteLine($"SDF narrow band width changed to: {_sdfNarrowBandWidth}");
             }
             _nKeyPrev = nDown;
+
+            // C key -> toggle backface culling (debug)
+            bool cDown = KeyboardState.IsKeyDown(Keys.C);
+            if (cDown && !_cKeyPrev)
+            {
+                // Toggle culling
+                if (GL.IsEnabled(EnableCap.CullFace))
+                {
+                    GL.Disable(EnableCap.CullFace);
+                    Console.WriteLine("Backface culling disabled (C)");
+                }
+                else
+                {
+                    GL.Enable(EnableCap.CullFace);
+                    Console.WriteLine("Backface culling enabled (C)");
+                }
+            }
+            _cKeyPrev = cDown;
         }
 
         protected override void OnResize(ResizeEventArgs e)
@@ -466,6 +485,25 @@ namespace MillSimSharp.Viewer
             int localNarrow = _sdfNarrowBandWidth;
             var gridCopy = _voxelGrid; // reference
             var sdfCopy = _sdfGrid; // may be null
+            // If user toggles SDF and no SDFGrid exists yet, create one with safe fast-mode settings
+            if (localUseSDF && sdfCopy == null && gridCopy != null)
+            {
+                long voxelsCountLocal = gridCopy.CountMaterialVoxels();
+                const long SDF_VOXEL_THRESHOLD = 1_000_000;
+                bool useSparseLocal = voxelsCountLocal > SDF_VOXEL_THRESHOLD;
+                bool fastModeLocal = false; // always create accurate SDF for viewer to avoid holes
+                try
+                {
+                    _sdfGrid = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(gridCopy, localNarrow, useSparseLocal, fastModeLocal);
+                    _sdfGrid.BindToVoxelGrid(gridCopy);
+                    sdfCopy = _sdfGrid;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to create SDF grid in viewer: {ex}");
+                    // leave sdfCopy null so we fallback to ConvertToMeshViaSDF which will create an SDF internally
+                }
+            }
 
             Console.WriteLine($"Starting mesh generation (useSDF={localUseSDF}, narrowBand={localNarrow})...");
 
@@ -498,7 +536,8 @@ namespace MillSimSharp.Viewer
                 }
                 else if (t.IsFaulted)
                 {
-                    Console.WriteLine($"Mesh generation failed: {t.Exception?.GetBaseException().Message}");
+                    // Print full exception details to help diagnose failures
+                    Console.WriteLine($"Mesh generation failed: {t.Exception?.ToString()}");
                 }
             }, System.Threading.Tasks.TaskScheduler.Default);
         }
