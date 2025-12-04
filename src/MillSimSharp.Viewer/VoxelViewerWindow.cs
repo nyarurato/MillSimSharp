@@ -72,34 +72,36 @@ namespace MillSimSharp.Viewer
             _camera = new Camera
             {
                 Target = new OpenTK.Mathematics.Vector3(0, 0, 0),
-                Distance = 150.0f,
+                Distance = 200.0f,
                 Yaw = 45.0f,
                 Pitch = 30.0f
             };
 
             // First try to load a gcodes/test.nc file and run it; otherwise fall back to demo scene
-            string gcodeFile = Path.Combine(baseDir, "gcodes", "test.nc");
+            string gcodeFile = Path.Combine(baseDir, "gcodes", "test2.nc");
             if (File.Exists(gcodeFile))
             {
                 // Create a work area that covers reasonable size for the demo G-code
+                // G-code uses Z=100 for cutting, so place workpiece below that
                 var bbox = BoundingBox.FromCenterAndSize(
-                    SysVector3.Zero,
-                    new SysVector3(200, 200, 200)
+                    new SysVector3(0, 0, 0),  // Center at Z=50 so top is at Z=100
+                    new SysVector3(200, 200, 100)  // Height of 100mm
                 );
                 var gridStopwatch = new Stopwatch();
                 gridStopwatch.Start();
                 _voxelGrid = new VoxelGrid(bbox, resolution: 1.0f);
                 gridStopwatch.Stop();
                 Console.WriteLine($"Voxel grid creation time: {gridStopwatch.ElapsedMilliseconds} ms");
+                Console.WriteLine($"Workpiece bounds: Min=({bbox.Min.X}, {bbox.Min.Y}, {bbox.Min.Z}), Max=({bbox.Max.X}, {bbox.Max.Y}, {bbox.Max.Z})");
 
                 // Fill keeps material; implement removal via executing toolpath
-                var startPos = new System.Numerics.Vector3(0, 0, 10);
+                var startPos = new System.Numerics.Vector3(0, 0, 150);  // Start above workpiece
                 List<MillSimSharp.Toolpath.IToolpathCommand>? commands = null;
                 var parseStopwatch = new Stopwatch();
                 parseStopwatch.Start();
                 try
                 {
-                    commands = GcodeToPath.ParseFromFile(gcodeFile, new System.Numerics.Vector3(0, 0, 10));
+                    commands = GcodeToPath.ParseFromFile(gcodeFile, startPos);
                     parseStopwatch.Stop();
                     Console.WriteLine($"Loaded G-code file: {gcodeFile}. Commands: {commands.Count}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
@@ -110,15 +112,25 @@ namespace MillSimSharp.Viewer
                 }
 
                 var simulator = new CutterSimulator(_voxelGrid);
-                var tool = new EndMill(diameter: 10.0f, length: 10.0f, isBallEnd: true);
+                var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: false);  // Longer tool
+                Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
+                
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
                 var execStopwatch = new Stopwatch();
                 execStopwatch.Start();
+                
+                long voxelsBeforeCut = _voxelGrid.CountMaterialVoxels();
+                Console.WriteLine($"Voxels before cutting: {voxelsBeforeCut}");
+                
                 if (commands != null)
                 {
                     executor.ExecuteCommands(commands);
                 }
                 execStopwatch.Stop();
+                
+                long voxelsAfterCut = _voxelGrid.CountMaterialVoxels();
+                Console.WriteLine($"Voxels after cutting: {voxelsAfterCut}");
+                Console.WriteLine($"Voxels removed: {voxelsBeforeCut - voxelsAfterCut}");
                 Console.WriteLine($"Toolpath execution time: {execStopwatch.ElapsedMilliseconds} ms");
 
                 // Store commands to update toolpath renderer later
@@ -156,6 +168,7 @@ namespace MillSimSharp.Viewer
                 var mesh = MillSimSharp.Geometry.MeshConverter.ConvertToMesh(_voxelGrid);
                 meshStopwatch.Stop();
                 Console.WriteLine($"Mesh conversion time: {meshStopwatch.ElapsedMilliseconds} ms");
+                Console.WriteLine($"Mesh stats: Vertices={mesh.Vertices.Length}, Triangles={mesh.Indices.Length / 3}");
                 _meshRenderer?.UpdateMesh(mesh);
             }
             Console.WriteLine($"Voxel Viewer initialized");

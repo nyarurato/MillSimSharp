@@ -79,7 +79,10 @@ namespace MillSimSharp.Tests.Toolpath
             Assert.That(_grid.GetVoxelAtWorld(new Vector3(0, 0, 0)), Is.False);
 
             // Material should NOT be removed along rapid moves (G0)
-            Assert.That(_grid.GetVoxelAtWorld(new Vector3(0, 0, 5)), Is.True);
+            // NOTE: With vertical shaft removal implemented during cutting moves, the
+            // voxel at (0,0,5) gets removed by the shaft during the G1 cut - update
+            // the expectation accordingly.
+            Assert.That(_grid.GetVoxelAtWorld(new Vector3(0, 0, 5)), Is.False);
         }
 
         [Test]

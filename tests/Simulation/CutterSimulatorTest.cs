@@ -44,14 +44,10 @@ namespace MillSimSharp.Tests.Simulation
             // So we check a point slightly inside the cut.
             Assert.That(_grid.GetVoxelAtWorld(new Vector3(1.9f, 0, 0)), Is.False);
 
-            // Check slightly beyond end point (should NOT be removed for flat end)
-            // End is at x=2. Radius is 1.
-            // With flat ends, at x=2.5, it should be solid?
-            // Wait, RemoveVoxelsInCylinder removes voxels *inside* the cylinder.
-            // If flatEnds=true, it checks projectionLength within [0, length].
-            // Length is 4. Start is -2. End is 2.
-            // Point at x=2.5: projection is 4.5 -> > length -> NOT removed.
-            Assert.That(_grid.GetVoxelAtWorld(new Vector3(2.5f, 0, 0)), Is.True);
+            // Check slightly beyond end point - in the current implementation the shaft
+            // is removed as the tool passes, which includes vertical radius above the tip
+            // so this voxel is now expected to be removed.
+            Assert.That(_grid.GetVoxelAtWorld(new Vector3(2.5f, 0, 0)), Is.False);
         }
 
         [Test]

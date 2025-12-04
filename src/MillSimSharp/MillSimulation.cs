@@ -63,19 +63,7 @@ namespace MillSimSharp
             Executor = new ToolpathExecutor(Simulator, Tool, Vector3.Zero);
         }
 
-        /// <summary>
-        /// Creates a simulation from configuration files.
-        /// </summary>
-        /// <param name="toolPath">Path to tool configuration (default: configs/default_tool.xml).</param>
-        /// <param name="stockPath">Path to stock configuration (default: configs/default_stock.xml).</param>
-        /// <param name="resolution">Voxel resolution in millimeters.</param>
-        /// <returns>New MillSimulation instance.</returns>
-        public static MillSimulation FromConfigFiles(string toolPath = null, string stockPath = null, float resolution = 1.0f)
-        {
-            var toolConfig = ConfigurationLoader.LoadToolConfig(toolPath);
-            var stockConfig = ConfigurationLoader.LoadStockConfig(stockPath);
-            return new MillSimulation(stockConfig, toolConfig, resolution);
-        }
+
 
         /// <summary>
         /// Executes a toolpath using the current tool.

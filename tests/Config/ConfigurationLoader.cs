@@ -1,7 +1,8 @@
 using System;
 using System.IO;
+using MillSimSharp.Config;
 
-namespace MillSimSharp.Config
+namespace MillSimSharp.Tests.Config
 {
     /// <summary>
     /// Utility class for loading configurations from XML files.
@@ -28,7 +29,7 @@ namespace MillSimSharp.Config
         /// </summary>
         /// <param name="path">Path to XML file (default: configs/default_tool.xml).</param>
         /// <returns>Tool configuration.</returns>
-        public static ToolConfiguration LoadToolConfig(string path = null)
+        public static ToolConfiguration LoadToolConfig(string? path = null)
         {
             path = path ?? DefaultToolConfigPath;
             if (!File.Exists(path))
@@ -42,7 +43,7 @@ namespace MillSimSharp.Config
         /// </summary>
         /// <param name="path">Path to XML file (default: configs/default_machine.xml).</param>
         /// <returns>Machine configuration.</returns>
-        public static MachineConfiguration LoadMachineConfig(string path = null)
+        public static MachineConfiguration LoadMachineConfig(string? path = null)
         {
             path = path ?? DefaultMachineConfigPath;
             if (!File.Exists(path))
@@ -56,7 +57,7 @@ namespace MillSimSharp.Config
         /// </summary>
         /// <param name="path">Path to XML file (default: configs/default_stock.xml).</param>
         /// <returns>Stock configuration.</returns>
-        public static StockConfiguration LoadStockConfig(string path = null)
+        public static StockConfiguration LoadStockConfig(string? path = null)
         {
             path = path ?? DefaultStockConfigPath;
             if (!File.Exists(path))

@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using MillSimSharp;
 using MillSimSharp.Config;
+using MillSimSharp.Tests.Config;
 using MillSimSharp.Simulation;
 using MillSimSharp.Toolpath;
 using System.Collections.Generic;
@@ -62,7 +63,9 @@ namespace MillSimSharp.Tests.Integration
             var toolPath = Path.Combine(_configPath, "default_tool.xml");
             var stockPath = Path.Combine(_configPath, "default_stock.xml");
 
-            var sim = MillSimulation.FromConfigFiles(toolPath, stockPath, resolution: 2.0f);
+            var toolConfig = ConfigurationLoader.LoadToolConfig(toolPath);
+            var stockConfig = ConfigurationLoader.LoadStockConfig(stockPath);
+            var sim = new MillSimulation(stockConfig, toolConfig, resolution: 2.0f);
 
             Assert.That(sim.Grid, Is.Not.Null);
             Assert.That(sim.Tool, Is.Not.Null);
