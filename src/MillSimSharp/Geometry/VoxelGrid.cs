@@ -81,6 +81,10 @@ namespace MillSimSharp.Geometry
     /// </summary>
     public class VoxelGrid
     {
+        /// <summary>
+        /// Event invoked when voxels are changed. Provides min and max indices of the region that changed.
+        /// </summary>
+        public event Action<int, int, int, int, int, int>? VoxelsChanged;
         private SVONode? _root;
         private readonly int _sizeX;
         private readonly int _sizeY;
@@ -265,14 +269,21 @@ namespace MillSimSharp.Geometry
                             if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
                             {
                                 SetVoxel(x, y, z, false);
+                                // No event here; we'll report changed region after processing
                             }
                         }
                     }
                 });
+                // Conservative report once for the whole bounding box
+                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
+                // Report the entire bounding box as changed (conservative)
+                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
             }
             else
             {
                 // Sequential processing for small volumes
+                int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+                int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     for (int y = minY; y <= maxY; y++)
@@ -287,9 +298,20 @@ namespace MillSimSharp.Geometry
                             if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
                             {
                                 SetVoxel(x, y, z, false);
+                                // Track changed region
+                                if (x < changedMinX) changedMinX = x;
+                                if (y < changedMinY) changedMinY = y;
+                                if (z < changedMinZ) changedMinZ = z;
+                                if (x > changedMaxX) changedMaxX = x;
+                                if (y > changedMaxY) changedMaxY = y;
+                                if (z > changedMaxZ) changedMaxZ = z;
                             }
                         }
                     }
+                }
+                if (changedMinX <= changedMaxX)
+                {
+                    VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
                 }
             }
         }
@@ -381,12 +403,15 @@ namespace MillSimSharp.Geometry
                                 }
                             }
                         }
+                        // Conservative report will be invoked after loop completes
                     }
                 });
             }
             else
             {
                 // Sequential processing for small volumes
+                int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+                int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     for (int y = minY; y <= maxY; y++)
@@ -407,7 +432,16 @@ namespace MillSimSharp.Geometry
                                 
                                 if (distanceSquared <= radiusSquared)
                                 {
-                                    SetVoxel(x, y, z, false);
+                                    if (GetVoxel(x, y, z))
+                                    {
+                                        SetVoxel(x, y, z, false);
+                                        if (x < changedMinX) changedMinX = x;
+                                        if (y < changedMinY) changedMinY = y;
+                                        if (z < changedMinZ) changedMinZ = z;
+                                        if (x > changedMaxX) changedMaxX = x;
+                                        if (y > changedMaxY) changedMaxY = y;
+                                        if (z > changedMaxZ) changedMaxZ = z;
+                                    }
                                 }
                             }
                             else if (!flatEnds)
@@ -418,11 +452,24 @@ namespace MillSimSharp.Geometry
                                 
                                 if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
                                 {
-                                    SetVoxel(x, y, z, false);
+                                    if (GetVoxel(x, y, z))
+                                    {
+                                        SetVoxel(x, y, z, false);
+                                        if (x < changedMinX) changedMinX = x;
+                                        if (y < changedMinY) changedMinY = y;
+                                        if (z < changedMinZ) changedMinZ = z;
+                                        if (x > changedMaxX) changedMaxX = x;
+                                        if (y > changedMaxY) changedMaxY = y;
+                                        if (z > changedMaxZ) changedMaxZ = z;
+                                    }
                                 }
                             }
                         }
                     }
+                }
+                if (changedMinX <= changedMaxX)
+                {
+                    VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
                 }
             }
         }

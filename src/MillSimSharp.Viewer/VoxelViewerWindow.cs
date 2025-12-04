@@ -20,6 +20,18 @@ namespace MillSimSharp.Viewer
         private Shader? _voxelShader;
         private Shader? _lineShader;
         private MeshRenderer? _meshRenderer;
+        private bool _useSDF = true;
+        private int _sdfNarrowBandWidth = 10;
+        private MillSimSharp.Geometry.SDFGrid? _sdfGrid = null;
+        // Async mesh generation fields
+        private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
+        private MillSimSharp.Geometry.Mesh? _pendingMesh;
+        private bool _meshUpdatePending = false;
+        // Key state helper for toggles
+        private bool _sKeyPrev = false;
+        private bool _rKeyPrev = false;
+        private bool _nKeyPrev = false;
+        private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
         private VoxelGrid? _voxelGrid;
         private ToolpathRenderer? _toolpathRenderer;
@@ -112,7 +124,7 @@ namespace MillSimSharp.Viewer
                 }
 
                 var simulator = new CutterSimulator(_voxelGrid);
-                var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: false);  // Longer tool
+                var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);  // Longer tool
                 Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
                 
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
@@ -165,11 +177,36 @@ namespace MillSimSharp.Viewer
                 // Generate a mesh from the voxel grid and update mesh renderer
                 var meshStopwatch = new Stopwatch();
                 meshStopwatch.Start();
-                var mesh = MillSimSharp.Geometry.MeshConverter.ConvertToMesh(_voxelGrid);
+                // Choose SDF vs voxel-based conversion depending on voxel size
+                long voxelsCount = _voxelGrid.CountMaterialVoxels();
+                const long SDF_VOXEL_THRESHOLD = 1_000_000; // threshold to avoid heavy SDF on very large grids
+                if (voxelsCount > SDF_VOXEL_THRESHOLD)
+                {
+                    // Use fast voxel mesh by default; allow user toggle to SDF if desired
+                    _useSDF = false;
+                    _sdfNarrowBandWidth = 2; // if user enables SDF later, use a narrow band to reduce cost
+                    Console.WriteLine($"Large grid detected ({voxelsCount} voxels). Using fast voxel mesh by default. Press 'S' to toggle SDF mode (may be slow).");
+                }
+
+                // If using SDF, create grid and bind to voxel changes
+                if (_useSDF)
+                {
+                    // For very large grids use sparse SDF storage to save memory
+                    bool useSparse = voxelsCount > SDF_VOXEL_THRESHOLD;
+                    _sdfGrid = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(_voxelGrid, _sdfNarrowBandWidth, useSparse);
+                    _sdfGrid.BindToVoxelGrid(_voxelGrid);
+                    _voxelGrid.VoxelsChanged += (minX, minY, minZ, maxX, maxY, maxZ) =>
+                    {
+                        // When voxel changes happen, schedule a mesh recompute
+                        StartMeshGenerationAsync();
+                    };
+                }
+
+                // Kick off mesh generation asynchronously so UI doesn't freeze
+                StartMeshGenerationAsync();
                 meshStopwatch.Stop();
-                Console.WriteLine($"Mesh conversion time: {meshStopwatch.ElapsedMilliseconds} ms");
-                Console.WriteLine($"Mesh stats: Vertices={mesh.Vertices.Length}, Triangles={mesh.Indices.Length / 3}");
-                _meshRenderer?.UpdateMesh(mesh);
+                Console.WriteLine($"Mesh conversion: started async generation (est. narrow-band={_sdfNarrowBandWidth}, useSDF={_useSDF})");
+                // Mesh will be applied once generation completes
             }
             Console.WriteLine($"Voxel Viewer initialized");
             Console.WriteLine($"Voxels: {_voxelGrid?.CountMaterialVoxels() ?? 0}");
@@ -253,6 +290,13 @@ namespace MillSimSharp.Viewer
                 _meshShader.SetMatrix4("uProjection", projection);
                 _meshShader.SetVector3("uLightDir", lightDir);
 
+                // Apply pending mesh update if available (do this on render thread)
+                if (_meshUpdatePending && _pendingMesh != null)
+                {
+                    _meshRenderer.UpdateMesh(_pendingMesh);
+                    _meshUpdatePending = false;
+                    _pendingMesh = null;
+                }
                 _meshRenderer.Render();
             }
             else
@@ -308,6 +352,38 @@ namespace MillSimSharp.Viewer
             {
                 Close();
             }
+
+            // S key -> toggle SDF mode
+            bool sDown = KeyboardState.IsKeyDown(Keys.S);
+            if (sDown && !_sKeyPrev)
+            {
+                _useSDF = !_useSDF;
+                Console.WriteLine($"SDF mode toggled. Now using SDF: {_useSDF}. Recomputing mesh...");
+                StartMeshGenerationAsync();
+            }
+            _sKeyPrev = sDown;
+
+            // R key -> recompute mesh
+            bool rDown = KeyboardState.IsKeyDown(Keys.R);
+            if (rDown && !_rKeyPrev)
+            {
+                Console.WriteLine("Recomputing mesh...");
+                StartMeshGenerationAsync();
+            }
+            _rKeyPrev = rDown;
+
+            // N key -> cycle narrow band widths for SDF
+            bool nDown = KeyboardState.IsKeyDown(Keys.N);
+            if (nDown && !_nKeyPrev)
+            {
+                // Cycle to next band option
+                int currentIndex = Array.IndexOf(_bandOptions, _sdfNarrowBandWidth);
+                if (currentIndex < 0) currentIndex = 0;
+                int nextIndex = (currentIndex + 1) % _bandOptions.Length;
+                _sdfNarrowBandWidth = _bandOptions[nextIndex];
+                Console.WriteLine($"SDF narrow band width changed to: {_sdfNarrowBandWidth}");
+            }
+            _nKeyPrev = nDown;
         }
 
         protected override void OnResize(ResizeEventArgs e)
@@ -370,6 +446,61 @@ namespace MillSimSharp.Viewer
             _meshShader?.Dispose();
             _toolpathRenderer?.Dispose();
             _meshRenderer?.Dispose();
+        }
+
+        /// <summary>
+        /// Start mesh generation on a background thread and apply it on the render thread once ready.
+        /// </summary>
+        private void StartMeshGenerationAsync()
+        {
+            if (_voxelGrid == null) return;
+
+            if (_meshComputeTask != null && !_meshComputeTask.IsCompleted)
+            {
+                Console.WriteLine("Mesh generation already in progress...");
+                return;
+            }
+
+            // Capture local state
+            bool localUseSDF = _useSDF;
+            int localNarrow = _sdfNarrowBandWidth;
+            var gridCopy = _voxelGrid; // reference
+            var sdfCopy = _sdfGrid; // may be null
+
+            Console.WriteLine($"Starting mesh generation (useSDF={localUseSDF}, narrowBand={localNarrow})...");
+
+            _meshComputeTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                if (localUseSDF)
+                {
+                    if (sdfCopy != null)
+                    {
+                        return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(sdfCopy);
+                    }
+                    else
+                    {
+                        return MillSimSharp.Geometry.MeshConverter.ConvertToMeshViaSDF(gridCopy, localNarrow);
+                    }
+                }
+                else
+                {
+                    return MillSimSharp.Geometry.MeshConverter.ConvertToMesh(gridCopy);
+                }
+            });
+
+            _meshComputeTask.ContinueWith((t) =>
+            {
+                if (t.IsCompletedSuccessfully)
+                {
+                    _pendingMesh = t.Result;
+                    _meshUpdatePending = true;
+                    Console.WriteLine($"Mesh generation finished: vertices={_pendingMesh.Vertices.Length}, triangles={_pendingMesh.Indices.Length / 3}");
+                }
+                else if (t.IsFaulted)
+                {
+                    Console.WriteLine($"Mesh generation failed: {t.Exception?.GetBaseException().Message}");
+                }
+            }, System.Threading.Tasks.TaskScheduler.Default);
         }
     }
 }
