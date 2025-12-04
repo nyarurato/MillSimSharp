@@ -25,7 +25,7 @@ dotnet add package MillSimSharp
 ## Quick Start
 
 ```csharp
-using Mill SimSharp.Geometry;
+using MillSimSharp.Geometry;
 
 // Create a work area (100×100×100mm)
 var workArea = BoundingBox.FromCenterAndSize(
@@ -49,9 +49,16 @@ grid.RemoveVoxelsInCylinder(start, end, toolRadius);
 // Export to STL
 StlExporter.Export(grid, "output.stl");
 
-## Viewer
 
-The `MillSimSharp.Viewer` application automatically looks for a G-code file under `src/MillSimSharp.Viewer/gcodes/test.nc` at startup and, if present, parses it and simulates the toolpath on the voxel grid. Otherwise the viewer falls back to the demo scene.
+## Viewer（Sample App）
+
+`MillSimSharp.Viewer` is provided as a sample application that demonstrates the library usage and offers a visual debugging surface. The core MillSimSharp library is the main project; the viewer is intended for demos and development/testing only.
+
+How to use:
+
+- The viewer looks for a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc` and, if present, will load and simulate it. Otherwise a demo scene is shown.
+
+For more detailed developer information and debugging tips, see `docs/SDF.md` and `docs/DEVELOPER.md`.
 ```
 
 ## Requirements
