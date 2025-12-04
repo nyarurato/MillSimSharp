@@ -7,7 +7,7 @@ using System;
 var nativeWindowSettings = new NativeWindowSettings()
 {
     ClientSize = new Vector2i(1280, 720),
-    Title = "MillSimSharp Voxel Viewer",
+    Title = "MillSimSharp SDF Viewer",
     Flags = ContextFlags.ForwardCompatible,
     Profile = ContextProfile.Core,
     API = ContextAPI.OpenGL,

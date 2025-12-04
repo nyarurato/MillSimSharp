@@ -63,6 +63,49 @@ namespace MillSimSharp.IO
             }
         }
 
+        /// <summary>
+        /// Exports a Mesh object to an STL file (binary format).
+        /// </summary>
+        /// <param name="mesh">The mesh to export.</param>
+        /// <param name="filePath">Output file path.</param>
+        public static void Export(Mesh mesh, string filePath)
+        {
+            byte[] stlData = ExportToBytes(mesh);
+            File.WriteAllBytes(filePath, stlData);
+        }
+
+        /// <summary>
+        /// Exports a mesh to STL binary data.
+        /// </summary>
+        /// <param name="mesh">The mesh to export.</param>
+        /// <returns>Binary STL data.</returns>
+        public static byte[] ExportToBytes(Mesh mesh)
+        {
+            List<Triangle> triangles = GenerateTriangles(mesh);
+
+            using (MemoryStream stream = new MemoryStream())
+            using (BinaryWriter writer = new BinaryWriter(stream))
+            {
+                byte[] header = new byte[80];
+                string headerText = "MillSimSharp Mesh Export";
+                byte[] headerBytes = System.Text.Encoding.ASCII.GetBytes(headerText);
+                Array.Copy(headerBytes, header, Math.Min(headerBytes.Length, 80));
+                writer.Write(header);
+
+                writer.Write((uint)triangles.Count);
+
+                foreach (Triangle tri in triangles)
+                {
+                    WriteVector3(writer, tri.Normal);
+                    WriteVector3(writer, tri.V1);
+                    WriteVector3(writer, tri.V2);
+                    WriteVector3(writer, tri.V3);
+                    writer.Write((ushort)0);
+                }
+                return stream.ToArray();
+            }
+        }
+
         private static void WriteVector3(BinaryWriter writer, Vector3 v)
         {
             writer.Write((float)v.X);
@@ -76,6 +119,23 @@ namespace MillSimSharp.IO
             var mesh = Geometry.MeshConverter.ConvertToMesh(grid);
 
             // Mesh was created by expanding triangles for each triangle; convert to Triangle list
+            for (int i = 0; i < mesh.Indices.Length; i += 3)
+            {
+                Vector3 v1 = mesh.Vertices[mesh.Indices[i + 0]];
+                Vector3 v2 = mesh.Vertices[mesh.Indices[i + 1]];
+                Vector3 v3 = mesh.Vertices[mesh.Indices[i + 2]];
+                Vector3 n = mesh.Normals[mesh.Indices[i + 0]];
+                triangles.Add(new Triangle(v1, v2, v3, n));
+            }
+            return triangles;
+        }
+
+        private static List<Triangle> GenerateTriangles(Mesh mesh)
+        {
+            List<Triangle> triangles = new List<Triangle>();
+            if (mesh == null || mesh.Vertices == null || mesh.Indices == null || mesh.Normals == null)
+                return triangles;
+
             for (int i = 0; i < mesh.Indices.Length; i += 3)
             {
                 Vector3 v1 = mesh.Vertices[mesh.Indices[i + 0]];

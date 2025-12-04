@@ -44,6 +44,13 @@
 
 > Note: Viewer はサンプルアプリケーションです。詳細なキー操作や GUI は本ドキュメントの中心ではなく、必要に応じてソースコード（`VoxelViewerWindow.cs`）内の実装を参照してください。
 
+Viewer key operations (sample):
+- `S` : Toggle SDF on/off
+- `R` : Recompute mesh
+- `N` : Cycle SDF narrow band values
+- `C` : Toggle backface culling
+- `E` : Export the currently displayed mesh (or voxel grid) to an STL file saved under `bin/*/exports`
+
 ---
 
 ## テストのベストプラクティス

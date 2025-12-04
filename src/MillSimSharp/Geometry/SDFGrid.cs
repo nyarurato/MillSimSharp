@@ -11,7 +11,7 @@ namespace MillSimSharp.Geometry
     public class SDFGrid
     {
         private readonly object _sync = new object();
-        private readonly float[][][] _distances;
+        private OctreeSDF _octree;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, float>? _sparseDistances;
         private readonly bool _useSparse;
         private readonly int _sizeX;
@@ -111,6 +111,8 @@ namespace MillSimSharp.Geometry
 
         private void OnVoxelGridChanged(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
         {
+            if (_octree == null) return; // Safety check
+            
             // Expand by narrow band in voxel units
             int bandVoxels = Math.Max(1, (int)Math.Ceiling(_narrowBandWidth / _resolution));
             int nx0 = Math.Max(0, minX - bandVoxels);
@@ -120,8 +122,8 @@ namespace MillSimSharp.Geometry
             int ny1 = Math.Min(_sizeY - 1, maxY + bandVoxels);
             int nz1 = Math.Min(_sizeZ - 1, maxZ + bandVoxels);
 
-            // Recompute this region
-            UpdateRegionFromVoxelGrid(_boundVoxelGrid!, nx0, ny0, nz0, nx1, ny1, nz1);
+            // Recompute this region within the octree
+            _octree.UpdateRegion(nx0, ny0, nz0, nx1, ny1, nz1);
         }
 
         /// <summary>
@@ -139,19 +141,11 @@ namespace MillSimSharp.Geometry
             _narrowBandWidth = narrowBandWidth * resolution;
             _fastMode = fastMode;
 
-            // Initialize distance array
-            _distances = new float[_sizeX][][];
-            for (int x = 0; x < _sizeX; x++)
-            {
-                _distances[x] = new float[_sizeY][];
-                for (int y = 0; y < _sizeY; y++)
-                {
-                    _distances[x][y] = new float[_sizeZ];
-                }
-            }
+            // Create octree representation initialized later
 
             _useSparse = useSparse;
             _sparseDistances = useSparse ? new System.Collections.Concurrent.ConcurrentDictionary<int, float>() : null;
+            _octree = null!; // will be assigned by ComputeSDF/ComputeSDFFast
             _boundVoxelGrid = voxelGrid; // remember original grid for on-demand distance queries
 
             // Compute the signed distance field (fast-mode uses simpler, approximate compute)
@@ -165,26 +159,8 @@ namespace MillSimSharp.Geometry
         /// </summary>
         private void ComputeSDF(VoxelGrid voxelGrid, int narrowBandWidth)
         {
-            // Parallel computation for each voxel
-            Parallel.For(0, _sizeZ, z =>
-            {
-                for (int y = 0; y < _sizeY; y++)
-                {
-                    for (int x = 0; x < _sizeX; x++)
-                    {
-                        float distance = ComputeDistanceAt(voxelGrid, x, y, z, narrowBandWidth);
-                        if (_useSparse)
-                        {
-                            int idx = x + y * _sizeX + z * _sizeX * _sizeY;
-                            _sparseDistances![idx] = distance;
-                        }
-                        else
-                        {
-                            lock (_sync) { _distances[x][y][z] = distance; }
-                        }
-                    }
-                }
-            });
+            // Build octree for the voxel grid
+            _octree = new OctreeSDF(voxelGrid, _resolution, _bounds, _sizeX, _sizeY, _sizeZ, _narrowBandWidth, fastMode: false);
         }
 
         /// <summary>
@@ -195,26 +171,8 @@ namespace MillSimSharp.Geometry
         /// </summary>
         private void ComputeSDFFast(VoxelGrid voxelGrid, int narrowBandWidth)
         {
-            int maxScan = Math.Max(1, Math.Min((int)Math.Ceiling(narrowBandWidth / _resolution), 12)); // cap for speed
-            Parallel.For(0, _sizeZ, z =>
-            {
-                for (int y = 0; y < _sizeY; y++)
-                {
-                    for (int x = 0; x < _sizeX; x++)
-                    {
-                        float distance = ComputeDistanceAtFast(voxelGrid, x, y, z, maxScan);
-                        if (_useSparse)
-                        {
-                            int idx = x + y * _sizeX + z * _sizeX * _sizeY;
-                            _sparseDistances![idx] = distance;
-                        }
-                        else
-                        {
-                            lock (_sync) { _distances[x][y][z] = distance; }
-                        }
-                    }
-                }
-            });
+            // Fast mode also builds an octree; can be further optimized if needed
+            _octree = new OctreeSDF(voxelGrid, _resolution, _bounds, _sizeX, _sizeY, _sizeZ, _narrowBandWidth, fastMode: true);
         }
 
         private float ComputeDistanceAtFast(VoxelGrid voxelGrid, int x, int y, int z, int maxScan)
@@ -306,60 +264,20 @@ namespace MillSimSharp.Geometry
             // NOTE: Previously debug logging added here; removed for regular runs.
             if (surfaces.Length == 0)
             {
-                Parallel.For(minZ, maxZ + 1, z =>
+                // Rebuild the entire region at once
+                if (_octree != null)
                 {
-                    for (int y = minY; y <= maxY; y++)
-                    {
-                        for (int x = minX; x <= maxX; x++)
-                        {
-                            float distance = _fastMode ? ComputeDistanceAtFast(voxelGrid, x, y, z, Math.Min(4, searchRadius)) : ComputeDistanceAt(voxelGrid, x, y, z, searchRadius);
-                            if (_useSparse)
-                            {
-                                int idx = x + y * _sizeX + z * _sizeX * _sizeY;
-                                _sparseDistances![idx] = distance;
-                            }
-                            else
-                            {
-                                lock (_sync) { _distances[x][y][z] = distance; }
-                            }
-                        }
-                    }
-                });
+                    _octree.UpdateRegion(minX, minY, minZ, maxX, maxY, maxZ);
+                }
                 return;
             }
 
             // Otherwise compute distances as minimum distance to any surface center in world coordinates
-            Parallel.For(minZ, maxZ + 1, z =>
+            // Update the entire region at once in the octree
+            if (_octree != null)
             {
-                for (int y = minY; y <= maxY; y++)
-                {
-                    for (int x = minX; x <= maxX; x++)
-                    {
-                        var center = VoxelToWorld(x, y, z);
-                        float minDistSq = float.MaxValue;
-                        foreach (var sc in surfaces)
-                        {
-                            float d = Vector3.DistanceSquared(center, sc);
-                            if (d < minDistSq) minDistSq = d;
-                        }
-                        float worldDist = MathF.Sqrt(minDistSq);
-                        float signedDistance = voxelGrid.GetVoxel(x, y, z) ? worldDist : -worldDist;
-                        // No debug logging here anymore.
-                        // Clamp
-                        if (Math.Abs(signedDistance) > _narrowBandWidth)
-                            signedDistance = MathF.Sign(signedDistance) * _narrowBandWidth;
-                        if (_useSparse)
-                        {
-                            int idx = x + y * _sizeX + z * _sizeX * _sizeY;
-                            _sparseDistances![idx] = signedDistance;
-                        }
-                        else
-                        {
-                            lock (_sync) { _distances[x][y][z] = signedDistance; }
-                        }
-                    }
-                }
-            });
+                _octree.UpdateRegion(minX, minY, minZ, maxX, maxY, maxZ);
+            }
         }
 
         /// <summary>
@@ -433,40 +351,7 @@ namespace MillSimSharp.Geometry
         /// </summary>
         private bool IsSurfaceVoxel(VoxelGrid voxelGrid, int x, int y, int z)
         {
-            bool current = voxelGrid.GetVoxel(x, y, z);
-
-            // Check 6-connected neighbors
-            for (int i = 0; i < 6; i++)
-            {
-                int nx = x, ny = y, nz = z;
-                
-                switch (i)
-                {
-                    case 0: nx = x - 1; break;
-                    case 1: nx = x + 1; break;
-                    case 2: ny = y - 1; break;
-                    case 3: ny = y + 1; break;
-                    case 4: nz = z - 1; break;
-                    case 5: nz = z + 1; break;
-                }
-
-                // Check bounds
-                if (nx < 0 || nx >= _sizeX || ny < 0 || ny >= _sizeY || nz < 0 || nz >= _sizeZ)
-                {
-                    // If out of bounds, treat as empty (different from material)
-                    if (current)
-                        return true;
-                    continue;
-                }
-
-                bool neighbor = voxelGrid.GetVoxel(nx, ny, nz);
-                if (neighbor != current)
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return SDFUtils.IsSurfaceVoxel(voxelGrid, x, y, z, _sizeX, _sizeY, _sizeZ);
         }
 
         /// <summary>
@@ -480,31 +365,26 @@ namespace MillSimSharp.Geometry
         {
             if (IsOutOfBoundsIndex(x, y, z))
             {
-                return -DistanceFromVoxelCenterToBounds(x, y, z);
+                // Out of bounds is considered outside (positive distance)
+                // Return positive distance to boundary
+                return DistanceFromVoxelCenterToBounds(x, y, z);
             }
 
-            if (_useSparse)
+            // query from octree
+            try
             {
-                int idx = x + y * _sizeX + z * _sizeX * _sizeY;
-                if (_sparseDistances != null && _sparseDistances.TryGetValue(idx, out float value))
-                    return value;
-                // Fallback: if we have a bound voxel grid, use material to determine sign, but
-                // still return a magnitude that matches the narrow band (we could compute
-                // exact world distance if desired). If a value isn't found in the sparse store,
-                // return the clamped narrow-band value with appropriate sign.
+                return _octree.GetDistanceAtIndex(x, y, z);
+            }
+            catch
+            {
+                // As a fallback, compute on-demand
                 if (_boundVoxelGrid != null)
                 {
-                    // If no computed SDF exists, compute it on-demand (bounded radius) and cache it.
                     int searchRadius = Math.Max(1, (int)Math.Ceiling(_narrowBandWidth / _resolution));
-                    float computed = ComputeDistanceAt(_boundVoxelGrid, x, y, z, searchRadius);
-                    int idx2 = x + y * _sizeX + z * _sizeX * _sizeY;
-                    _sparseDistances![idx2] = computed;
-                    return computed;
+                    return ComputeDistanceAt(_boundVoxelGrid, x, y, z, searchRadius);
                 }
                 return _narrowBandWidth;
             }
-
-            lock (_sync) { return _distances[x][y][z]; }
         }
 
         /// <summary>

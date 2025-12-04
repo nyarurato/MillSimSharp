@@ -61,3 +61,10 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+# Treat .nc files as G-code for syntax highlighting / language detection
+*.nc linguist-language=G-code
+
+# If large .nc files are sample data that you don't want counted in language stats,
+# mark specific files or directories as vendored/generated. Examples:
+# path/to/huge-example.nc linguist-vendored
+*.nc               linguist-vendored
