@@ -328,6 +328,17 @@ namespace MillSimSharp.Geometry
 
         private float GetDistanceAtIndexInternal(OctreeNode node, int x, int y, int z)
         {
+            // With pre-computed SDF, directly read from the array instead of traversing octree
+            if (_precomputedSDF != null)
+            {
+                if (x >= 0 && x < _sizeX && y >= 0 && y < _sizeY && z >= 0 && z < _sizeZ)
+                {
+                    return _precomputedSDF[x, y, z] * _resolution;
+                }
+                return _narrowBand;
+            }
+            
+            // Legacy octree traversal
             if (node.IsLeaf) return node.Value;
             if (node.Children == null) return node.Value; // Safety check
             

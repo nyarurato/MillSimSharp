@@ -21,6 +21,7 @@ namespace MillSimSharp.Geometry
         public static float[,,] ComputeSDF(VoxelGrid voxelGrid, int sizeX, int sizeY, int sizeZ, float narrowBand)
         {
             var sdf = new float[sizeX, sizeY, sizeZ];
+            
             var sw = System.Diagnostics.Stopwatch.StartNew();
             
             // Step 1: Initialize distances
@@ -43,8 +44,8 @@ namespace MillSimSharp.Geometry
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, +1, -1, +1, narrowBand);
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, -1, -1, +1, narrowBand);
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, +1, +1, -1, narrowBand);
-                SweepParallel(sdf, sizeX, sizeY, sizeZ, -1, +1, -1, narrowBand);
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, +1, -1, -1, narrowBand);
+                SweepParallel(sdf, sizeX, sizeY, sizeZ, -1, +1, -1, narrowBand);
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, -1, -1, -1, narrowBand);
             }
             
@@ -89,27 +90,30 @@ namespace MillSimSharp.Geometry
                         }
                         
                         // Initialize:
-                        // - Surface voxels: 0.0 (on the surface)
-                        // - Interior material: -0.5 (will propagate inward)
-                        // - Exterior empty: +narrowBand (will propagate outward)
+                        // - Surface voxels: Small signed distance based on material state
+                        // - Interior empty: negative (inside empty region carved by RemoveVoxels)
+                        // - Interior material: positive (outside empty region, solid material)
+                        // NOTE: This sign convention matches the test expectations where
+                        // negative = inside empty space, positive = inside material
                         if (isSurface)
                         {
-                            sdf[x, y, z] = 0.0f;
+                            // Surface voxels get a small distance with correct sign
+                            // Empty surface: slightly negative (inside empty region)
+                            // Material surface: slightly positive (inside material, outside empty)
+                            sdf[x, y, z] = isMaterial ? 0.1f : -0.1f;
                         }
                         else if (isMaterial)
                         {
-                            sdf[x, y, z] = -0.5f; // Slightly inside
+                            sdf[x, y, z] = 0.5f; // Deep inside material
                         }
                         else
                         {
-                            sdf[x, y, z] = narrowBand; // Far outside
+                            sdf[x, y, z] = -narrowBand; // Deep inside empty region
                         }
                     }
                 }
             });
-        }
-        
-        private static void Sweep(float[,,] sdf, int sizeX, int sizeY, int sizeZ, int xDir, int yDir, int zDir, float narrowBand)
+        }        private static void Sweep(float[,,] sdf, int sizeX, int sizeY, int sizeZ, int xDir, int yDir, int zDir, float narrowBand)
         {
             int xStart = (xDir > 0) ? 0 : sizeX - 1;
             int xEnd = (xDir > 0) ? sizeX : -1;

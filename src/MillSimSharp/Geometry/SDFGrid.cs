@@ -365,9 +365,9 @@ namespace MillSimSharp.Geometry
         {
             if (IsOutOfBoundsIndex(x, y, z))
             {
-                // Out of bounds is considered outside (positive distance)
-                // Return positive distance to boundary
-                return DistanceFromVoxelCenterToBounds(x, y, z);
+                // Out of bounds is considered empty space (outside the grid bounds)
+                // Return negative distance (consistent with "empty" convention)
+                return -DistanceFromVoxelCenterToBounds(x, y, z);
             }
 
             // query from octree
