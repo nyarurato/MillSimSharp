@@ -28,6 +28,7 @@ namespace MillSimSharp.Geometry
         private readonly int _sizeX, _sizeY, _sizeZ;
         private readonly float _narrowBand;
         private readonly OctreeNode _root;
+        private readonly float[,,]? _precomputedSDF; // Pre-computed dense SDF grid (if using Fast Sweeping)
         private readonly List<(int x, int y, int z)> _surfaceVoxels;
         private readonly Dictionary<int, List<(int x, int y, int z)>> _surfaceVoxelGrid; // Spatial hash for fast lookup
         private readonly int _gridCellSize = 8; // Grid cells of 8x8x8 voxels
@@ -47,41 +48,13 @@ namespace MillSimSharp.Geometry
             Console.WriteLine($"  Building octree SDF (narrowBand={narrowBand}, fastMode={fastMode})...");
             var sw = System.Diagnostics.Stopwatch.StartNew();
             
-            // Pre-compute surface voxels efficiently
+            // Use Fast Sweeping Algorithm to pre-compute dense SDF grid
+            _precomputedSDF = FastSweepingSDF.ComputeSDF(voxelGrid, sizeX, sizeY, sizeZ, narrowBand);
+            Console.WriteLine($"  Fast Sweeping SDF computed in {sw.ElapsedMilliseconds} ms");
+            
+            // Surface voxels not needed anymore - SDF is already computed
             _surfaceVoxels = new List<(int, int, int)>();
-            System.Threading.Tasks.Parallel.For(0, _sizeZ, z =>
-            {
-                var localSurface = new List<(int, int, int)>();
-                for (int y = 0; y < _sizeY; y++)
-                {
-                    for (int x = 0; x < _sizeX; x++)
-                    {
-                        // Check if this voxel is on the surface (material/empty boundary)
-                        if (SDFUtils.IsSurfaceVoxel(voxelGrid, x, y, z, sizeX, sizeY, sizeZ))
-                        {
-                            localSurface.Add((x, y, z));
-                        }
-                    }
-                }
-                lock (_surfaceVoxels)
-                {
-                    _surfaceVoxels.AddRange(localSurface);
-                }
-            });
-            
-            Console.WriteLine($"  Found {_surfaceVoxels.Count} surface voxels in {sw.ElapsedMilliseconds} ms");
-            
-            // Build spatial hash grid for fast surface voxel lookup
-            sw.Restart();
             _surfaceVoxelGrid = new Dictionary<int, List<(int x, int y, int z)>>();
-            foreach (var (x, y, z) in _surfaceVoxels)
-            {
-                int key = GetGridKey(x, y, z);
-                if (!_surfaceVoxelGrid.ContainsKey(key))
-                    _surfaceVoxelGrid[key] = new List<(int, int, int)>();
-                _surfaceVoxelGrid[key].Add((x, y, z));
-            }
-            Console.WriteLine($"  Built spatial hash grid in {sw.ElapsedMilliseconds} ms ({_surfaceVoxelGrid.Count} cells)");
             
             int maxDim = Math.Max(_sizeX, Math.Max(_sizeY, _sizeZ));
             int pow2 = 1; while (pow2 < maxDim) pow2 <<= 1;
@@ -110,6 +83,25 @@ namespace MillSimSharp.Geometry
         }
 
         private float SampleDistanceAtVoxel(int x, int y, int z)
+        {
+            // With pre-computed SDF, just read from the grid - O(1) operation!
+            if (_precomputedSDF != null)
+            {
+                // Out of bounds: return positive distance (empty space outside)
+                if (x < 0 || x >= _sizeX || y < 0 || y >= _sizeY || z < 0 || z >= _sizeZ)
+                {
+                    return _narrowBand;
+                }
+                
+                // Convert voxel-space distance to world-space distance
+                return _precomputedSDF[x, y, z] * _resolution;
+            }
+            
+            // Fallback to old method (shouldn't happen)
+            return SampleDistanceAtVoxelLegacy(x, y, z);
+        }
+        
+        private float SampleDistanceAtVoxelLegacy(int x, int y, int z)
         {
             // Check cache first
             int cacheKey = x + y * _sizeX + z * (_sizeX * _sizeY);
@@ -219,25 +211,8 @@ namespace MillSimSharp.Geometry
                 return;
             }
 
-            // Check if this node is near the surface by checking distance to closest surface voxel
-            float minDistToSurface = GetMinDistanceToSurface(node.MinX, node.MinY, node.MinZ, node.Size);
-            
-            // If node is completely outside narrow band, don't subdivide - assign fixed value
-            if (minDistToSurface > _narrowBand)
-            {
-                node.IsLeaf = true;
-                // Determine if inside or outside by checking center voxel
-                int cx = node.MinX + node.Size / 2;
-                int cy = node.MinY + node.Size / 2;
-                int cz = node.MinZ + node.Size / 2;
-                bool isMaterial = (cx >= 0 && cx < _sizeX && cy >= 0 && cy < _sizeY && cz >= 0 && cz < _sizeZ)
-                    ? _voxelGrid.GetVoxel(cx, cy, cz)
-                    : false;
-                node.Value = isMaterial ? -_narrowBand : _narrowBand;
-                return;
-            }
-
-            // Node is near surface - sample corners to decide if we need to subdivide
+            // Sample corners to decide if we need to subdivide
+            // With pre-computed SDF, this is now very fast - just array lookups!
             int sx = node.MinX; int sy = node.MinY; int sz = node.MinZ;
             int s = node.Size - 1; // span
             var samples = new List<float>();
