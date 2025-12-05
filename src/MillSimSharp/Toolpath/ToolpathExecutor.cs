@@ -10,7 +10,7 @@ namespace MillSimSharp.Toolpath
     /// </summary>
     public class ToolpathExecutor
     {
-        private readonly CutterSimulator _simulator;
+        private readonly ICutterSimulator _simulator;
         private readonly Tool _tool;
         private List<IToolpathCommand>? _commands;
         private int _currentCommandIndex = -1;
@@ -41,7 +41,7 @@ namespace MillSimSharp.Toolpath
         /// </summary>
         public bool IsCompleted => _currentCommandIndex >= (TotalCommands - 1);
 
-        public ToolpathExecutor(CutterSimulator simulator, Tool tool, Vector3 initialPosition)
+        public ToolpathExecutor(ICutterSimulator simulator, Tool tool, Vector3 initialPosition)
         {
             _simulator = simulator ?? throw new ArgumentNullException(nameof(simulator));
             _tool = tool ?? throw new ArgumentNullException(nameof(tool));

@@ -28,7 +28,7 @@ namespace MillSimSharp.Geometry
         private readonly int _sizeX, _sizeY, _sizeZ;
         private readonly float _narrowBand;
         private readonly OctreeNode _root;
-        private readonly float[,,]? _precomputedSDF; // Pre-computed dense SDF grid (if using Fast Sweeping)
+        internal float[,,]? _precomputedSDF; // Pre-computed dense SDF grid (if using Fast Sweeping)
         private readonly List<(int x, int y, int z)> _surfaceVoxels;
         private readonly Dictionary<int, List<(int x, int y, int z)>> _surfaceVoxelGrid; // Spatial hash for fast lookup
         private readonly int _gridCellSize = 8; // Grid cells of 8x8x8 voxels
@@ -61,6 +61,37 @@ namespace MillSimSharp.Geometry
             _root = new OctreeNode(0, 0, 0, pow2);
             
             sw.Restart();
+            BuildNode(_root);
+            Console.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
+        }
+
+        /// <summary>
+        /// Constructor that accepts pre-computed SDF array (no VoxelGrid dependency).
+        /// </summary>
+        public OctreeSDF(float[,,] sdf, float resolution, BoundingBox bounds, int sizeX, int sizeY, int sizeZ, float narrowBand)
+        {
+            _voxelGrid = null!; // No VoxelGrid dependency
+            _resolution = resolution;
+            _bounds = bounds;
+            _sizeX = sizeX; _sizeY = sizeY; _sizeZ = sizeZ;
+            _narrowBand = narrowBand;
+            _fastMode = false;
+            _sampleCache = new System.Collections.Concurrent.ConcurrentDictionary<int, float>();
+            
+            Console.WriteLine($"  Building octree from SDF array (narrowBand={narrowBand})...");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            
+            // Use pre-computed SDF directly
+            _precomputedSDF = sdf;
+            
+            // Surface voxels not needed
+            _surfaceVoxels = new List<(int, int, int)>();
+            _surfaceVoxelGrid = new Dictionary<int, List<(int x, int y, int z)>>();
+            
+            int maxDim = Math.Max(_sizeX, Math.Max(_sizeY, _sizeZ));
+            int pow2 = 1; while (pow2 < maxDim) pow2 <<= 1;
+            _root = new OctreeNode(0, 0, 0, pow2);
+            
             BuildNode(_root);
             Console.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
         }

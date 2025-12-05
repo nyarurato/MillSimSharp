@@ -23,7 +23,6 @@ namespace MillSimSharp.Viewer
         private MeshRenderer? _meshRenderer;
         private bool _useSDF = true;
         private int _sdfNarrowBandWidth = 10;
-        private MillSimSharp.Geometry.SDFGrid? _sdfGrid = null;
         // Async mesh generation fields
         private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
@@ -38,7 +37,7 @@ namespace MillSimSharp.Viewer
         private MillSimSharp.Geometry.Mesh? _currentMesh;
         private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
-        private VoxelGrid? _voxelGrid;
+        private SDFGrid? _sdfGrid;
         private ToolpathRenderer? _toolpathRenderer;
         private List<IToolpathCommand>? _pendingToolpathCommands;
         private SysVector3 _pendingToolpathStartPos;
@@ -46,8 +45,8 @@ namespace MillSimSharp.Viewer
         // Step-by-step execution fields
         private bool _stepByStepMode = false;
         private ToolpathExecutor? _stepExecutor;
-        private CutterSimulator? _stepSimulator;
-        private VoxelGrid? _stepVoxelGrid;
+        private SDFCutterSimulator? _stepSimulator;
+        private SDFGrid? _stepSdfGrid;
         private bool _tKeyPrev = false;
         private bool _spaceKeyPrev = false;
         private bool _homeKeyPrev = false;
@@ -124,9 +123,9 @@ namespace MillSimSharp.Viewer
                 );
                 var gridStopwatch = new Stopwatch();
                 gridStopwatch.Start();
-                _voxelGrid = new VoxelGrid(bbox, resolution: 1.0f);
+                _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
                 gridStopwatch.Stop();
-                Console.WriteLine($"Voxel grid creation time: {gridStopwatch.ElapsedMilliseconds} ms");
+                Console.WriteLine($"SDF grid creation time: {gridStopwatch.ElapsedMilliseconds} ms");
                 Console.WriteLine($"Workpiece bounds: Min=({bbox.Min.X}, {bbox.Min.Y}, {bbox.Min.Z}), Max=({bbox.Max.X}, {bbox.Max.Y}, {bbox.Max.Z})");
 
                 // Fill keeps material; implement removal via executing toolpath
@@ -146,9 +145,8 @@ namespace MillSimSharp.Viewer
                     Console.WriteLine($"Failed to parse G-code: {ex.Message}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
 
-                // Execute all commands at once (original behavior)
-                // Don't bind VoxelsChanged event to avoid incremental updates during batch execution
-                var simulator = new CutterSimulator(_voxelGrid);
+                // Execute all commands at once using SDF simulator
+                var simulator = new SDFCutterSimulator(_sdfGrid);
                 var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                 Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
                 
@@ -156,18 +154,12 @@ namespace MillSimSharp.Viewer
                 var execStopwatch = new Stopwatch();
                 execStopwatch.Start();
                 
-                long voxelsBeforeCut = _voxelGrid.CountMaterialVoxels();
-                Console.WriteLine($"Voxels before cutting: {voxelsBeforeCut}");
-                
                 if (commands != null)
                 {
                     executor.ExecuteCommands(commands);
                 }
                 execStopwatch.Stop();
                 
-                long voxelsAfterCut = _voxelGrid.CountMaterialVoxels();
-                Console.WriteLine($"Voxels after cutting: {voxelsAfterCut}");
-                Console.WriteLine($"Voxels removed: {voxelsBeforeCut - voxelsAfterCut}");
                 Console.WriteLine($"Toolpath execution time: {execStopwatch.ElapsedMilliseconds} ms");
 
                 // Store commands for step-by-step execution later
@@ -196,117 +188,14 @@ namespace MillSimSharp.Viewer
                 Console.WriteLine($"Toolpath segments loaded: {_pendingToolpathCommands.Count}");
             }
             
-            if (_voxelGrid != null)
+            if (_sdfGrid != null)
             {
-                _renderer.UpdateVoxelData(_voxelGrid);
-                // Check voxel count to determine mesh generation strategy
-                long voxelsCount = _voxelGrid.CountMaterialVoxels();
-                const long SDF_VOXEL_THRESHOLD = 1_000_000;
-                
-                if (voxelsCount > SDF_VOXEL_THRESHOLD)
-                {
-                    // Use SDF with narrow band for large grids
-                    _useSDF = true;
-                    _sdfNarrowBandWidth = 2;
-                    Console.WriteLine($"Large grid detected ({voxelsCount} voxels). Using SDF with narrow band width of {_sdfNarrowBandWidth}.");
-                    Console.WriteLine($"SDF grid and mesh will be generated in background. Press 'R' to regenerate if needed.");
-                    Console.WriteLine($"Estimated SDF generation time: ~{EstimateSdfTime(voxelsCount, _sdfNarrowBandWidth)} seconds");
-                    
-                    // Start SDF generation in background to avoid blocking startup
-                    var gridCopy = _voxelGrid;
-                    var narrowBand = _sdfNarrowBandWidth;
-                    bool useSparse = voxelsCount > SDF_VOXEL_THRESHOLD;
-                    
-                    _sdfGenerationInProgress = true;
-                    _processingStatus = "Generating SDF...";
-                    
-                    Console.WriteLine($"Starting SDF generation task... (voxels={voxelsCount}, narrowBand={narrowBand}, sparse={useSparse})");
-                    
-                    System.Threading.Tasks.Task.Run(() =>
-                    {
-                        MillSimSharp.Geometry.SDFGrid? sdf = null;
-                        try
-                        {
-                            var sdfStopwatch = new Stopwatch();
-                            sdfStopwatch.Start();
-                            
-                            Console.WriteLine($"SDF generation thread started. About to call FromVoxelGrid...");
-                            
-                            // Progress reporting task - more frequent updates
-                            var progressTask = System.Threading.Tasks.Task.Run(async () =>
-                            {
-                                int reportCount = 0;
-                                while (_sdfGenerationInProgress)
-                                {
-                                    await System.Threading.Tasks.Task.Delay(2000); // Every 2 seconds
-                                    if (_sdfGenerationInProgress)
-                                    {
-                                        reportCount++;
-                                        Console.WriteLine($"[{reportCount}] SDF generation in progress... ({sdfStopwatch.ElapsedMilliseconds / 1000}s elapsed)");
-                                    }
-                                }
-                            });
-                            
-                            sdf = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(gridCopy, narrowBand, useSparse);
-                            _sdfGenerationInProgress = false;
-                            sdfStopwatch.Stop();
-                            Console.WriteLine($"SDF grid creation completed: {sdfStopwatch.ElapsedMilliseconds} ms ({sdfStopwatch.ElapsedMilliseconds / 1000.0:F1}s, sparse={useSparse})");
-                        }
-                        catch (Exception ex)
-                        {
-                            _sdfGenerationInProgress = false;
-                            _processingStatus = "SDF generation failed";
-                            Console.WriteLine($"SDF generation failed with exception: {ex.Message}");
-                            Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                            return;
-                        }
-                        
-                        if (sdf == null)
-                        {
-                            Console.WriteLine($"SDF generation returned null!");
-                            return;
-                        }
-                        
-                        // Update on main thread
-                        _sdfGrid = sdf;
-                        _sdfGrid.BindToVoxelGrid(gridCopy);
-                        gridCopy.VoxelsChanged += (minX, minY, minZ, maxX, maxY, maxZ) =>
-                        {
-                            // When voxel changes happen, schedule a mesh recompute
-                            StartMeshGenerationAsync();
-                        };
-                        
-                        _processingStatus = "Generating mesh...";
-                        // Auto-generate mesh after SDF is ready
-                        StartMeshGenerationAsync();
-                    });
-                }
-                else
-                {
-                    // For smaller grids, create SDF synchronously
-                    if (_useSDF)
-                    {
-                        var sdfStopwatch = new Stopwatch();
-                        sdfStopwatch.Start();
-                        bool useSparse = voxelsCount > SDF_VOXEL_THRESHOLD;
-                        _sdfGrid = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(_voxelGrid, _sdfNarrowBandWidth, useSparse);
-                        sdfStopwatch.Stop();
-                        Console.WriteLine($"SDF grid creation time: {sdfStopwatch.ElapsedMilliseconds} ms (sparse={useSparse})");
-                        
-                        _sdfGrid.BindToVoxelGrid(_voxelGrid);
-                        _voxelGrid.VoxelsChanged += (minX, minY, minZ, maxX, maxY, maxZ) =>
-                        {
-                            // When voxel changes happen, schedule a mesh recompute
-                            StartMeshGenerationAsync();
-                        };
-                    }
-                    
-                    // Kick off mesh generation asynchronously
-                    StartMeshGenerationAsync();
-                }
+                // SDF grid is already initialized, just generate mesh
+                Console.WriteLine("Starting mesh generation...");
+                StartMeshGenerationAsync();
             }
+            
             Console.WriteLine($"Voxel Viewer initialized");
-            Console.WriteLine($"Voxels: {_voxelGrid?.CountMaterialVoxels() ?? 0}");
             Console.WriteLine($"Controls:");
             Console.WriteLine($"  - Mouse drag: Rotate camera");
             Console.WriteLine($"  - Mouse wheel: Zoom in/out");
@@ -339,25 +228,25 @@ namespace MillSimSharp.Viewer
                 SysVector3.Zero,
                 new SysVector3(100, 100, 100)
             );
-            _voxelGrid = new VoxelGrid(bbox, resolution: 1.0f);
+            _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
 
             // Remove a sphere in the center
-            _voxelGrid.RemoveVoxelsInSphere(SysVector3.Zero, radius: 50.0f);
+            _sdfGrid.RemoveSphere(SysVector3.Zero, radius: 50.0f);
 
             // Remove some cylinders for visual interest
-            _voxelGrid.RemoveVoxelsInCylinder(
+            _sdfGrid.RemoveCylinder(
                 new SysVector3(-40, 0, 50),
                 new SysVector3(40, 0, 50),
                 radius: 10.0f
             );
 
-            _voxelGrid.RemoveVoxelsInCylinder(
+            _sdfGrid.RemoveCylinder(
                 new SysVector3(50, -40, 0),
                 new SysVector3(50, 40, 0),
                 radius: 10.0f
             );
 
-            _voxelGrid.RemoveVoxelsInCylinder(
+            _sdfGrid.RemoveCylinder(
                 new SysVector3(0, 50, -40),
                 new SysVector3(0, 50, 40),
                 radius: 10.0f
@@ -388,7 +277,7 @@ namespace MillSimSharp.Viewer
 
             _voxelShader.SetMatrix4("uView", view);
             _voxelShader.SetMatrix4("uProjection", projection);
-            _voxelShader.SetFloat("uVoxelSize", _voxelGrid?.Resolution ?? 1.0f);
+            _voxelShader.SetFloat("uVoxelSize", _sdfGrid?.Resolution ?? 1.0f);
 
             // Set light direction (Directional light pointing from above, Z+)
             Vector3 lightDir = new Vector3(0.3f, 0.3f, -0.3f);
@@ -454,9 +343,7 @@ namespace MillSimSharp.Viewer
                 string statusSuffix = string.IsNullOrEmpty(_processingStatus) ? "" : $" - {_processingStatus}";
                 int triangles = _currentMesh?.Indices.Length / 3 ?? 0;
                 
-                // Use step grid if in step mode
-                var activeGrid = _stepByStepMode ? _stepVoxelGrid : _voxelGrid;
-                string meshInfo = triangles > 0 ? $" - Triangles: {triangles}" : $" - Voxels: {activeGrid?.CountMaterialVoxels() ?? 0}";
+                string meshInfo = triangles > 0 ? $" - Triangles: {triangles}" : "";
                 
                 // Add step execution info
                 string stepInfo = "";
@@ -552,16 +439,17 @@ namespace MillSimSharp.Viewer
                             Console.WriteLine($"Exported current mesh to: {filePath}");
                         });
                     }
-                    else if (_voxelGrid != null)
+                    else if (_sdfGrid != null)
                     {
                         System.Threading.Tasks.Task.Run(() => {
-                            MillSimSharp.IO.StlExporter.Export(_voxelGrid, filePath);
-                            Console.WriteLine($"Exported voxel grid to: {filePath}");
+                            var mesh = MeshConverter.ConvertToMeshFromSDF(_sdfGrid);
+                            MillSimSharp.IO.StlExporter.Export(mesh, filePath);
+                            Console.WriteLine($"Exported SDF mesh to: {filePath}");
                         });
                     }
                     else
                     {
-                        Console.WriteLine("No mesh or voxel grid available to export.");
+                        Console.WriteLine("No mesh or SDF grid available to export.");
                     }
                 }
                 catch (Exception ex)
@@ -578,52 +466,26 @@ namespace MillSimSharp.Viewer
                 _stepByStepMode = !_stepByStepMode;
                 Console.WriteLine($"Step-by-step mode: {(_stepByStepMode ? "ON" : "OFF")}");
                 
-                if (_stepByStepMode && _pendingToolpathCommands != null && _voxelGrid != null)
+                if (_stepByStepMode && _pendingToolpathCommands != null && _sdfGrid != null)
                 {
                     // Initialize step execution
-                    var bbox = _voxelGrid.Bounds;
-                    _stepVoxelGrid = new VoxelGrid(bbox, _voxelGrid.Resolution);
-                    _stepSimulator = new CutterSimulator(_stepVoxelGrid);
+                    var bbox = _sdfGrid.Bounds;
+                    _stepSdfGrid = new SDFGrid(bbox, _sdfGrid.Resolution, narrowBandWidth: 2, useSparse: true);
+                    _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands);
                     
-                    // Create new SDF for step voxel grid
-                    // Don't reuse the existing SDF - create a fresh one for the step grid
-                    if (_useSDF)
-                    {
-                        Console.WriteLine("Creating SDF for step-by-step mode...");
-                        long voxelsCount = _stepVoxelGrid.CountMaterialVoxels();
-                        const long SDF_VOXEL_THRESHOLD = 1_000_000;
-                        bool useSparse = voxelsCount > SDF_VOXEL_THRESHOLD;
-                        
-                        // Create SDF synchronously for step mode (it's fast for initial state)
-                        var stepSdf = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(_stepVoxelGrid, _sdfNarrowBandWidth, useSparse);
-                        stepSdf.BindToVoxelGrid(_stepVoxelGrid);
-                        
-                        // Replace the global SDF with step SDF
-                        _sdfGrid?.UnbindFromVoxelGrid();
-                        _sdfGrid = stepSdf;
-                        
-                        Console.WriteLine("Step SDF created successfully.");
-                    }
-                    
-                    // Update renderer to use step grid
-                    _renderer?.UpdateVoxelData(_stepVoxelGrid);
+
                     
                     Console.WriteLine($"Step executor initialized. Total commands: {_stepExecutor.TotalCommands}, Step size: {_stepExecutor.StepSize}");
                 }
                 else if (!_stepByStepMode)
                 {
                     // Restore original grid
-                    if (_voxelGrid != null)
+                    if (_sdfGrid != null)
                     {
-                        _renderer?.UpdateVoxelData(_voxelGrid);
-                        if (_useSDF && _sdfGrid != null)
-                        {
-                            _sdfGrid.UnbindFromVoxelGrid();
-                            _sdfGrid.BindToVoxelGrid(_voxelGrid);
-                        }
+                        StartMeshGenerationAsync();
                     }
                 }
             }
@@ -633,14 +495,11 @@ namespace MillSimSharp.Viewer
             bool spaceDown = KeyboardState.IsKeyDown(Keys.Space);
             if (spaceDown && !_spaceKeyPrev && _stepByStepMode && _stepExecutor != null)
             {
-                long voxelsBefore = _stepVoxelGrid?.CountMaterialVoxels() ?? 0;
                 int executed = _stepExecutor.ExecuteNextSteps();
-                long voxelsAfter = _stepVoxelGrid?.CountMaterialVoxels() ?? 0;
                 
                 if (executed > 0)
                 {
                     Console.WriteLine($"Executed {executed} step(s). Progress: {_stepExecutor.CurrentCommandIndex + 1}/{_stepExecutor.TotalCommands}");
-                    Console.WriteLine($"  Voxels: {voxelsBefore} -> {voxelsAfter} (removed: {voxelsBefore - voxelsAfter})");
                     // Trigger mesh update
                     StartMeshGenerationAsync();
                 }
@@ -656,23 +515,16 @@ namespace MillSimSharp.Viewer
             if (homeDown && !_homeKeyPrev && _stepByStepMode && _stepExecutor != null)
             {
                 _stepExecutor.Reset();
-                if (_stepVoxelGrid != null)
+                if (_stepSdfGrid != null)
                 {
                     // Reset voxel grid
-                    var bbox = _stepVoxelGrid.Bounds;
-                    _stepVoxelGrid = new VoxelGrid(bbox, _stepVoxelGrid.Resolution);
-                    _stepSimulator = new CutterSimulator(_stepVoxelGrid);
+                    var bbox = _stepSdfGrid.Bounds;
+                    _stepSdfGrid = new SDFGrid(bbox, _stepSdfGrid.Resolution, narrowBandWidth: 2, useSparse: true);
+                    _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands!);
-                    
-                    _renderer?.UpdateVoxelData(_stepVoxelGrid);
-                    if (_useSDF && _sdfGrid != null)
-                    {
-                        _sdfGrid.UnbindFromVoxelGrid();
-                        _sdfGrid.BindToVoxelGrid(_stepVoxelGrid);
-                    }
-                    
+                                       
                     StartMeshGenerationAsync();
                 }
                 Console.WriteLine("Reset to beginning.");
@@ -769,7 +621,7 @@ namespace MillSimSharp.Viewer
         /// </summary>
         private void StartMeshGenerationAsync()
         {
-            if (_voxelGrid == null) return;
+            if (_sdfGrid == null) return;
 
             if (_meshComputeTask != null && !_meshComputeTask.IsCompleted)
             {
@@ -782,27 +634,14 @@ namespace MillSimSharp.Viewer
             int localNarrow = _sdfNarrowBandWidth;
             
             // Use step grid if in step mode, otherwise use original grid
-            var gridCopy = _stepByStepMode ? _stepVoxelGrid : _voxelGrid;
+            var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
             var sdfCopy = _sdfGrid; // may be null
             
             // If user toggles SDF and no SDFGrid exists yet, create one with safe fast-mode settings
             if (localUseSDF && sdfCopy == null && gridCopy != null)
             {
-                long voxelsCountLocal = gridCopy.CountMaterialVoxels();
                 const long SDF_VOXEL_THRESHOLD = 1_000_000;
-                bool useSparseLocal = voxelsCountLocal > SDF_VOXEL_THRESHOLD;
-                bool fastModeLocal = false; // always create accurate SDF for viewer to avoid holes
-                try
-                {
-                    _sdfGrid = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(gridCopy, localNarrow, useSparseLocal, fastModeLocal);
-                    _sdfGrid.BindToVoxelGrid(gridCopy);
-                    sdfCopy = _sdfGrid;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to create SDF grid in viewer: {ex}");
-                    // leave sdfCopy null so we fallback to ConvertToMeshViaSDF which will create an SDF internally
-                }
+                
             }
 
             _meshGenerationInProgress = true;
@@ -827,21 +666,8 @@ namespace MillSimSharp.Viewer
 
             _meshComputeTask = System.Threading.Tasks.Task.Run(() =>
             {
-                if (localUseSDF)
-                {
-                    if (sdfCopy != null)
-                    {
-                        return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(sdfCopy);
-                    }
-                    else
-                    {
-                        return MillSimSharp.Geometry.MeshConverter.ConvertToMeshViaSDF(gridCopy, localNarrow);
-                    }
-                }
-                else
-                {
-                    return MillSimSharp.Geometry.MeshConverter.ConvertToMesh(gridCopy);
-                }
+                // Generate mesh directly from SDF
+                return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(gridCopy);
             });
 
             _meshComputeTask.ContinueWith((t) =>

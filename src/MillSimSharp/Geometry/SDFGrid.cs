@@ -43,6 +43,31 @@ namespace MillSimSharp.Geometry
         public float NarrowBandWidth => _narrowBandWidth;
 
         /// <summary>
+        /// Creates an empty SDF grid with all material (positive distances).
+        /// </summary>
+        /// <param name="bounds">Bounding box of the SDF grid.</param>
+        /// <param name="resolution">Voxel size in millimeters.</param>
+        /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
+        /// <param name="useSparse">Use sparse storage for large grids.</param>
+        public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10, bool useSparse = false)
+        {
+            var size = bounds.Max - bounds.Min;
+            _sizeX = (int)Math.Ceiling(size.X / resolution);
+            _sizeY = (int)Math.Ceiling(size.Y / resolution);
+            _sizeZ = (int)Math.Ceiling(size.Z / resolution);
+            _resolution = resolution;
+            _bounds = bounds;
+            _narrowBandWidth = narrowBandWidth * resolution;
+            _fastMode = false;
+            _useSparse = useSparse;
+            _sparseDistances = useSparse ? new System.Collections.Concurrent.ConcurrentDictionary<int, float>() : null;
+            _boundVoxelGrid = null;
+
+            // Initialize with all material (positive distances)
+            InitializeEmpty(narrowBandWidth);
+        }
+
+        /// <summary>
         /// Creates a Signed Distance Field grid from a VoxelGrid.
         /// </summary>
         /// <param name="voxelGrid">The source voxel grid.</param>
@@ -143,6 +168,24 @@ namespace MillSimSharp.Geometry
             // Compute the signed distance field (fast-mode uses simpler, approximate compute)
             if (_fastMode) ComputeSDFFast(voxelGrid, narrowBandWidth);
             else ComputeSDF(voxelGrid, narrowBandWidth);
+        }
+
+        /// <summary>
+        /// Initialize empty SDF grid with all material.
+        /// </summary>
+        private void InitializeEmpty(int narrowBandWidth)
+        {
+            // Create SDF array with all positive values (material)
+            var sdf = new float[_sizeX, _sizeY, _sizeZ];
+            for (int z = 0; z < _sizeZ; z++)
+            for (int y = 0; y < _sizeY; y++)
+            for (int x = 0; x < _sizeX; x++)
+            {
+                sdf[x, y, z] = narrowBandWidth; // All material
+            }
+
+            // Build octree from SDF array
+            _octree = new OctreeSDF(sdf, _resolution, _bounds, _sizeX, _sizeY, _sizeZ, _narrowBandWidth);
         }
 
         /// <summary>
@@ -474,6 +517,104 @@ namespace MillSimSharp.Geometry
             }
             
             return Vector3.UnitY; // Default normal if gradient is zero
+        }
+
+        /// <summary>
+        /// Removes material in a spherical region by updating the SDF.
+        /// </summary>
+        /// <param name="center">Center of the sphere in world coordinates.</param>
+        /// <param name="radius">Radius of the sphere.</param>
+        public void RemoveSphere(Vector3 center, float radius)
+        {
+            // Convert to voxel space
+            var (cx, cy, cz) = WorldToVoxel(center);
+            int voxelRadius = (int)Math.Ceiling(radius / _resolution);
+
+            // Determine affected region
+            int minX = Math.Max(0, cx - voxelRadius);
+            int maxX = Math.Min(_sizeX - 1, cx + voxelRadius);
+            int minY = Math.Max(0, cy - voxelRadius);
+            int maxY = Math.Min(_sizeY - 1, cy + voxelRadius);
+            int minZ = Math.Max(0, cz - voxelRadius);
+            int maxZ = Math.Min(_sizeZ - 1, cz + voxelRadius);
+
+            // Update SDF values in the affected region
+            if (_octree?._precomputedSDF != null)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                for (int y = minY; y <= maxY; y++)
+                for (int x = minX; x <= maxX; x++)
+                {
+                    Vector3 voxelCenter = VoxelToWorld(x, y, z);
+                    float distToCenter = Vector3.Distance(voxelCenter, center);
+                    float sdfValue = distToCenter - radius;
+
+                    // Update to negative (empty) if inside sphere
+                    if (sdfValue < _octree._precomputedSDF[x, y, z])
+                    {
+                        _octree._precomputedSDF[x, y, z] = sdfValue;
+                    }
+                }
+
+                // Rebuild octree for the affected region
+                _octree.UpdateRegion(minX, minY, minZ, maxX, maxY, maxZ);
+            }
+        }
+
+        /// <summary>
+        /// Removes material in a cylindrical region by updating the SDF.
+        /// </summary>
+        /// <param name="start">Start point of the cylinder axis.</param>
+        /// <param name="end">End point of the cylinder axis.</param>
+        /// <param name="radius">Radius of the cylinder.</param>
+        public void RemoveCylinder(Vector3 start, Vector3 end, float radius)
+        {
+            Vector3 axis = end - start;
+            float length = axis.Length();
+            if (length < 1e-6f) return; // Degenerate cylinder
+            axis = Vector3.Normalize(axis);
+
+            // Determine bounding box of cylinder
+            Vector3 min = Vector3.Min(start, end) - new Vector3(radius);
+            Vector3 max = Vector3.Max(start, end) + new Vector3(radius);
+
+            var (minX, minY, minZ) = WorldToVoxel(min);
+            var (maxX, maxY, maxZ) = WorldToVoxel(max);
+
+            minX = Math.Max(0, minX);
+            maxX = Math.Min(_sizeX - 1, maxX);
+            minY = Math.Max(0, minY);
+            maxY = Math.Min(_sizeY - 1, maxY);
+            minZ = Math.Max(0, minZ);
+            maxZ = Math.Min(_sizeZ - 1, maxZ);
+
+            // Update SDF values
+            if (_octree?._precomputedSDF != null)
+            {
+                for (int z = minZ; z <= maxZ; z++)
+                for (int y = minY; y <= maxY; y++)
+                for (int x = minX; x <= maxX; x++)
+                {
+                    Vector3 voxelCenter = VoxelToWorld(x, y, z);
+                    
+                    // Distance from point to cylinder axis
+                    Vector3 toPoint = voxelCenter - start;
+                    float projectionLength = Vector3.Dot(toPoint, axis);
+                    projectionLength = Math.Clamp(projectionLength, 0, length);
+                    Vector3 closestPointOnAxis = start + axis * projectionLength;
+                    float distToAxis = Vector3.Distance(voxelCenter, closestPointOnAxis);
+                    float sdfValue = distToAxis - radius;
+
+                    // Update to negative (empty) if inside cylinder
+                    if (sdfValue < _octree._precomputedSDF[x, y, z])
+                    {
+                        _octree._precomputedSDF[x, y, z] = sdfValue;
+                    }
+                }
+
+                // Rebuild octree for the affected region
+                _octree.UpdateRegion(minX, minY, minZ, maxX, maxY, maxZ);
+            }
         }
     }
 }

@@ -14,6 +14,6 @@ namespace MillSimSharp.Toolpath
         /// <param name="simulator">The cutter simulator to use.</param>
         /// <param name="tool">The tool to use.</param>
         /// <param name="currentPosition">Current position (updated after execution).</param>
-        void Execute(CutterSimulator simulator, Tool tool, ref Vector3 currentPosition);
+        void Execute(ICutterSimulator simulator, Tool tool, ref Vector3 currentPosition);
     }
 }

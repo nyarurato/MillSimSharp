@@ -25,7 +25,7 @@ namespace MillSimSharp.Toolpath
             FeedRate = feedRate;
         }
 
-        public void Execute(CutterSimulator simulator, Tool tool, ref Vector3 currentPosition)
+        public void Execute(ICutterSimulator simulator, Tool tool, ref Vector3 currentPosition)
         {
             if (simulator == null) throw new ArgumentNullException(nameof(simulator));
             if (tool == null) throw new ArgumentNullException(nameof(tool));

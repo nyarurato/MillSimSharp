@@ -151,6 +151,3 @@ done
 - 別の3Dビューアーで試す
 - エラーメッセージを確認
 
----
-
-詳細なドキュメントは[README.md](../README.md)と[docs/SDF.md](../docs/SDF.md)を参照してください。
