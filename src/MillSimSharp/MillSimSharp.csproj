@@ -11,7 +11,14 @@
     <Title>Mill Sim Sharp</Title>
     <Authors>kyano</Authors>
     <Copyright>Copyright (c) kyano 2025</Copyright>
-		<MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+	<Description>MillSimSharp is a C# library for simulating CNC milling operations using signed distance fields (SDFs) and voxel grids.</Description>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	<RepositoryUrl>https://github.com/nyarurato/MillSimSharp</RepositoryUrl>
+	<PackageProjectUrl>https://github.com/nyarurato/MillSimSharp</PackageProjectUrl>
+	<RepositoryType>git</RepositoryType>
+	<PackageTags>CNC;Milling;Simulation;SDF;VoxelGrid;Toolpath;CAM;CAD</PackageTags>
+	<MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+	<PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
@@ -38,6 +45,10 @@
 	  <Folder Include="Util\" />
 	  <Folder Include="Config\" />
 	  <Folder Include="IO\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	<None Include="../../README.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
 </Project>
