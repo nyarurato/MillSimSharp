@@ -27,30 +27,65 @@ dotnet add package MillSimSharp
 
 ## Quick Start (Core library)
 
+### Basic Toolpath Simulation
+
 ```csharp
 using MillSimSharp.Geometry;
+using MillSimSharp.Simulation;
+using MillSimSharp.Toolpath;
+using MillSimSharp.IO;
+using System.Numerics;
 
-// Create a work area (100×100×100mm)
+// 1. Create a work area (100×100×100mm)
 var workArea = BoundingBox.FromCenterAndSize(
     Vector3.Zero,
     new Vector3(100, 100, 100)
 );
 
-// Initialize voxel grid with 0.5mm resolution
-var grid = new VoxelGrid(workArea, resolution: 0.5);
+// 2. Initialize voxel grid with 1.0mm resolution
+var voxelGrid = new VoxelGrid(workArea, resolution: 1.0f);
 
-// Simulate tool cutting (sphere removal)
-var toolPosition = new Vector3(0, 0, 10);
-var toolRadius = 3.0; // 6mm diameter tool
-grid.RemoveVoxelsInSphere(toolPosition, toolRadius);
+// 3. Define a tool (10mm diameter ball-end mill)
+var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
 
-// Simulate linear tool movement (cylinder removal)
-var start = new Vector3(-10, 0, 5);
-var end = new Vector3(10, 0, 5);
-grid.RemoveVoxelsInCylinder(start, end, toolRadius);
+// 4. Create simulator and executor
+var simulator = new CutterSimulator(voxelGrid);
+var startPosition = new Vector3(0, 0, 50);
+var executor = new ToolpathExecutor(simulator, tool, startPosition);
 
-// Export to STL
-StlExporter.Export(grid, "output.stl");
+// 5. Execute toolpath commands
+var commands = new List<IToolpathCommand>
+{
+    new G0Move(new Vector3(0, 0, 10)),      // Rapid move to start
+    new G1Move(new Vector3(20, 0, 10), 100), // Linear cut
+    new G1Move(new Vector3(20, 20, 10), 100) // Linear cut
+};
+executor.ExecuteCommands(commands);
+
+// 6. Export to STL (direct from voxel grid)
+StlExporter.Export(voxelGrid, "output.stl");
+```
+
+### Advanced: Using SDF for High-Quality Mesh
+
+For large grids or high-quality mesh output, use `SDFGrid`:
+
+```csharp
+using MillSimSharp.Geometry;
+
+// After voxel simulation...
+// Generate SDF with narrow band optimization
+var sdfGrid = SDFGrid.FromVoxelGrid(
+    voxelGrid, 
+    narrowBandWidth: 2,  // Optimize for speed
+    useSparse: true      // Use sparse storage for large grids
+);
+
+// Generate high-quality mesh using Dual Contouring
+var mesh = sdfGrid.GenerateMesh();
+
+// Export mesh to STL
+StlExporter.Export(mesh, "output_hq.stl");
 ```
 
 ## Viewer (sample app)
@@ -66,8 +101,6 @@ dotnet run --project src\MillSimSharp.Viewer
 ```
 
 If you have a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc`, the viewer will load and simulate it; otherwise it will run the demo scene.
-
-For more detailed developer information and debugging tips, see `docs/SDF.md` and `docs/DEVELOPER.md`.
 
 ## Build and Test (local)
 
@@ -89,6 +122,3 @@ MIT
 ## Contributing
 
 Contributions are welcome!
-- Open an issue to discuss larger feature changes before coding.
-
-Please include unit tests for any behavioral changes.
