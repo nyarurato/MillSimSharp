@@ -4,20 +4,20 @@ using MillSimSharp.Toolpath;
 using MillSimSharp.IO;
 using System.Numerics;
 
-Console.WriteLine("=== MillSimSharp Sample: Custom Shapes ===\n");
+Console.WriteLine("=== MillSimSharp Sample: Custom Shapes (SDF) ===\n");
 
 // Create output directory
 var outputDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "output");
 Directory.CreateDirectory(outputDir);
 
 // 1. Create a work area (120×120×80mm stock)
-Console.WriteLine("Creating voxel grid (120×120×80mm, 1mm resolution)...");
+Console.WriteLine("Creating SDF grid (120×120×80mm, 1mm resolution)...");
 var workArea = BoundingBox.FromCenterAndSize(
     new Vector3(0, 0, 40),
     new Vector3(120, 120, 80)
 );
-var voxelGrid = new VoxelGrid(workArea, resolution: 1.0f);
-Console.WriteLine($"  Grid created: {voxelGrid.Dimensions.X}×{voxelGrid.Dimensions.Y}×{voxelGrid.Dimensions.Z} voxels\n");
+var sdfGrid = new SDFGrid(workArea, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
+Console.WriteLine($"  Grid created: {sdfGrid.Resolution}mm resolution\n");
 
 // 2. Define tools
 Console.WriteLine("Setting up tools...");
@@ -28,7 +28,7 @@ Console.WriteLine($"  Finishing tool: {finishingTool.Diameter}mm ball-end mill\n
 
 // 3. Roughing pass - create circular pocket with layers
 Console.WriteLine("Executing roughing pass (circular pocket, 3 layers)...");
-var simulator = new CutterSimulator(voxelGrid);
+var simulator = new SDFCutterSimulator(sdfGrid);
 var executor = new ToolpathExecutor(simulator, roughingTool, new Vector3(0, 0, 90));
 
 var roughingCommands = new List<IToolpathCommand>();
@@ -57,50 +57,59 @@ for (int layer = 0; layer < 3; layer++)
 executor.ExecuteCommands(roughingCommands);
 sw.Stop();
 Console.WriteLine($"  Roughing completed in {sw.ElapsedMilliseconds}ms");
-Console.WriteLine($"  Commands executed: {roughingCommands.Count}");
-Console.WriteLine($"  Remaining voxels: {voxelGrid.CountMaterialVoxels():N0}\n");
+Console.WriteLine($"  Commands executed: {roughingCommands.Count}\n");
 
-// 4. Finishing pass - smooth the walls
-Console.WriteLine("Executing finishing pass (spiral path)...");
+// 4. Finishing pass - smooth the walls with a spherical spiral
+Console.WriteLine("Executing finishing pass (spherical spiral path)...");
 executor = new ToolpathExecutor(simulator, finishingTool, new Vector3(0, 0, 90));
 
 var finishingCommands = new List<IToolpathCommand>();
 sw.Restart();
 
-// Spiral finishing path
-int spiralTurns = 5;
-int pointsPerTurn = 20;
-float startRadius = 25;
-float endRadius = 15;
-float startZ = 65;
-float endZ = 45;
+// Spherical spiral finishing path
+// Cutting a hemisphere-like shape
+float centerX = 0;
+float centerY = 0;
+float sphereRadius = 30; // Matches the roughing radius at top
+float zStart = 60; // Start height (top of hemisphere)
+float zEnd = 30;   // End height (bottom of hemisphere cut)
+int spiralTurns = 10;
+int pointsPerTurn = 36;
 
-finishingCommands.Add(new G0Move(new Vector3(startRadius, 0, startZ)));
+// Move to start
+finishingCommands.Add(new G0Move(new Vector3(sphereRadius + 5, 0, zStart))); // Safe approach
+finishingCommands.Add(new G1Move(new Vector3(sphereRadius, 0, zStart), 800)); // Engage
 
 for (int i = 0; i <= spiralTurns * pointsPerTurn; i++)
 {
-    float t = (float)i / (spiralTurns * pointsPerTurn);
-    float angle = (float)(i * 2 * Math.PI / pointsPerTurn);
-    float radius = startRadius + (endRadius - startRadius) * t;
-    float z = startZ + (endZ - startZ) * t;
+    float t = (float)i / (spiralTurns * pointsPerTurn); // 0 to 1
     
-    float x = radius * MathF.Cos(angle);
-    float y = radius * MathF.Sin(angle);
+    // Calculate angle
+    float angle = (float)(i * 2 * Math.PI / pointsPerTurn);  
+    float currentZ = 70 - (t * 30); // 70 -> 40    
+    float sphereR = 35.0f;
+    float dz = 70.0f - currentZ; // 0 to 30
+    float currentRadius = (float)Math.Sqrt(Math.Max(0, sphereR*sphereR - dz*dz));   
+    float x = currentRadius * MathF.Cos(angle);
+    float y = currentRadius * MathF.Sin(angle);
     
-    finishingCommands.Add(new G1Move(new Vector3(x, y, z), 600));
+    finishingCommands.Add(new G1Move(new Vector3(x, y, currentZ), 600));
 }
+
+// Retract
+finishingCommands.Add(new G0Move(new Vector3(0, 0, 90)));
 
 executor.ExecuteCommands(finishingCommands);
 sw.Stop();
 Console.WriteLine($"  Finishing completed in {sw.ElapsedMilliseconds}ms");
-Console.WriteLine($"  Commands executed: {finishingCommands.Count}");
-Console.WriteLine($"  Final voxels: {voxelGrid.CountMaterialVoxels():N0}\n");
+Console.WriteLine($"  Commands executed: {finishingCommands.Count}\n");
 
 // 5. Export to STL
-Console.WriteLine("Exporting to STL...");
+Console.WriteLine("Generating mesh and exporting to STL...");
 var outputPath = Path.Combine(outputDir, "custom_shape.stl");
 sw.Restart();
-StlExporter.Export(voxelGrid, outputPath);
+var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
+StlExporter.Export(mesh, outputPath);
 sw.Stop();
 
 Console.WriteLine($"  Exported to: {outputPath}");

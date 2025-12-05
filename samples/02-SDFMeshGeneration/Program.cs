@@ -59,10 +59,10 @@ for (int layer = 0; layer < 3; layer++)
 }
 
 // Add some crossing cuts
-commands.Add(new G0Move(new Vector3(-25, 0, 50)));
-commands.Add(new G1Move(new Vector3(25, 0, 50), 500));
-commands.Add(new G0Move(new Vector3(0, -25, 50)));
-commands.Add(new G1Move(new Vector3(0, 25, 50), 500));
+commands.Add(new G0Move(new Vector3(-30, 0, 50)));
+commands.Add(new G1Move(new Vector3(30, 0, 50), 500));
+commands.Add(new G0Move(new Vector3(0, -30, 50)));
+commands.Add(new G1Move(new Vector3(0, 30, 50), 500));
 
 // Retract
 commands.Add(new G0Move(new Vector3(0, 0, 65)));

@@ -1,21 +1,21 @@
 # MillSimSharp Samples
 
-このディレクトリには、MillSimSharpライブラリの使い方を示すサンプルプロジェクトが含まれています。
+This directory contains sample projects demonstrating how to use the MillSimSharp library.
 
-## サンプル一覧
+## Available Samples
 
 ### 01-BasicToolpath
-基本的なツールパスシミュレーションのサンプルです。
+A basic sample of toolpath simulation using VoxelGrid.
 
-**内容**:
-- VoxelGridの作成
-- EndMillツールの定義
-- 単純なツールパス（四角形のポケット加工）の実行
-- STLエクスポート
+**Features**:
+- Creating a VoxelGrid
+- Defining an EndMill tool
+- Executing a simple toolpath (square pocket)
+- Exporting to STL
 
-**出力**: `output/basic_toolpath.stl`
+**Output**: `output/basic_toolpath.stl`
 
-**実行方法**:
+**How to Run**:
 ```bash
 cd 01-BasicToolpath
 dotnet run
@@ -24,130 +24,75 @@ dotnet run
 ---
 
 ### 02-SDFMeshGeneration
-SDFを使用した高品質メッシュ生成のサンプルです。
+Sample demonstrating high-quality mesh generation using Signed Distance Fields (SDF).
 
-**内容**:
-- 複雑な形状の作成（球と円柱の組み合わせ）
-- SDFGridの生成（Narrow band最適化）
-- Dual Contouringによる高品質メッシュ生成
-- STLエクスポート
+**Features**:
+- Directly operating on an SDFGrid
+- Executing toolpaths (circular pockets) with `SDFCutterSimulator`
+- Generating high-quality clean meshes using Dual Contouring
+- Exporting to STL
 
-**出力**: `output/sdf_mesh.stl`
+**Output**: `output/sdf_mesh.stl`
 
-**実行方法**:
+**How to Run**:
 ```bash
 cd 02-SDFMeshGeneration
 dotnet run
 ```
 
-**ポイント**: 直接VoxelGridからエクスポートした場合と比較して、表面の滑らかさの違いを確認できます。
+**Note**: You can observe the superior surface smoothness compared to direct voxel exports.
 
 ---
 
 ### 03-CustomShapes
-カスタム形状の削り出しサンプルです。
+Advanced sample demonstrating custom shape machining with multiple tools.
 
-**内容**:
-- 複数ツールの使用（荒加工用と仕上げ用）
-- レイヤーごとの円形ポケット加工
-- スパイラル仕上げパス
-- STLエクスポート
+**Features**:
+- Using multiple tools (Roughing and Finishing)
+- Complex toolpaths including a spherical spiral finishing pass
+- Simulation using `SDFGrid` and `G0`/`G1` commands
+- Exporting the final result to STL
 
-**出力**: `output/custom_shape.stl`
+**Output**: `output/custom_shape.stl`
 
-**実行方法**:
+**How to Run**:
 ```bash
 cd 03-CustomShapes
 dotnet run
 ```
 
-**ポイント**: 荒加工と仕上げ加工の2段階プロセスを実演しています。
+**Key Concept**: Demonstrates a realistic multi-stage machining workflow.
 
 ---
 
 ### 04-StepByStep
-ステップバイステップ実行のサンプルです。
+Sample demonstrating incremental step-by-step execution.
 
-**内容**:
-- ToolpathExecutorのステップバイステップ実行
-- 各ステップでの中間結果の保存
-- 複数のSTLファイル出力
+**Features**:
+- Executing toolpaths incrementally using `ToolpathExecutor`
+- Saving intermediate simulation results as STL files
+- Using `MeshConverter` to generate meshes from SDF at each step
 
-**出力**: `output/step_01.stl`, `output/step_02.stl`, ..., `output/step_final.stl`
+**Output**: `output/step_01.stl`, `output/step_02.stl`, ..., `output/step_final.stl`
 
-**実行方法**:
+**How to Run**:
 ```bash
 cd 04-StepByStep
 dotnet run
 ```
 
-**ポイント**: 生成されたSTLファイルを順番に読み込むことで、加工プロセスをアニメーションのように確認できます。
+**Tip**: Load the generated STL files sequentially in a 3D viewer to animate the machining process.
 
 ---
 
-## すべてのサンプルを実行
+## Viewing Outputs
 
-すべてのサンプルを一度に実行するには、samplesディレクトリから：
+Each sample generates STL files in an `output/` folder. You can view them with any standard 3D viewer.
 
-```bash
-# Windowsの場合
-foreach ($dir in Get-ChildItem -Directory) { 
-    Push-Location $dir.FullName
-    dotnet run
-    Pop-Location
-}
-
-# Linux/macOSの場合
-for dir in */; do
-    (cd "$dir" && dotnet run)
-done
-```
 
 ---
 
-## 出力ファイルの確認
-
-各サンプルは `output/` フォルダにSTLファイルを生成します。以下のような3Dビューアーで確認できます：
-
-- **Windows**: 3D Builder（標準搭載）
-- **クロスプラットフォーム**: Blender, MeshLab, FreeCAD
-- **オンライン**: [3D Viewer Online](https://3dviewer.net/)
-
----
-
-## 要件
+## Requirements
 
 - .NET 8.0 SDK
-- MillSimSharpライブラリ（自動的にプロジェクト参照されます）
-
----
-
-## カスタマイズ
-
-各サンプルのソースコードは自由に編集できます。以下のパラメータを変更して実験してみてください：
-
-- **解像度**: `VoxelGrid`の`resolution`パラメータ
-- **ワークエリアサイズ**: `BoundingBox.FromCenterAndSize()`の引数
-- **ツール径**: `EndMill`の`diameter`パラメータ
-- **送り速度**: `G1Move`の第2引数
-- **Narrow Band幅**: `SDFGrid.FromVoxelGrid()`の`narrowBandWidth`パラメータ
-
----
-
-## トラブルシューティング
-
-### メモリ不足エラー
-- VoxelGridの解像度を大きくする（例: 1.0mm → 2.0mm）
-- ワークエリアサイズを小さくする
-- SDFを使用する場合は`useSparse: true`を設定
-
-### 実行が遅い
-- 解像度を粗くする
-- `fastMode: true`を使用（精度は低下）
-- Narrow Band幅を小さくする（例: 2）
-
-### STLファイルが開けない
-- ファイルサイズを確認（0バイトでないか）
-- 別の3Dビューアーで試す
-- エラーメッセージを確認
-
+- MillSimSharp library
