@@ -1,14 +1,17 @@
 # Mill Sim Sharp
 
-A voxel-based milling simulation dependency-free library for .NET — the core library provides a voxel-based representation, SDF generation, and mesh exporting utilities. The project contains a small viewer sample app for demonstrations.
+MillSimSharp is a milling simulation library for .NET focused on voxel-based and SDF (Signed Distance Field) workflows.  
+It provides fast SDF generation, robust voxel-based simulation for milling operations, and high-quality mesh export.  
+The repository also contains a lightweight viewer app for visualization and demos.
 
 ## Overview
 
-MillSimSharp is a library designed to simulate CNC milling operations using a voxel-based approach. It provides:
+MillSimSharp simulates CNC milling operations using both voxel-based representations and SDFs. It is designed for accurate material removal simulation and for producing high-quality meshes from the resulting geometry. It provides:
 
-- **Voxel-based material representation** for accurate simulation
-- **STL mesh export** using the Marching Cubes algorithm
-- **G-code parser independence** - bring your own parser (gsGCode recommended for the viewer)
+- **Voxel-based material representation** for accurate, conservative milling simulation (fast incremental operations)
+- **Signed Distance Field (SDF) generation** (Fast Sweeping algorithm) for high-quality mesh conversion and fast distance queries
+- **High-quality mesh export** using Dual Contouring and Marching Cubes
+- **G-code parser independence** - bring your own parser (gsGCode is used for the viewer demo)
 - **Flexible resolution** - adjust voxel size based on your needs
 - **Simple API** for toolpath execution
 
@@ -18,7 +21,7 @@ MillSimSharp is a library designed to simulate CNC milling operations using a vo
 
 ## Installation
 
-The library is published to NuGet (GitHub Packages) via CI.   
+The library is published to NuGet via CI.   
 you can install it with:
 
 ```bash
@@ -114,7 +117,7 @@ dotnet test
 
 ## Requirements
 
-- .NET 8.0 or .NET Standard 2.1
+- .NET 8.0 or .NET Standard 2.1 or higher
 
 ## License
 
