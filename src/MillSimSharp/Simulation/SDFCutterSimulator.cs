@@ -12,6 +12,11 @@ namespace MillSimSharp.Simulation
     {
         private readonly SDFGrid _sdfGrid;
 
+        /// <summary>
+        /// Creates a new SDFCutterSimulator with the specified SDF grid.
+        /// </summary>
+        /// <param name="sdfGrid"></param>
+        /// <exception cref="ArgumentNullException"></exception>
         public SDFCutterSimulator(SDFGrid sdfGrid)
         {
             _sdfGrid = sdfGrid ?? throw new ArgumentNullException(nameof(sdfGrid));

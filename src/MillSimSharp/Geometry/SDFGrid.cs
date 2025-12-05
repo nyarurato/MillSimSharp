@@ -68,12 +68,13 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Creates a Signed Distance Field grid from a VoxelGrid.
+        /// Creates an SDF grid from an existing VoxelGrid.
         /// </summary>
-        /// <param name="voxelGrid">The source voxel grid.</param>
-        /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10). 
-        /// Only distances within this range are computed accurately, others are clamped.</param>
-        /// <returns>A new SDFGrid instance.</returns>
+        /// <param name="voxelGrid"></param>
+        /// <param name="narrowBandWidth"></param>
+        /// <param name="useSparse"></param>
+        /// <param name="fastMode"></param>
+        /// <returns></returns>
         public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10, bool useSparse = false, bool fastMode = false)
         {
             var dimensions = voxelGrid.Dimensions;

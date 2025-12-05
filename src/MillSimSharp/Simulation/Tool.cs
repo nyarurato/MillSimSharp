@@ -2,11 +2,19 @@ using System;
 
 namespace MillSimSharp.Simulation
 {
+    /// <summary>
+    /// Type of cutting tool.
+    /// </summary>
     public enum ToolType
     {
+        /// <summary>
+        /// Flat end mill.
+        /// </summary>
         Flat,
-        Ball,
-        Bull
+        /// <summary>
+        /// Ball end mill.
+        /// </summary>
+        Ball
     }
 
     /// <summary>
@@ -29,6 +37,13 @@ namespace MillSimSharp.Simulation
         /// </summary>
         public ToolType Type { get; }
 
+        /// <summary>
+        /// Protected constructor for Tool.
+        /// </summary>
+        /// <param name="diameter"></param>
+        /// <param name="length"></param>
+        /// <param name="type"></param>
+        /// <exception cref="ArgumentException"></exception>
         protected Tool(float diameter, float length, ToolType type)
         {
             if (diameter <= 0) throw new ArgumentException("Diameter must be positive", nameof(diameter));

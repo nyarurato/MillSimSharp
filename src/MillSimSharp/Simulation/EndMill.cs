@@ -7,11 +7,22 @@ namespace MillSimSharp.Simulation
     /// </summary>
     public class EndMill : Tool
     {
+        /// <summary>
+        /// Creates a new EndMill tool.
+        /// </summary>
+        /// <param name="diameter"></param>
+        /// <param name="length"></param>
+        /// <param name="isBallEnd"></param>
         public EndMill(float diameter, float length, bool isBallEnd = false)
             : base(diameter, length, isBallEnd ? ToolType.Ball : ToolType.Flat)
         {
         }
 
+        /// <summary>
+        /// Gets the radius of the tool at a given height from the tip.
+        /// </summary>
+        /// <param name="heightFromTip"></param>
+        /// <returns></returns>
         public override float GetRadiusAtHeight(float heightFromTip)
         {
             if (heightFromTip < 0 || heightFromTip > Length)

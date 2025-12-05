@@ -6,6 +6,9 @@ using System.Collections.Concurrent;
 
 namespace MillSimSharp.Geometry
 {
+    /// <summary>
+    /// Static class for converting voxel grids and SDF grids to triangle meshes.
+    /// </summary>
     public static class MeshConverter
     {
         // Helper: Compute 8 corner world positions for a cube base position and resolution

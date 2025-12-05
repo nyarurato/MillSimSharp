@@ -10,10 +10,22 @@ namespace MillSimSharp.Geometry
     /// </summary>
     public class SVONode
     {
+        /// <summary>
+        /// Children nodes (8 for octree)
+        /// </summary>
         public SVONode[] children;
+        /// <summary>
+        /// Is this node a leaf node?
+        /// </summary>
         public bool isLeaf;
+        /// <summary>
+        /// Value at this node (true = empty, false = material)
+        /// </summary>
         public bool value;
 
+        /// <summary>
+        /// Constructor for SVONode.
+        /// </summary>
         public SVONode()
         {
             children = new SVONode[8];
@@ -21,6 +33,9 @@ namespace MillSimSharp.Geometry
             value = false;
         }
 
+        /// <summary>
+        /// Gets the value at the specified voxel coordinates.
+        /// </summary>
         public bool Get(int x, int y, int z, int level, int maxLevel)
         {
             if (isLeaf)
@@ -39,6 +54,9 @@ namespace MillSimSharp.Geometry
             return children[childIndex].Get(x, y, z, level + 1, maxLevel);
         }
 
+        /// <summary>
+        /// Sets the value at the specified voxel coordinates.
+        /// </summary>
         public void Set(int x, int y, int z, bool val, int level, int maxLevel)
         {
             if (level >= maxLevel)
@@ -58,6 +76,9 @@ namespace MillSimSharp.Geometry
             children[childIndex].Set(x, y, z, val, level + 1, maxLevel);
         }
 
+        /// <summary>
+        /// Counts the number of empty voxels in this subtree up to the specified max level.
+        /// </summary>
         public int CountEmpty(int level, int maxLevel)
         {
             if (isLeaf)
@@ -199,7 +220,10 @@ namespace MillSimSharp.Geometry
         /// <summary>
         /// Sets the material state of a voxel at the specified indices.
         /// </summary>
-        /// <param name="isMaterial">True for material, false for empty.</param>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <param name="z"></param>
+        /// <param name="isMaterial"></param>
         public void SetVoxel(int x, int y, int z, bool isMaterial)
         {
             if (!IsValidIndex(x, y, z))
@@ -474,6 +498,9 @@ namespace MillSimSharp.Geometry
             }
         }
 
+        /// <summary>
+        /// Clears all voxels (resets to all material).
+        /// </summary>
         public void Clear()
         {
             _root = null;

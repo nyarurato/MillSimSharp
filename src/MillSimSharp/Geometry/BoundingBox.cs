@@ -81,6 +81,10 @@ namespace MillSimSharp.Geometry
             );
         }
 
+        /// <summary>
+        /// Returns a string representation of the bounding box.
+        /// </summary>
+        /// <returns></returns>
         public override string ToString()
         {
             return $"BoundingBox[Min={Min}, Max={Max}, Size={Size}]";

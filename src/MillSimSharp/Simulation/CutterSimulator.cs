@@ -13,7 +13,12 @@ namespace MillSimSharp.Simulation
     public class CutterSimulator : ICutterSimulator
     {
         private readonly VoxelGrid _grid;
-
+        
+        /// <summary>
+        /// Creates a new CutterSimulator with the specified voxel grid.
+        /// </summary>
+        /// <param name="grid"></param>
+        /// <exception cref="ArgumentNullException"></exception>
         public CutterSimulator(VoxelGrid grid)
         {
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));

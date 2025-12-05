@@ -41,6 +41,13 @@ namespace MillSimSharp.Toolpath
         /// </summary>
         public bool IsCompleted => _currentCommandIndex >= (TotalCommands - 1);
 
+        /// <summary>
+        /// Creates a new ToolpathExecutor.
+        /// </summary>
+        /// <param name="simulator"></param>
+        /// <param name="tool"></param>
+        /// <param name="initialPosition"></param>
+        /// <exception cref="ArgumentNullException"></exception>
         public ToolpathExecutor(ICutterSimulator simulator, Tool tool, Vector3 initialPosition)
         {
             _simulator = simulator ?? throw new ArgumentNullException(nameof(simulator));
