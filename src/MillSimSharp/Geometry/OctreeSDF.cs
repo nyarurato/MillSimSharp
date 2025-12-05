@@ -406,5 +406,46 @@ namespace MillSimSharp.Geometry
                 node.Children = null;
             }
         }
+        
+        /// <summary>
+        /// Update SDF and Octree for a specific region after voxel changes.
+        /// OPTIMIZATION: Instead of rebuilding octree nodes,
+        /// update leaf values incrementally and propagate changes upward.
+        /// This would reduce tree traversal overhead.
+        /// </summary>
+        /// <param name="minX">Minimum X index of changed region</param>
+        /// <param name="minY">Minimum Y index of changed region</param>
+        /// <param name="minZ">Minimum Z index of changed region</param>
+        /// <param name="maxX">Maximum X index of changed region</param>
+        /// <param name="maxY">Maximum Y index of changed region</param>
+        /// <param name="maxZ">Maximum Z index of changed region</param>
+        public void UpdateRegionWithFastSweeping(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+        {
+            if (_precomputedSDF == null)
+            {
+                // No precomputed SDF, just update octree
+                UpdateRegion(minX, minY, minZ, maxX, maxY, maxZ);
+                return;
+            }
+            
+            // Expand region by narrow band to ensure proper distance propagation
+            int expansion = (int)Math.Ceiling(_narrowBand / _resolution);
+            int expandedMinX = Math.Max(0, minX - expansion);
+            int expandedMinY = Math.Max(0, minY - expansion);
+            int expandedMinZ = Math.Max(0, minZ - expansion);
+            int expandedMaxX = Math.Min(_sizeX - 1, maxX + expansion);
+            int expandedMaxY = Math.Min(_sizeY - 1, maxY + expansion);
+            int expandedMaxZ = Math.Min(_sizeZ - 1, maxZ + expansion);
+            
+            // Re-run Fast Sweeping on expanded region
+            FastSweepingSDF.UpdateRegion(_precomputedSDF, _voxelGrid,
+                expandedMinX, expandedMinY, expandedMinZ,
+                expandedMaxX, expandedMaxY, expandedMaxZ,
+                _narrowBand);
+            
+            // Rebuild octree for this region
+            UpdateRegion(expandedMinX, expandedMinY, expandedMinZ,
+                         expandedMaxX, expandedMaxY, expandedMaxZ);
+        }
     }
 }

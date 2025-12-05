@@ -34,6 +34,7 @@ namespace MillSimSharp.Viewer
         private bool _nKeyPrev = false;
         private bool _cKeyPrev = false;
         private bool _eKeyPrev = false;
+        private bool _fKeyPrev = false; // For full execution
         private MillSimSharp.Geometry.Mesh? _currentMesh;
         private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
@@ -41,6 +42,18 @@ namespace MillSimSharp.Viewer
         private ToolpathRenderer? _toolpathRenderer;
         private List<IToolpathCommand>? _pendingToolpathCommands;
         private SysVector3 _pendingToolpathStartPos;
+        
+        // Step-by-step execution fields
+        private bool _stepByStepMode = false;
+        private ToolpathExecutor? _stepExecutor;
+        private CutterSimulator? _stepSimulator;
+        private VoxelGrid? _stepVoxelGrid;
+        private bool _tKeyPrev = false;
+        private bool _spaceKeyPrev = false;
+        private bool _homeKeyPrev = false;
+        private bool _pageUpKeyPrev = false;
+        private bool _pageDownKeyPrev = false;
+        private int[] _stepSizeOptions = new int[] { 1, 5, 10, 50, 100,1000 };
 
         private Vector2 _lastMousePos;
         private bool _isMouseDragging;
@@ -133,8 +146,10 @@ namespace MillSimSharp.Viewer
                     Console.WriteLine($"Failed to parse G-code: {ex.Message}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
 
+                // Execute all commands at once (original behavior)
+                // Don't bind VoxelsChanged event to avoid incremental updates during batch execution
                 var simulator = new CutterSimulator(_voxelGrid);
-                var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);  // Longer tool
+                var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                 Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
                 
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
@@ -155,7 +170,7 @@ namespace MillSimSharp.Viewer
                 Console.WriteLine($"Voxels removed: {voxelsBeforeCut - voxelsAfterCut}");
                 Console.WriteLine($"Toolpath execution time: {execStopwatch.ElapsedMilliseconds} ms");
 
-                // Store commands to update toolpath renderer later
+                // Store commands for step-by-step execution later
                 if (commands != null)
                 {
                     _pendingToolpathCommands = commands;
@@ -295,6 +310,10 @@ namespace MillSimSharp.Viewer
             Console.WriteLine($"Controls:");
             Console.WriteLine($"  - Mouse drag: Rotate camera");
             Console.WriteLine($"  - Mouse wheel: Zoom in/out");
+            Console.WriteLine($"  - T: Toggle step-by-step execution mode");
+            Console.WriteLine($"  - Space: Execute next step(s) (in step mode)");
+            Console.WriteLine($"  - Home: Reset to beginning (in step mode)");
+            Console.WriteLine($"  - PageUp/PageDown: Change step size (1, 5, 10, 50, 100, 1000)");
             Console.WriteLine($"  - ESC: Exit");
 
             stopwatch.Stop();
@@ -371,8 +390,8 @@ namespace MillSimSharp.Viewer
             _voxelShader.SetMatrix4("uProjection", projection);
             _voxelShader.SetFloat("uVoxelSize", _voxelGrid?.Resolution ?? 1.0f);
 
-            // Set light direction
-            Vector3 lightDir = new Vector3(0.5f, 1.0f, 0.3f);
+            // Set light direction (Directional light pointing from above, Z+)
+            Vector3 lightDir = new Vector3(0.3f, 0.3f, -0.3f);
             lightDir.Normalize();
             _voxelShader.SetVector3("uLightDir", lightDir);
 
@@ -434,9 +453,19 @@ namespace MillSimSharp.Viewer
                 
                 string statusSuffix = string.IsNullOrEmpty(_processingStatus) ? "" : $" - {_processingStatus}";
                 int triangles = _currentMesh?.Indices.Length / 3 ?? 0;
-                string meshInfo = triangles > 0 ? $" - Triangles: {triangles}" : $" - Voxels: {_voxelGrid?.CountMaterialVoxels() ?? 0}";
+                
+                // Use step grid if in step mode
+                var activeGrid = _stepByStepMode ? _stepVoxelGrid : _voxelGrid;
+                string meshInfo = triangles > 0 ? $" - Triangles: {triangles}" : $" - Voxels: {activeGrid?.CountMaterialVoxels() ?? 0}";
+                
+                // Add step execution info
+                string stepInfo = "";
+                if (_stepByStepMode && _stepExecutor != null)
+                {
+                    stepInfo = $" - Step: {_stepExecutor.CurrentCommandIndex + 1}/{_stepExecutor.TotalCommands} (Size: {_stepExecutor.StepSize})";
+                }
 
-                Title = $"MillSimSharp Voxel Viewer - FPS: {fps:0.0} - Mem: {memory} MB{meshInfo}{statusSuffix}";
+                Title = $"MillSimSharp Voxel Viewer - FPS: {fps:0.0} - Mem: {memory} MB{meshInfo}{stepInfo}{statusSuffix}";
 
                 _frameCount = 0;
                 _timeSinceLastUpdate = 0.0;
@@ -541,6 +570,136 @@ namespace MillSimSharp.Viewer
                 }
             }
             _eKeyPrev = eDown;
+
+            // T key -> toggle step-by-step mode
+            bool tDown = KeyboardState.IsKeyDown(Keys.T);
+            if (tDown && !_tKeyPrev)
+            {
+                _stepByStepMode = !_stepByStepMode;
+                Console.WriteLine($"Step-by-step mode: {(_stepByStepMode ? "ON" : "OFF")}");
+                
+                if (_stepByStepMode && _pendingToolpathCommands != null && _voxelGrid != null)
+                {
+                    // Initialize step execution
+                    var bbox = _voxelGrid.Bounds;
+                    _stepVoxelGrid = new VoxelGrid(bbox, _voxelGrid.Resolution);
+                    _stepSimulator = new CutterSimulator(_stepVoxelGrid);
+                    var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
+                    _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
+                    _stepExecutor.LoadCommands(_pendingToolpathCommands);
+                    
+                    // Create new SDF for step voxel grid
+                    // Don't reuse the existing SDF - create a fresh one for the step grid
+                    if (_useSDF)
+                    {
+                        Console.WriteLine("Creating SDF for step-by-step mode...");
+                        long voxelsCount = _stepVoxelGrid.CountMaterialVoxels();
+                        const long SDF_VOXEL_THRESHOLD = 1_000_000;
+                        bool useSparse = voxelsCount > SDF_VOXEL_THRESHOLD;
+                        
+                        // Create SDF synchronously for step mode (it's fast for initial state)
+                        var stepSdf = MillSimSharp.Geometry.SDFGrid.FromVoxelGrid(_stepVoxelGrid, _sdfNarrowBandWidth, useSparse);
+                        stepSdf.BindToVoxelGrid(_stepVoxelGrid);
+                        
+                        // Replace the global SDF with step SDF
+                        _sdfGrid?.UnbindFromVoxelGrid();
+                        _sdfGrid = stepSdf;
+                        
+                        Console.WriteLine("Step SDF created successfully.");
+                    }
+                    
+                    // Update renderer to use step grid
+                    _renderer?.UpdateVoxelData(_stepVoxelGrid);
+                    
+                    Console.WriteLine($"Step executor initialized. Total commands: {_stepExecutor.TotalCommands}, Step size: {_stepExecutor.StepSize}");
+                }
+                else if (!_stepByStepMode)
+                {
+                    // Restore original grid
+                    if (_voxelGrid != null)
+                    {
+                        _renderer?.UpdateVoxelData(_voxelGrid);
+                        if (_useSDF && _sdfGrid != null)
+                        {
+                            _sdfGrid.UnbindFromVoxelGrid();
+                            _sdfGrid.BindToVoxelGrid(_voxelGrid);
+                        }
+                    }
+                }
+            }
+            _tKeyPrev = tDown;
+            
+            // Space key -> execute next step(s) in step-by-step mode
+            bool spaceDown = KeyboardState.IsKeyDown(Keys.Space);
+            if (spaceDown && !_spaceKeyPrev && _stepByStepMode && _stepExecutor != null)
+            {
+                long voxelsBefore = _stepVoxelGrid?.CountMaterialVoxels() ?? 0;
+                int executed = _stepExecutor.ExecuteNextSteps();
+                long voxelsAfter = _stepVoxelGrid?.CountMaterialVoxels() ?? 0;
+                
+                if (executed > 0)
+                {
+                    Console.WriteLine($"Executed {executed} step(s). Progress: {_stepExecutor.CurrentCommandIndex + 1}/{_stepExecutor.TotalCommands}");
+                    Console.WriteLine($"  Voxels: {voxelsBefore} -> {voxelsAfter} (removed: {voxelsBefore - voxelsAfter})");
+                    // Trigger mesh update
+                    StartMeshGenerationAsync();
+                }
+                else
+                {
+                    Console.WriteLine("All commands completed.");
+                }
+            }
+            _spaceKeyPrev = spaceDown;
+            
+            // Home key -> reset to beginning
+            bool homeDown = KeyboardState.IsKeyDown(Keys.Home);
+            if (homeDown && !_homeKeyPrev && _stepByStepMode && _stepExecutor != null)
+            {
+                _stepExecutor.Reset();
+                if (_stepVoxelGrid != null)
+                {
+                    // Reset voxel grid
+                    var bbox = _stepVoxelGrid.Bounds;
+                    _stepVoxelGrid = new VoxelGrid(bbox, _stepVoxelGrid.Resolution);
+                    _stepSimulator = new CutterSimulator(_stepVoxelGrid);
+                    var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
+                    _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
+                    _stepExecutor.LoadCommands(_pendingToolpathCommands!);
+                    
+                    _renderer?.UpdateVoxelData(_stepVoxelGrid);
+                    if (_useSDF && _sdfGrid != null)
+                    {
+                        _sdfGrid.UnbindFromVoxelGrid();
+                        _sdfGrid.BindToVoxelGrid(_stepVoxelGrid);
+                    }
+                    
+                    StartMeshGenerationAsync();
+                }
+                Console.WriteLine("Reset to beginning.");
+            }
+            _homeKeyPrev = homeDown;
+            
+            // PageUp/PageDown -> change step size
+            bool pageUpDown = KeyboardState.IsKeyDown(Keys.PageUp);
+            bool pageDownDown = KeyboardState.IsKeyDown(Keys.PageDown);
+            if ((pageUpDown && !_pageUpKeyPrev) || (pageDownDown && !_pageDownKeyPrev))
+            {
+                if (_stepExecutor != null)
+                {
+                    int currentIndex = Array.IndexOf(_stepSizeOptions, _stepExecutor.StepSize);
+                    if (currentIndex < 0) currentIndex = 0;
+                    
+                    if (pageUpDown)
+                        currentIndex = (currentIndex + 1) % _stepSizeOptions.Length;
+                    else
+                        currentIndex = (currentIndex - 1 + _stepSizeOptions.Length) % _stepSizeOptions.Length;
+                    
+                    _stepExecutor.StepSize = _stepSizeOptions[currentIndex];
+                    Console.WriteLine($"Step size changed to: {_stepExecutor.StepSize}");
+                }
+            }
+            _pageUpKeyPrev = pageUpDown;
+            _pageDownKeyPrev = pageDownDown;
         }
 
         protected override void OnResize(ResizeEventArgs e)
@@ -621,8 +780,11 @@ namespace MillSimSharp.Viewer
             // Capture local state
             bool localUseSDF = _useSDF;
             int localNarrow = _sdfNarrowBandWidth;
-            var gridCopy = _voxelGrid; // reference
+            
+            // Use step grid if in step mode, otherwise use original grid
+            var gridCopy = _stepByStepMode ? _stepVoxelGrid : _voxelGrid;
             var sdfCopy = _sdfGrid; // may be null
+            
             // If user toggles SDF and no SDFGrid exists yet, create one with safe fast-mode settings
             if (localUseSDF && sdfCopy == null && gridCopy != null)
             {

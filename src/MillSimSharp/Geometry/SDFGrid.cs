@@ -113,17 +113,9 @@ namespace MillSimSharp.Geometry
         {
             if (_octree == null) return; // Safety check
             
-            // Expand by narrow band in voxel units
-            int bandVoxels = Math.Max(1, (int)Math.Ceiling(_narrowBandWidth / _resolution));
-            int nx0 = Math.Max(0, minX - bandVoxels);
-            int ny0 = Math.Max(0, minY - bandVoxels);
-            int nz0 = Math.Max(0, minZ - bandVoxels);
-            int nx1 = Math.Min(_sizeX - 1, maxX + bandVoxels);
-            int ny1 = Math.Min(_sizeY - 1, maxY + bandVoxels);
-            int nz1 = Math.Min(_sizeZ - 1, maxZ + bandVoxels);
-
-            // Recompute this region within the octree
-            _octree.UpdateRegion(nx0, ny0, nz0, nx1, ny1, nz1);
+            // Use the new Fast Sweeping-based incremental update
+            // This will expand the region by narrow band and update both SDF and octree
+            _octree.UpdateRegionWithFastSweeping(minX, minY, minZ, maxX, maxY, maxZ);
         }
 
         /// <summary>

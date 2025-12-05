@@ -250,7 +250,169 @@ namespace MillSimSharp.Geometry
                         // Update with sign preserved
                         sdf[x, y, z] = sign * minDist;
                     }
-                });
+                })
+;
+            }
+        }
+        
+        /// <summary>
+        /// Update SDF for a specific region after voxel changes.
+        /// OPTIMIZATION: Instead of full Fast Sweeping on the region,
+        /// use incremental distance propagation from changed voxels only.
+        /// This would reduce O(region_size) to O(changed_voxels * narrow_band).
+        /// </summary>
+        /// <param name="sdf">Existing SDF grid to update</param>
+        /// <param name="voxelGrid">Source voxel grid</param>
+        /// <param name="minX">Minimum X index of changed region</param>
+        /// <param name="minY">Minimum Y index of changed region</param>
+        /// <param name="minZ">Minimum Z index of changed region</param>
+        /// <param name="maxX">Maximum X index of changed region</param>
+        /// <param name="maxY">Maximum Y index of changed region</param>
+        /// <param name="maxZ">Maximum Z index of changed region</param>
+        /// <param name="narrowBand">Maximum distance to compute (in voxels)</param>
+        public static void UpdateRegion(float[,,] sdf, VoxelGrid voxelGrid,
+            int minX, int minY, int minZ, int maxX, int maxY, int maxZ, float narrowBand)
+        {
+            int sizeX = sdf.GetLength(0);
+            int sizeY = sdf.GetLength(1);
+            int sizeZ = sdf.GetLength(2);
+            
+            // Clamp region to grid bounds
+            minX = Math.Max(0, minX);
+            minY = Math.Max(0, minY);
+            minZ = Math.Max(0, minZ);
+            maxX = Math.Min(sizeX - 1, maxX);
+            maxY = Math.Min(sizeY - 1, maxY);
+            maxZ = Math.Min(sizeZ - 1, maxZ);
+            
+            // Re-initialize distances in the affected region
+            Parallel.For(minZ, maxZ + 1, z =>
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        bool isMaterial = voxelGrid.GetVoxel(x, y, z);
+                        
+                        // Check if this is a surface voxel
+                        bool isSurface = false;
+                        for (int dz = -1; dz <= 1 && !isSurface; dz++)
+                        {
+                            for (int dy = -1; dy <= 1 && !isSurface; dy++)
+                            {
+                                for (int dx = -1; dx <= 1 && !isSurface; dx++)
+                                {
+                                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                                    
+                                    int nx = x + dx, ny = y + dy, nz = z + dz;
+                                    
+                                    bool neighborMaterial = (nx >= 0 && nx < sizeX && ny >= 0 && ny < sizeY && nz >= 0 && nz < sizeZ)
+                                        ? voxelGrid.GetVoxel(nx, ny, nz)
+                                        : false;
+                                    
+                                    if (neighborMaterial != isMaterial)
+                                    {
+                                        isSurface = true;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (isSurface)
+                        {
+                            sdf[x, y, z] = isMaterial ? 0.1f : -0.1f;
+                        }
+                        else if (isMaterial)
+                        {
+                            sdf[x, y, z] = 0.5f;
+                        }
+                        else
+                        {
+                            sdf[x, y, z] = -narrowBand;
+                        }
+                    }
+                }
+            });
+            
+            // Run Fast Sweeping on the region (2 iterations)
+            for (int iter = 0; iter < 2; iter++)
+            {
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, +1, +1, +1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, -1, +1, +1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, +1, -1, +1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, -1, -1, +1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, +1, +1, -1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, +1, -1, -1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, -1, +1, -1, narrowBand);
+                SweepRegion(sdf, sizeX, sizeY, sizeZ, minX, minY, minZ, maxX, maxY, maxZ, -1, -1, -1, narrowBand);
+            }
+        }
+        
+        /// <summary>
+        /// Sweep a specific region of the SDF grid
+        /// </summary>
+        private static void SweepRegion(float[,,] sdf, int sizeX, int sizeY, int sizeZ,
+            int minX, int minY, int minZ, int maxX, int maxY, int maxZ,
+            int xDir, int yDir, int zDir, float narrowBand)
+        {
+            int xStart = (xDir > 0) ? minX : maxX;
+            int xEnd = (xDir > 0) ? maxX + 1 : minX - 1;
+            
+            int yStart = (yDir > 0) ? minY : maxY;
+            int yEnd = (yDir > 0) ? maxY + 1 : minY - 1;
+            
+            int zStart = (zDir > 0) ? minZ : maxZ;
+            int zEnd = (zDir > 0) ? maxZ + 1 : minZ - 1;
+            
+            for (int z = zStart; z != zEnd; z += zDir)
+            {
+                for (int y = yStart; y != yEnd; y += yDir)
+                {
+                    for (int x = xStart; x != xEnd; x += xDir)
+                    {
+                        float current = sdf[x, y, z];
+                        
+                        if (Math.Abs(current) < 0.1f) continue;
+                        
+                        float minDist = Math.Abs(current);
+                        int sign = Math.Sign(current);
+                        
+                        // Check 6-connected neighbors
+                        if (x - xDir >= 0 && x - xDir < sizeX)
+                        {
+                            float neighbor = sdf[x - xDir, y, z];
+                            if (Math.Sign(neighbor) == sign)
+                            {
+                                float newDist = Math.Abs(neighbor) + 1.0f;
+                                if (newDist < minDist) minDist = newDist;
+                            }
+                        }
+                        
+                        if (y - yDir >= 0 && y - yDir < sizeY)
+                        {
+                            float neighbor = sdf[x, y - yDir, z];
+                            if (Math.Sign(neighbor) == sign)
+                            {
+                                float newDist = Math.Abs(neighbor) + 1.0f;
+                                if (newDist < minDist) minDist = newDist;
+                            }
+                        }
+                        
+                        if (z - zDir >= 0 && z - zDir < sizeZ)
+                        {
+                            float neighbor = sdf[x, y, z - zDir];
+                            if (Math.Sign(neighbor) == sign)
+                            {
+                                float newDist = Math.Abs(neighbor) + 1.0f;
+                                if (newDist < minDist) minDist = newDist;
+                            }
+                        }
+                        
+                        if (minDist > narrowBand) minDist = narrowBand;
+                        
+                        sdf[x, y, z] = sign * minDist;
+                    }
+                }
             }
         }
     }

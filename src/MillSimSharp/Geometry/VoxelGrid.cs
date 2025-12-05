@@ -274,8 +274,6 @@ namespace MillSimSharp.Geometry
                         }
                     }
                 });
-                // Conservative report once for the whole bounding box
-                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
                 // Report the entire bounding box as changed (conservative)
                 VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
             }
@@ -406,6 +404,8 @@ namespace MillSimSharp.Geometry
                         // Conservative report will be invoked after loop completes
                     }
                 });
+                // Report the entire bounding box as changed (conservative)
+                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
             }
             else
             {
