@@ -69,31 +69,56 @@ executor.ExecuteCommands(commands);
 StlExporter.Export(voxelGrid, "output.stl");
 ```
 
-### Advanced: Using SDF for High-Quality Mesh
+### SDF-Native Workflow (Direct SDF Manipulation)
 
-For large grids or high-quality mesh output, use `SDFGrid`:
+For SDF-based workflows without voxels, use `SDFGrid` directly:
+
+```csharp
+using MillSimSharp.Geometry;
+using MillSimSharp.IO;
+using System.Numerics;
+
+// 1. Create an SDF grid directly (all material initially)
+var workArea = BoundingBox.FromCenterAndSize(
+    Vector3.Zero,
+    new Vector3(100, 100, 100)
+);
+var sdfGrid = new SDFGrid(workArea, resolution: 0.5f, narrowBandWidth: 10);
+
+// 2. Remove material using SDF operations
+sdfGrid.RemoveSphere(new Vector3(0, 0, 0), radius: 15.0f);
+sdfGrid.RemoveSphere(new Vector3(20, 0, 0), radius: 10.0f);
+
+// 3. Generate high-quality mesh using Dual Contouring
+var mesh = sdfGrid.GenerateMesh();
+
+// 4. Export to STL
+StlExporter.Export(mesh, "output_sdf.stl");
+```
+
+### Converting Voxel Simulation to SDF
+
+You can also convert a voxel grid (after simulation) to an SDF for mesh export:
 
 ```csharp
 using MillSimSharp.Geometry;
 
-// After voxel simulation...
-// Generate SDF with narrow band optimization
+// After voxel simulation (see first example)...
 var sdfGrid = SDFGrid.FromVoxelGrid(
     voxelGrid, 
-    narrowBandWidth: 2,  // Optimize for speed
-    useSparse: true      // Use sparse storage for large grids
+    narrowBandWidth: 2,
+    useSparse: true
 );
 
-// Generate high-quality mesh using Dual Contouring
 var mesh = sdfGrid.GenerateMesh();
-
-// Export mesh to STL
-StlExporter.Export(mesh, "output_hq.stl");
+StlExporter.Export(mesh, "output_from_voxel.stl");
 ```
 
-## Viewer (sample app)
+## Viewer and Samples (Repository Only)
 
-The `MillSimSharp.Viewer` project is a lightweight sample application and visualizer to demonstrate library usage. It is a demo tool and not intended to be a full GUI for production.
+> **Note:** The viewer app and sample projects are included in the **source repository** but are **not part of the NuGet package**. The NuGet package contains only the core `MillSimSharp` library.
+
+The `MillSimSharp.Viewer` project is a lightweight sample application and visualizer to demonstrate library usage. It is a demo tool and not intended to be a full GUI for production. Additional usage samples can be found in the `samples/` directory of the repository.
 <img width="1282" height="752" alt="image" src="https://github.com/user-attachments/assets/54a82f2c-3519-4e7c-b18a-20732c760441" />
 
 ![Animation](https://github.com/user-attachments/assets/dfda64cc-c0e9-40aa-bfe1-dba323b3b4ef)
@@ -106,9 +131,11 @@ dotnet run --project src\MillSimSharp.Viewer
 
 If you have a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc`, the viewer will load and simulate it; otherwise it will run the demo scene.
 
-## Build and Test (local)
+## Build and Test (Repository)
 
-To build and run tests locally
+> **Note:** This section applies to the source repository, not the NuGet package.
+
+To build and run tests locally:
 
 ```powershell
 dotnet build
