@@ -101,7 +101,8 @@ Sample demonstrating 5-axis machining capabilities with rotary axes.
 - Curved surface machining with normal-controlled tool orientation
 - Coordinate transformations for multi-axis positioning
 
-**Output**: `five_axis_result.stl`
+**Output**: `output/five_axis_result.stl`
+<img width="827" height="772" alt="image" src="https://github.com/user-attachments/assets/5ed18368-9b97-41c7-8954-f342c60087fb" />
 
 **How to Run**:
 ```bash
