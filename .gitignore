@@ -367,3 +367,6 @@ FodyWeavers.xsd
 
 # ignore IO/OBJ directories
 !/src/IO/OBJ
+
+# ignore stl files
+*.stl

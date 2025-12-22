@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<machine>
+  <name>5-Axis Machining Center</name>
+  <axes>
+    <!-- Linear axes -->
+    <axis>
+      <name>X</name>
+      <type>Linear</type>
+      <min>0</min>
+      <max>500</max>
+    </axis>
+    <axis>
+      <name>Y</name>
+      <type>Linear</type>
+      <min>0</min>
+      <max>400</max>
+    </axis>
+    <axis>
+      <name>Z</name>
+      <type>Linear</type>
+      <min>-200</min>
+      <max>300</max>
+    </axis>
+    
+    <!-- Rotary axes -->
+    <axis>
+      <name>A</name>
+      <type>Rotary</type>
+      <rotationAxis>X</rotationAxis>
+      <min>-120</min>
+      <max>120</max>
+    </axis>
+    <axis>
+      <name>C</name>
+      <type>Rotary</type>
+      <rotationAxis>Z</rotationAxis>
+      <min>-360</min>
+      <max>360</max>
+    </axis>
+  </axes>
+</machine>

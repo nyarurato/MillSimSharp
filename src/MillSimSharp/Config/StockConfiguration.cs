@@ -7,13 +7,31 @@ using MillSimSharp.Geometry;
 namespace MillSimSharp.Config
 {
     /// <summary>
+    /// Defines where the WorkOrigin point is located on the stock.
+    /// </summary>
+    public enum StockOriginType
+    {
+        /// <summary>
+        /// WorkOrigin is at the minimum corner (X-, Y-, Z-) of the stock.
+        /// Stock extends in positive X, Y, Z directions.
+        /// </summary>
+        MinCorner,
+
+        /// <summary>
+        /// WorkOrigin is at the center of the stock.
+        /// Stock extends equally in all directions.
+        /// </summary>
+        Center
+    }
+
+    /// <summary>
     /// Stock configuration loaded from XML.
     /// </summary>
     [XmlRoot("stock")]
     public class StockConfiguration
     {
         /// <summary>
-        /// Work origin (center or corner of stock).
+        /// Work origin (reference point on stock).
         /// </summary>
         [XmlElement("WorkOrigin")]
         public Vector3Data WorkOrigin { get; set; }
@@ -23,6 +41,13 @@ namespace MillSimSharp.Config
         /// </summary>
         [XmlElement("WorkSize")]
         public Vector3Data WorkSize { get; set; }
+
+        /// <summary>
+        /// Defines where the WorkOrigin point is located on the stock.
+        /// Default is MinCorner (legacy behavior).
+        /// </summary>
+        [XmlElement("OriginType")]
+        public StockOriginType OriginType { get; set; } = StockOriginType.MinCorner;
 
         /// <summary>
         /// Loads stock configuration from XML file.
@@ -46,7 +71,17 @@ namespace MillSimSharp.Config
         {
             var origin = WorkOrigin.ToVector3();
             var size = WorkSize.ToVector3();
-            return BoundingBox.FromCenterAndSize(origin, size);
+
+            if (OriginType == StockOriginType.Center)
+            {
+                // Origin is at center, create bounding box from center and size
+                return BoundingBox.FromCenterAndSize(origin, size);
+            }
+            else // MinCorner
+            {
+                // Origin is at minimum corner, create bounding box from min to max
+                return new BoundingBox(origin, origin + size);
+            }
         }
     }
 

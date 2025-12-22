@@ -15,11 +15,17 @@ namespace MillSimSharp.Toolpath
         private List<IToolpathCommand>? _commands;
         private int _currentCommandIndex = -1;
         private Vector3 _initialPosition;
+        private ToolOrientation _initialOrientation;
 
         /// <summary>
         /// Current tool position.
         /// </summary>
         public Vector3 CurrentPosition { get; private set; }
+
+        /// <summary>
+        /// Current tool orientation (for 5-axis machining).
+        /// </summary>
+        public ToolOrientation CurrentOrientation { get; private set; }
         
         /// <summary>
         /// Number of commands to execute per step (default: 1).
@@ -47,13 +53,16 @@ namespace MillSimSharp.Toolpath
         /// <param name="simulator"></param>
         /// <param name="tool"></param>
         /// <param name="initialPosition"></param>
+        /// <param name="initialOrientation">Initial tool orientation (optional, for 5-axis).</param>
         /// <exception cref="ArgumentNullException"></exception>
-        public ToolpathExecutor(ICutterSimulator simulator, Tool tool, Vector3 initialPosition)
+        public ToolpathExecutor(ICutterSimulator simulator, Tool tool, Vector3 initialPosition, ToolOrientation? initialOrientation = null)
         {
             _simulator = simulator ?? throw new ArgumentNullException(nameof(simulator));
             _tool = tool ?? throw new ArgumentNullException(nameof(tool));
             _initialPosition = initialPosition;
+            _initialOrientation = initialOrientation ?? ToolOrientation.Default;
             CurrentPosition = initialPosition;
+            CurrentOrientation = _initialOrientation;
         }
         
         /// <summary>
@@ -65,6 +74,7 @@ namespace MillSimSharp.Toolpath
             _commands = new List<IToolpathCommand>(commands);
             _currentCommandIndex = -1;
             CurrentPosition = _initialPosition;
+            CurrentOrientation = _initialOrientation;
         }
         
         /// <summary>
@@ -99,6 +109,7 @@ namespace MillSimSharp.Toolpath
         {
             _currentCommandIndex = -1;
             CurrentPosition = _initialPosition;
+            CurrentOrientation = _initialOrientation;
         }
 
         /// <summary>
@@ -110,11 +121,29 @@ namespace MillSimSharp.Toolpath
             if (commands == null) throw new ArgumentNullException(nameof(commands));
 
             var position = CurrentPosition;
+            var orientation = CurrentOrientation;
+            
             foreach (var command in commands)
             {
-                command.Execute(_simulator, _tool, ref position);
+                // Check if it's a 5-axis command that needs orientation
+                if (command is G1Move5Axis g1Move5Axis)
+                {
+                    g1Move5Axis.Execute(_simulator, _tool, ref position, orientation);
+                    orientation = g1Move5Axis.Orientation;
+                }
+                else if (command is G0Move5Axis g0Move5Axis)
+                {
+                    position = g0Move5Axis.Target;
+                    orientation = g0Move5Axis.Orientation;
+                }
+                else
+                {
+                    command.Execute(_simulator, _tool, ref position);
+                }
             }
+            
             CurrentPosition = position;
+            CurrentOrientation = orientation;
         }
 
         /// <summary>
@@ -124,9 +153,28 @@ namespace MillSimSharp.Toolpath
         public void ExecuteCommand(IToolpathCommand command)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
+            
             var position = CurrentPosition;
-            command.Execute(_simulator, _tool, ref position);
+            var orientation = CurrentOrientation;
+            
+            // Check if it's a 5-axis command that needs orientation
+            if (command is G1Move5Axis g1Move5Axis)
+            {
+                g1Move5Axis.Execute(_simulator, _tool, ref position, orientation);
+                orientation = g1Move5Axis.Orientation;
+            }
+            else if (command is G0Move5Axis g0Move5Axis)
+            {
+                position = g0Move5Axis.Target;
+                orientation = g0Move5Axis.Orientation;
+            }
+            else
+            {
+                command.Execute(_simulator, _tool, ref position);
+            }
+            
             CurrentPosition = position;
+            CurrentOrientation = orientation;
         }
     }
 }

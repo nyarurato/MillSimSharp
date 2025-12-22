@@ -27,9 +27,16 @@ namespace MillSimSharp.Simulation
         /// <summary>
         /// Performs a linear cut from start to end using the specified tool.
         /// Removes material both at the tool tip and along the tool shaft.
+        /// 
+        /// <para><b>座標基準：</b></para>
+        /// <para>
+        /// start と end は工具先端（ツールチップ）の位置を表します。
+        /// 3軸加工では工具は常にZ軸負方向（下向き）を向いています。
+        /// 5軸加工でも、指定された位置は工具先端の位置です。
+        /// </para>
         /// </summary>
-        /// <param name="start">Start position of the tool tip.</param>
-        /// <param name="end">End position of the tool tip.</param>
+        /// <param name="start">Start position of the tool tip (cutting edge center).</param>
+        /// <param name="end">End position of the tool tip (cutting edge center).</param>
         /// <param name="tool">The cutting tool.</param>
         public void CutLinear(Vector3 start, Vector3 end, Tool tool)
         {
@@ -126,6 +133,62 @@ namespace MillSimSharp.Simulation
             // Remove material along the tool shaft (vertical cylinder above the tip)
             Vector3 shaftTop = position + new Vector3(0, 0, length);
             _grid.RemoveVoxelsInCylinder(position, shaftTop, radius, flatEnds: true);
+        }
+
+        /// <summary>
+        /// Performs a linear cut with specified tool orientation (for 5-axis machining).
+        /// </summary>
+        /// <param name="start">Tool tip position at start.</param>
+        /// <param name="end">Tool tip position at end.</param>
+        /// <param name="tool">Cutting tool to use.</param>
+        /// <param name="startOrientation">Tool orientation at start.</param>
+        /// <param name="endOrientation">Tool orientation at end.</param>
+        public void CutLinearWithOrientation(Vector3 start, Vector3 end, Tool tool,
+            Toolpath.ToolOrientation startOrientation, Toolpath.ToolOrientation endOrientation)
+        {
+            if (tool == null) throw new ArgumentNullException(nameof(tool));
+
+            float radius = tool.Diameter / 2.0f;
+            float length = tool.Length;
+
+            // Number of interpolation steps based on distance
+            Vector3 delta = end - start;
+            float distance = delta.Length();
+            int steps = Math.Max(1, (int)Math.Ceiling(distance / _grid.Resolution));
+
+            // Interpolate along the path with orientation
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = i / (float)steps;
+                Vector3 position = Vector3.Lerp(start, end, t);
+
+                // Interpolate orientation
+                var orientation = new Toolpath.ToolOrientation(
+                    startOrientation.A + (endOrientation.A - startOrientation.A) * t,
+                    startOrientation.B + (endOrientation.B - startOrientation.B) * t,
+                    startOrientation.C + (endOrientation.C - startOrientation.C) * t
+                );
+
+                // Get tool direction at this orientation
+                Vector3 toolDirection = orientation.GetToolDirection();
+
+                // Calculate shaft endpoint
+                Vector3 shaftEnd = position - toolDirection * length;
+
+                // Remove material for tool tip
+                if (tool.Type == ToolType.Ball)
+                {
+                    _grid.RemoveVoxelsInSphere(position, radius);
+                }
+                else
+                {
+                    // For flat end mill, remove a small sphere at the tip
+                    _grid.RemoveVoxelsInSphere(position, radius * 0.5f);
+                }
+
+                // Remove material along the tool shaft
+                _grid.RemoveVoxelsInCylinder(position, shaftEnd, radius, flatEnds: true);
+            }
         }
     }
 }

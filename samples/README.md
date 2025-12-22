@@ -91,6 +91,28 @@ dotnet run
 
 ---
 
+### 05-FiveAxisMachining
+Sample demonstrating 5-axis machining capabilities with rotary axes.
+
+**Features**:
+- Tool orientation control using A, B, C rotary axes
+- Tilted cutting passes with angular tool positioning
+- 5-axis spiral toolpath with continuously changing orientation
+- Curved surface machining with normal-controlled tool orientation
+- Coordinate transformations for multi-axis positioning
+
+**Output**: `five_axis_result.stl`
+
+**How to Run**:
+```bash
+cd 05-FiveAxisMachining
+dotnet run
+```
+
+**Key Concept**: Demonstrates advanced 5-axis capabilities including tool orientation interpolation and surface-normal-based toolpath generation. See the [detailed README](05-FiveAxisMachining/README.md) for more information.
+
+---
+
 ## Viewing Outputs
 
 Each sample generates STL files in an `output/` folder. You can view them with any standard 3D viewer.

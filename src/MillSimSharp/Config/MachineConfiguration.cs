@@ -69,21 +69,48 @@ namespace MillSimSharp.Config
     public class AxisConfig
     {
         /// <summary>
-        /// Axis name (e.g., "X", "Y", "Z").
+        /// Axis name (e.g., "X", "Y", "Z", "A", "B", "C").
         /// </summary>
         [XmlElement("name")]
         public string Name { get; set; }
 
         /// <summary>
-        /// Minimum axis position in millimeters.
+        /// Minimum axis position in millimeters or degrees for rotary axes.
         /// </summary>
         [XmlElement("min")]
         public float Min { get; set; }
 
         /// <summary>
-        /// Maximum axis position in millimeters.
+        /// Maximum axis position in millimeters or degrees for rotary axes.
         /// </summary>
         [XmlElement("max")]
         public float Max { get; set; }
+
+        /// <summary>
+        /// Type of axis (Linear or Rotary).
+        /// </summary>
+        [XmlElement("type")]
+        public AxisType Type { get; set; } = AxisType.Linear;
+
+        /// <summary>
+        /// For rotary axes, the axis of rotation (X, Y, or Z).
+        /// </summary>
+        [XmlElement("rotationAxis")]
+        public string RotationAxis { get; set; }
+    }
+
+    /// <summary>
+    /// Type of machine axis.
+    /// </summary>
+    public enum AxisType
+    {
+        /// <summary>
+        /// Linear axis (X, Y, Z).
+        /// </summary>
+        Linear,
+        /// <summary>
+        /// Rotary axis (A, B, C).
+        /// </summary>
+        Rotary
     }
 }

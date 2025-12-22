@@ -107,5 +107,65 @@ namespace MillSimSharp.Simulation
             Vector3 shaftTop = position + new Vector3(0, 0, length);
             _sdfGrid.RemoveCylinder(position, shaftTop, radius);
         }
+
+        /// <summary>
+        /// Performs a linear cut with specified tool orientation (for 5-axis machining).
+        /// </summary>
+        /// <param name="start">Tool tip position at start.</param>
+        /// <param name="end">Tool tip position at end.</param>
+        /// <param name="tool">Cutting tool to use.</param>
+        /// <param name="startOrientation">Tool orientation at start.</param>
+        /// <param name="endOrientation">Tool orientation at end.</param>
+        public void CutLinearWithOrientation(Vector3 start, Vector3 end, Tool tool,
+            Toolpath.ToolOrientation startOrientation, Toolpath.ToolOrientation endOrientation)
+        {
+            if (tool == null) throw new ArgumentNullException(nameof(tool));
+
+            float radius = tool.Diameter / 2.0f;
+            float length = tool.Length;
+
+            // Number of interpolation steps based on distance
+            // Limit interpolation frequency to avoid excessive computation
+            Vector3 delta = end - start;
+            float distance = delta.Length();
+            
+            // Use fewer steps for 5-axis: one step per 2-3 voxels rather than every voxel
+            float stepSize = _sdfGrid.Resolution * 2.5f;
+            int steps = Math.Max(1, (int)Math.Ceiling(distance / stepSize));
+
+            // Interpolate along the path with orientation
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = i / (float)steps;
+                Vector3 position = Vector3.Lerp(start, end, t);
+
+                // Interpolate orientation
+                var orientation = new Toolpath.ToolOrientation(
+                    startOrientation.A + (endOrientation.A - startOrientation.A) * t,
+                    startOrientation.B + (endOrientation.B - startOrientation.B) * t,
+                    startOrientation.C + (endOrientation.C - startOrientation.C) * t
+                );
+
+                // Get tool direction at this orientation
+                Vector3 toolDirection = orientation.GetToolDirection();
+
+                // Calculate shaft endpoint
+                Vector3 shaftEnd = position - toolDirection * length;
+
+                // Remove material for tool tip
+                if (tool.Type == ToolType.Ball)
+                {
+                    _sdfGrid.RemoveSphere(position, radius);
+                }
+                else
+                {
+                    // For flat end mill, remove a small sphere at the tip
+                    _sdfGrid.RemoveSphere(position, radius * 0.5f);
+                }
+
+                // Remove material along the tool shaft
+                _sdfGrid.RemoveCylinder(position, shaftEnd, radius);
+            }
+        }
     }
 }
