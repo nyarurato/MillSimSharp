@@ -17,8 +17,11 @@ namespace FiveAxisMachining
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("5-Axis Machining Simulation Demo (SDF-based)");
-            Console.WriteLine("=============================================\n");
+            Console.WriteLine("=== MillSimSharp Sample: 5-Axis Machining (SDF) ===\n");
+
+            // Create output directory
+            var outputDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "output");
+            Directory.CreateDirectory(outputDir);
 
             // Create stock configuration (100x100x50mm block)
             // Origin at center (0,0,0), so stock extends from (-50,-50,-25) to (50,50,25)
@@ -40,34 +43,34 @@ namespace FiveAxisMachining
             var tool = toolConfig.CreateTool();
 
             // Create SDF grid with 0.5mm resolution for high-quality results
+            Console.WriteLine("Creating SDF grid (100×100×50mm, 0.5mm resolution)...");
             var bbox = stockConfig.GetBoundingBox();
             var sdfGrid = new SDFGrid(bbox, resolution: 0.5f, narrowBandWidth: 5);
             var simulator = new SDFCutterSimulator(sdfGrid);
             var executor = new ToolpathExecutor(simulator, tool, Vector3.Zero);
-
             var size = bbox.Max - bbox.Min;
-            Console.WriteLine($"Stock: {size.X}x{size.Y}x{size.Z}mm");
-            Console.WriteLine($"Tool: Ball End Mill, Diameter: {toolConfig.Diameter}mm");
-            Console.WriteLine($"Resolution: {sdfGrid.Resolution}mm (SDF-based)");
-            Console.WriteLine($"Narrow band width: {sdfGrid.NarrowBandWidth} voxels\n");
+            Console.WriteLine($"  Stock: {size.X}x{size.Y}x{size.Z}mm");
+            Console.WriteLine($"  Tool: {toolConfig.Diameter}mm ball-end mill");
+            Console.WriteLine($"  Resolution: {sdfGrid.Resolution}mm\n");
 
             // Example 1: Simple tilted cutting pass
-            Console.WriteLine("Example 1: Tilted cutting pass with A-axis rotation");
+            Console.WriteLine("Example 1: Tilted cutting pass with A-axis rotation...");
             SimpleTiltedPass(executor);
 
             // Example 2: Cone-shaped toolpath with continuously changing orientation
-            Console.WriteLine("Example 2: 5-axis cone toolpath");
+            Console.WriteLine("\nExample 2: 5-axis cone toolpath...");
             FiveAxisCone(executor);
 
             // Generate high-quality mesh from SDF
             Console.WriteLine("\nGenerating mesh from SDF...");
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
-            Console.WriteLine($"Mesh generated: {mesh.Vertices.Length} vertices, {mesh.Indices.Length / 3} triangles");
+            Console.WriteLine($"  Generated: {mesh.Vertices.Length} vertices, {mesh.Indices.Length / 3} triangles\n");
 
             // Export result
             string outputFile = "five_axis_result.stl";
-            StlExporter.Export(mesh, outputFile);
-            Console.WriteLine($"\nExported result to: {outputFile}");
+            string outputPath = Path.Combine(outputDir, outputFile);
+            StlExporter.Export(mesh, outputPath);
+            Console.WriteLine($"Saved: {outputFile}");
         }
 
         /// <summary>
@@ -106,44 +109,42 @@ namespace FiveAxisMachining
         static void FiveAxisCone(ToolpathExecutor executor)
         {
             var commands = new List<IToolpathCommand>();
-            var tool_fixed_point = new Vector3(0, 0, 10); //工具のシャフトが通る固定点（原点より上）
-            int divN = 10; //分割数
-            float cone_base_z = -15f; //円錐底面のZ座標（原点より下）
-            float radius = 20f; //底面の半径
+            var tool_fixed_point = new Vector3(0, 0, 10); // Fixed point on tool shaft (above origin)
+            int divN = 10; // Number of divisions
+            float cone_base_z = -15f; // Cone base Z coordinate (below origin)
+            float radius = 20f; // Base radius
             
-            // 安全な退避位置
+            // Retract to safe position
             commands.Add(new G0Move5Axis(new Vector3(0, 0, 50), ToolOrientation.Default));
-
-            Console.WriteLine($"  Cone: center=(0,0,{cone_base_z}), radius={radius}mm, apex=(0,0,{tool_fixed_point.Z})");
 
             for(int i = 0; i <= divN; i++)
             {
                 float angle = i * 2.0f * MathF.PI / divN;
-                float x = radius * MathF.Cos(angle);  // 原点(0,0)中心の円
+                float x = radius * MathF.Cos(angle);  // Circle centered at origin
                 float y = radius * MathF.Sin(angle);
-                float z = cone_base_z; // 円錐底面の高さ
+                float z = cone_base_z; // Cone base height
                 
-                // 工具先端位置（円錐の底面円周上）
+                // Tool tip position (on cone base circumference)
                 var targetPos = new Vector3(x, y, z);
 
-                // 工具軸方向 = 固定点から工具先端への方向（工具先端が下、デフォルト(0,0,-1)と同じ向き）
+                // Tool axis direction = from fixed point to tool tip (tip pointing down, same as default (0,0,-1))
                 Vector3 tool_direction = Vector3.Normalize(targetPos - tool_fixed_point);
                 
-                // 工具方向から姿勢角度を計算
-                // tool_direction は工具が指す方向（デフォルトは(0,0,-1)が下向き）
-                // 回転順序: C → B → A (ZYX Euler angles)
+                // Calculate orientation angles from tool direction
+                // tool_direction is the direction tool points (default is (0,0,-1) downward)
+                // Rotation order: C → B → A (ZYX Euler angles)
                 
-                // B軸: Y軸周りの回転（XZ平面での傾き）
-                // 符号を反転（Matrix4x4.CreateRotationYの定義と合わせる）
+                // B-axis: Rotation around Y-axis (tilt in XZ plane)
+                // Negate to match Matrix4x4.CreateRotationY definition
                 float b_deg = -MathF.Atan2(tool_direction.X, -tool_direction.Z) * 180f / MathF.PI;
                 
-                // A軸: X軸周りの回転（YZ平面での傾き）
+                // A-axis: Rotation around X-axis (tilt in YZ plane)
                 float projectionXZ = MathF.Sqrt(tool_direction.X * tool_direction.X + tool_direction.Z * tool_direction.Z);
                 float a_deg = MathF.Atan2(tool_direction.Y, projectionXZ) * 180f / MathF.PI;
                 
                 var orientation = new ToolOrientation(a_deg, b_deg, 0);
                 
-                // 切削移動（最初のポイントから切削開始）
+                // Cutting move (start cutting from first point)
                 commands.Add(new G1Move5Axis(targetPos, orientation, feedRate: 150f));
             }
             
