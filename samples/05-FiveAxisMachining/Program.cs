@@ -70,7 +70,7 @@ namespace FiveAxisMachining
             string outputFile = "five_axis_result.stl";
             string outputPath = Path.Combine(outputDir, outputFile);
             StlExporter.Export(mesh, outputPath);
-            Console.WriteLine($"Saved: {outputFile}");
+            Console.WriteLine($"Saved: {outputPath}");
         }
 
         /// <summary>
