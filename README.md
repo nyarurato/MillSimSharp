@@ -141,9 +141,9 @@ var commands = new List<IToolpathCommand>
     // Tilted cutting pass (30° on A-axis)
     new G0Move5Axis(new Vector3(-10, 0, 10), new ToolOrientation(a_deg: 30)),
     new G1Move5Axis(new Vector3(50, 0, 10), new ToolOrientation(a_deg: 30), feedRate: 200f),
-    
-    // Cone-shaped path with varying orientation
-    // (Tool shaft passes through fixed point while tip moves in circle)
+
+    // See samples/05-FiveAxisMachining for a cone toolpath whose orientation changes
+    // continuously (the tool shaft passes through a fixed point while the tip moves in a circle).
 };
 executor.ExecuteCommands(commands);
 
@@ -185,6 +185,7 @@ You can also convert a voxel grid (after simulation) to an SDF for mesh export:
 
 ```csharp
 using MillSimSharp.Geometry;
+using MillSimSharp.IO;
 
 // After voxel simulation (see first example)...
 var sdfGrid = SDFGrid.FromVoxelGrid(

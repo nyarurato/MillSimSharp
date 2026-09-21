@@ -95,7 +95,7 @@ sdfGrid.BindToVoxelGrid(voxelGrid);
 
 // ボクセル変更時、自動的にSDF更新がトリガーされる
 voxelGrid.RemoveVoxelsInSphere(position, radius);
-// → SDFGrid.OnVoxelGridChanged が呼ばれる
+// → VoxelsChanged イベント経由で SDF 更新がスケジュールされる
 // → SignedDistanceFieldBuilder.ComputeRegion が該当領域を再計算
 ```
 

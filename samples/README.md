@@ -99,9 +99,8 @@ Sample demonstrating 5-axis machining capabilities with rotary axes.
 
 **Features**:
 - Tool orientation control using A, B, C rotary axes
-- Tilted cutting passes with angular tool positioning
+- Tilted cutting pass with a fixed orientation
 - 5-axis cone toolpath with continuously changing orientation
-- Curved surface machining with normal-controlled tool orientation
 - Physical-tip tool pose with quaternion orientation interpolation
 
 **Output**: `output/five_axis_result.stl`

@@ -82,8 +82,7 @@ The specified orientation defines the final tool direction vector. Conversion to
 ## Features Demonstrated
 
 1. **Tilted Cutting Pass**: Simple linear cutting with a tilted tool orientation
-2. **5-Axis Spiral**: Complex toolpath with continuously changing position and orientation
-3. **Curved Surface Machining**: Simulating surface following with normal-controlled tool orientation
+2. **5-Axis Cone Toolpath**: Circular path with continuously changing orientation (the tool shaft passes through a fixed point while the tip moves along the cone base)
 
 ## Key Classes
 
@@ -105,9 +104,14 @@ Represents the rotational state of the tool:
 
 ## Configuration
 
-The sample uses a 5-axis machine configuration defined in `configs/five_axis_machine.xml`:
+The sample defines its stock and tool inline (`StockConfiguration`, `ToolConfiguration`).
+
+The repository also contains an example machine definition in `configs/five_axis_machine.xml`:
 - Linear axes: X (0-500mm), Y (0-400mm), Z (-200-300mm)
 - Rotary axes: A (-120° to 120°), C (-360° to 360°)
+
+The sample does not load or enforce these limits. Use `MachineConfiguration.LoadFromXml` if you want
+to validate moves against a machine definition.
 
 ## Running the Sample
 
@@ -120,7 +124,7 @@ The program will:
 1. Create a 100x100x50mm stock represented as an SDF
 2. Execute two different 5-axis toolpath examples (tilted pass and cone path)
 3. Generate a high-quality mesh from the SDF using Dual Contouring
-4. Export the result to `five_axis_result.stl`
+4. Export the result to `output/five_axis_result.stl`
 
 **Advantages of SDF-based simulation:**
 - High-quality smooth surfaces
@@ -145,7 +149,7 @@ executor.ExecuteCommands(commands);
 
 // Generate high-quality mesh
 var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
-StlExporter.Export(mesh, "output.stl");
+StlExporter.Export(mesh, "output/five_axis_result.stl");
 ```
 
 The SDF approach provides smoother surfaces compared to direct voxel export, especially for curved toolpaths and tilted cutting operations.
@@ -197,6 +201,9 @@ Orientation is interpolated with quaternion slerp (shortest rotation), and rotat
 (same position, changed orientation) are swept as well. Straight moves with constant orientation
 and no axial motion use an exact swept solid.
 
+This sample overrides `MaxLinearStep` to `1.0mm` (the chord sagitta of the R5 ball is only ~0.025mm)
+to keep the sample fast while staying well below the 0.5mm voxel size.
+
 ### Coordinate Systems
 
 - **Work Coordinates**: The coordinate system where parts are designed
@@ -204,6 +211,9 @@ and no axial motion use an exact swept solid.
 - **Tool Coordinates**: Coordinate system aligned with the tool axis
 
 ## Advanced Usage
+
+> The snippets in this section are illustrative. Helpers such as `CalculateSurfaceNormal`,
+> `NormalToOrientation` and `CheckCollision` are not part of the library.
 
 ### Custom Surface Machining
 
