@@ -45,4 +45,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\src\MillSimSharp.Viewer\gcodes\*.nc" Link="gcodes\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

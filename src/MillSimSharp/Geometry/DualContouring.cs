@@ -244,45 +244,48 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Generate quad (two triangles) between four cell vertices.
+        /// Emits a quad (two triangles) between four cell vertices.
+        /// <para>
+        /// The winding is derived from the SDF sign change along the corresponding grid edge:
+        /// when material (negative) is at the positive end of the edge, the natural quad winding
+        /// points into the material and must be reversed. This is globally consistent and does not
+        /// depend on potentially cancelling cell normals.
+        /// </para>
         /// </summary>
         private static void EmitQuad(
             CellVertex v0, CellVertex v1, CellVertex v2, CellVertex v3,
+            bool materialAtEdgeEnd,
             Func<Vector3, Vector3, int> addVertex, List<int> indices)
         {
             // Check all vertices are valid
             if (!v0.IsValid || !v1.IsValid || !v2.IsValid || !v3.IsValid)
                 return;
 
-            Vector3 avgNormal = (v0.Normal + v1.Normal + v2.Normal + v3.Normal) / 4.0f;
-            if (!IsValidNormal(avgNormal))
-                return;
-
-            avgNormal = Vector3.Normalize(avgNormal);
-
-            // Compute face normal to determine winding order
+            // Compute the quad normal for shading. After the winding decision below this is the
+            // normal of the emitted triangles, so vertex normals always agree with the geometry.
             Vector3 edge1 = v1.Position - v0.Position;
             Vector3 edge2 = v2.Position - v0.Position;
             Vector3 faceNormal = Vector3.Cross(edge1, edge2);
-
-            if (faceNormal.LengthSquared() < 1e-12f)
-            {
-                // Degenerate quad: keep the topology closed and use the cell normal for winding
-                faceNormal = avgNormal;
-            }
-            else
+            if (faceNormal.LengthSquared() > 1e-12f)
             {
                 faceNormal = Vector3.Normalize(faceNormal);
             }
+            else
+            {
+                faceNormal = IsValidNormal(v0.Normal) ? Vector3.Normalize(v0.Normal) : Vector3.UnitY;
+            }
 
-            int i0 = addVertex(v0.Position, IsValidNormal(v0.Normal) ? v0.Normal : faceNormal);
-            int i1 = addVertex(v1.Position, IsValidNormal(v1.Normal) ? v1.Normal : faceNormal);
-            int i2 = addVertex(v2.Position, IsValidNormal(v2.Normal) ? v2.Normal : faceNormal);
-            int i3 = addVertex(v3.Position, IsValidNormal(v3.Normal) ? v3.Normal : faceNormal);
+            if (materialAtEdgeEnd)
+            {
+                faceNormal = -faceNormal; // the emitted triangles are reversed
+            }
 
-            bool flipWinding = Vector3.Dot(faceNormal, avgNormal) < 0;
+            int i0 = addVertex(v0.Position, faceNormal);
+            int i1 = addVertex(v1.Position, faceNormal);
+            int i2 = addVertex(v2.Position, faceNormal);
+            int i3 = addVertex(v3.Position, faceNormal);
 
-            if (flipWinding)
+            if (materialAtEdgeEnd)
             {
                 AddTriangle(indices, i0, i2, i1);
                 AddTriangle(indices, i0, i3, i2);
@@ -381,6 +384,10 @@ namespace MillSimSharp.Geometry
                         CellVertex center = cellVertices[xi, yi, zi];
                         if (!center.IsValid) continue;
 
+                        // All three edges end at the cell's (+,+,+) corner, so the sign there
+                        // decides whether the natural quad winding must be reversed.
+                        bool materialAtEdgeEnd = (center.MaterialMask & (1 << 7)) != 0;
+
                         // X-aligned edge at the cell's (+y, +z) corner
                         if (HasEdgeCrossing(center.MaterialMask, 6, 7))
                         {
@@ -389,7 +396,7 @@ namespace MillSimSharp.Geometry
                                 cellVertices[xi, yi + 1, zi],
                                 cellVertices[xi, yi + 1, zi + 1],
                                 cellVertices[xi, yi, zi + 1],
-                                AddVertex, indices);
+                                materialAtEdgeEnd, AddVertex, indices);
                         }
 
                         // Y-aligned edge at the cell's (+x, +z) corner
@@ -400,7 +407,7 @@ namespace MillSimSharp.Geometry
                                 cellVertices[xi, yi, zi + 1],
                                 cellVertices[xi + 1, yi, zi + 1],
                                 cellVertices[xi + 1, yi, zi],
-                                AddVertex, indices);
+                                materialAtEdgeEnd, AddVertex, indices);
                         }
 
                         // Z-aligned edge at the cell's (+x, +y) corner
@@ -411,7 +418,7 @@ namespace MillSimSharp.Geometry
                                 cellVertices[xi + 1, yi, zi],
                                 cellVertices[xi + 1, yi + 1, zi],
                                 cellVertices[xi, yi + 1, zi],
-                                AddVertex, indices);
+                                materialAtEdgeEnd, AddVertex, indices);
                         }
                     }
                 }

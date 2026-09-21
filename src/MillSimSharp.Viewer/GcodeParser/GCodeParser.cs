@@ -6,10 +6,11 @@ using System.Numerics;
 using System.Text.RegularExpressions;
 using MillSimSharp.Toolpath;
 
-namespace MillSimSharp.IO
+namespace MillSimSharp.Viewer
 {
     /// <summary>
-    /// Minimal G-code parser that produces toolpath commands.
+    /// Minimal G-code parser that produces toolpath commands. This is a viewer-side helper; the
+    /// core library intentionally does not include a G-code parser.
     /// <list type="bullet">
     /// <item>G0 rapid and G1 linear moves</item>
     /// <item>G2 / G3 arcs in the G17 (XY) plane, emitted as short G1 chords (helical Z supported)</item>

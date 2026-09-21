@@ -210,16 +210,23 @@ namespace MillSimSharp.Geometry
         /// </summary>
         private float DistanceFromVoxelCenterToBounds(int x, int y, int z)
         {
-            float cx = _bounds.Min.X + (x + 0.5f) * _resolution;
-            float cy = _bounds.Min.Y + (y + 0.5f) * _resolution;
-            float cz = _bounds.Min.Z + (z + 0.5f) * _resolution;
+            Vector3 center = VoxelToWorld(x, y, z);
+            return DistanceFromPointToBounds(center);
+        }
+
+        /// <summary>
+        /// Computes the positive distance from a world point to the closest point inside the bounds.
+        /// Points inside the bounds return zero.
+        /// </summary>
+        private float DistanceFromPointToBounds(Vector3 point)
+        {
             float dx = 0, dy = 0, dz = 0;
-            if (cx < _bounds.Min.X) dx = _bounds.Min.X - cx;
-            else if (cx > _bounds.Max.X) dx = cx - _bounds.Max.X;
-            if (cy < _bounds.Min.Y) dy = _bounds.Min.Y - cy;
-            else if (cy > _bounds.Max.Y) dy = cy - _bounds.Max.Y;
-            if (cz < _bounds.Min.Z) dz = _bounds.Min.Z - cz;
-            else if (cz > _bounds.Max.Z) dz = cz - _bounds.Max.Z;
+            if (point.X < _bounds.Min.X) dx = _bounds.Min.X - point.X;
+            else if (point.X > _bounds.Max.X) dx = point.X - _bounds.Max.X;
+            if (point.Y < _bounds.Min.Y) dy = _bounds.Min.Y - point.Y;
+            else if (point.Y > _bounds.Max.Y) dy = point.Y - _bounds.Max.Y;
+            if (point.Z < _bounds.Min.Z) dz = _bounds.Min.Z - point.Z;
+            else if (point.Z > _bounds.Max.Z) dz = point.Z - _bounds.Max.Z;
             float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
             if (dist > _narrowBandWidth) dist = _narrowBandWidth;
             return dist;
@@ -271,11 +278,21 @@ namespace MillSimSharp.Geometry
         /// <summary>
         /// Gets the signed distance at a world position using trilinear interpolation.
         /// Voxel samples are treated as living at voxel centers (half-voxel offset).
+        /// Points on or outside the grid bounds are treated as air (positive distance), which keeps
+        /// the outer shell of an SDF-native grid closed and consistent with voxel-derived grids.
         /// </summary>
         /// <param name="worldPos">World position</param>
         /// <returns>Interpolated signed distance value in millimeters</returns>
         public float GetDistance(Vector3 worldPos)
         {
+            const float boundaryEpsilon = 1e-6f;
+            if (worldPos.X <= _bounds.Min.X + boundaryEpsilon || worldPos.X >= _bounds.Max.X - boundaryEpsilon ||
+                worldPos.Y <= _bounds.Min.Y + boundaryEpsilon || worldPos.Y >= _bounds.Max.Y - boundaryEpsilon ||
+                worldPos.Z <= _bounds.Min.Z + boundaryEpsilon || worldPos.Z >= _bounds.Max.Z - boundaryEpsilon)
+            {
+                return DistanceFromPointToBounds(worldPos);
+            }
+
             // Convert to sample space (voxel centers live at integer + 0.5 in world/res units).
             float fx = (worldPos.X - _bounds.Min.X) / _resolution - 0.5f;
             float fy = (worldPos.Y - _bounds.Min.Y) / _resolution - 0.5f;

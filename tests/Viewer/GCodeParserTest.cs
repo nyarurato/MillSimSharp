@@ -1,11 +1,11 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using MillSimSharp.IO;
 using MillSimSharp.Toolpath;
+using MillSimSharp.Viewer;
 using NUnit.Framework;
 
-namespace MillSimSharp.Tests.IO
+namespace MillSimSharp.Tests.Viewer
 {
     /// <summary>
     /// Tests for the core G-code parser.

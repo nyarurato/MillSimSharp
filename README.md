@@ -13,7 +13,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **Signed Distance Field (SDF) generation** (exact Euclidean Distance Transform) for high-quality mesh conversion and fast distance queries
 - **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
 - **Flexible stock origin configuration** (center or corner-based)
-- **G-code parser independence** - bring your own parser (gsGCode is used for the viewer demo)
+- **G-code parser independence** - bring your own parser; the viewer includes a small example parser (G0/G1/G2/G3, inch/mm, absolute/incremental)
 - **Flexible resolution** - adjust voxel size based on your needs
 - **Simple API** for toolpath execution
 

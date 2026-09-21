@@ -15,12 +15,11 @@ namespace MillSimSharp.Viewer
 {
     public class VoxelViewerWindow : GameWindow
     {
-        private VoxelRenderer? _renderer;
         private AxisRenderer? _axisRenderer;
         private Camera? _camera;
-        private Shader? _voxelShader;
         private Shader? _lineShader;
         private MeshRenderer? _meshRenderer;
+        private readonly object _meshLock = new object();
         // Async mesh generation fields
         private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
@@ -39,7 +38,6 @@ namespace MillSimSharp.Viewer
         // Step-by-step execution fields
         private bool _stepByStepMode = false;
         private ToolpathExecutor? _stepExecutor;
-        private SDFCutterSimulator? _stepSimulator;
         private SDFGrid? _stepSdfGrid;
         private bool _tKeyPrev = false;
         private bool _spaceKeyPrev = false;
@@ -53,7 +51,7 @@ namespace MillSimSharp.Viewer
 
         // Processing state tracking
         private string _processingStatus = "";
-        private bool _meshGenerationInProgress = false;
+        private volatile bool _meshGenerationInProgress = false;
 
         public VoxelViewerWindow(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
             : base(gameWindowSettings, nativeWindowSettings)
@@ -80,11 +78,6 @@ namespace MillSimSharp.Viewer
 
             // Load shaders
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            _voxelShader = new Shader(
-                Path.Combine(baseDir, "Shaders/voxel.vert"),
-                Path.Combine(baseDir, "Shaders/voxel.frag")
-            );
-
             _lineShader = new Shader(
                 Path.Combine(baseDir, "Shaders/line.vert"),
                 Path.Combine(baseDir, "Shaders/line.frag")
@@ -114,8 +107,8 @@ namespace MillSimSharp.Viewer
                 // Create a work area that covers reasonable size for the demo G-code
                 // G-code uses Z=100 for cutting, so place workpiece below that
                 var bbox = BoundingBox.FromCenterAndSize(
-                    new SysVector3(0, 0, 0),  // Center at Z=50 so top is at Z=100
-                    new SysVector3(200, 200, 100)  // Height of 100mm
+                    new SysVector3(0, 0, 0),  // Stock centered at the origin (Z spans -50..50)
+                    new SysVector3(200, 200, 100)
                 );
                 var gridStopwatch = new Stopwatch();
                 gridStopwatch.Start();
@@ -131,7 +124,7 @@ namespace MillSimSharp.Viewer
                 parseStopwatch.Start();
                 try
                 {
-                    commands = GcodeToPath.ParseFromFile(gcodeFile, startPos);
+                    commands = GCodeParser.ParseFile(gcodeFile, startPos);
                     parseStopwatch.Stop();
                     Console.WriteLine($"Loaded G-code file: {gcodeFile}. Commands: {commands.Count}. Parse time: {parseStopwatch.ElapsedMilliseconds} ms");
                 }
@@ -172,7 +165,6 @@ namespace MillSimSharp.Viewer
             }
 
             // Initialize renderer
-            _renderer = new VoxelRenderer();
             _axisRenderer = new AxisRenderer();
             _toolpathRenderer = new ToolpathRenderer();
             _meshRenderer = new MeshRenderer();
@@ -187,7 +179,6 @@ namespace MillSimSharp.Viewer
             if (_sdfGrid != null)
             {
                 // SDF grid is already initialized, just generate mesh
-                Console.WriteLine("Starting mesh generation...");
                 StartMeshGenerationAsync();
             }
 
@@ -199,6 +190,9 @@ namespace MillSimSharp.Viewer
             Console.WriteLine($"  - Space: Execute next step(s) (in step mode)");
             Console.WriteLine($"  - Home: Reset to beginning (in step mode)");
             Console.WriteLine($"  - PageUp/PageDown: Change step size (1, 5, 10, 50, 100, 1000)");
+            Console.WriteLine($"  - R: Recompute mesh");
+            Console.WriteLine($"  - C: Toggle backface culling");
+            Console.WriteLine($"  - E: Export current mesh to STL");
             Console.WriteLine($"  - ESC: Exit");
 
             stopwatch.Stop();
@@ -244,11 +238,8 @@ namespace MillSimSharp.Viewer
             // Clear buffers
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            if (_voxelShader == null || _camera == null || _renderer == null)
+            if (_camera == null || _meshShader == null || _meshRenderer == null)
                 return;
-
-            // Use shader
-            _voxelShader.Use();
 
             // Set matrices
             Matrix4 view = _camera.GetViewMatrix();
@@ -259,24 +250,18 @@ namespace MillSimSharp.Viewer
                 1000.0f
             );
 
-            _voxelShader.SetMatrix4("uView", view);
-            _voxelShader.SetMatrix4("uProjection", projection);
-            _voxelShader.SetFloat("uVoxelSize", _sdfGrid?.Resolution ?? 1.0f);
-
-            // Set light direction (Directional light pointing from above, Z+)
-            Vector3 lightDir = new Vector3(0.3f, 0.3f, -0.3f);
+            // Directional light (toward the light source: from above with a slight tilt)
+            Vector3 lightDir = new Vector3(0.3f, 0.3f, 0.8f);
             lightDir.Normalize();
-            _voxelShader.SetVector3("uLightDir", lightDir);
 
-            // Render mesh if available, otherwise render instanced voxels
-            if (_meshShader != null && _meshRenderer != null)
+            _meshShader.Use();
+            _meshShader.SetMatrix4("uView", view);
+            _meshShader.SetMatrix4("uProjection", projection);
+            _meshShader.SetVector3("uLightDir", lightDir);
+
+            // Apply pending mesh update if available (do this on render thread)
+            lock (_meshLock)
             {
-                _meshShader.Use();
-                _meshShader.SetMatrix4("uView", view);
-                _meshShader.SetMatrix4("uProjection", projection);
-                _meshShader.SetVector3("uLightDir", lightDir);
-
-                // Apply pending mesh update if available (do this on render thread)
                 if (_meshUpdatePending && _pendingMesh != null)
                 {
                     _meshRenderer.UpdateMesh(_pendingMesh);
@@ -285,12 +270,8 @@ namespace MillSimSharp.Viewer
                     _meshUpdatePending = false;
                     _pendingMesh = null;
                 }
-                _meshRenderer.Render();
             }
-            else
-            {
-                _renderer.Render();
-            }
+            _meshRenderer.Render();
 
             // Render axes
             _axisRenderer?.Render(view, projection);
@@ -434,12 +415,10 @@ namespace MillSimSharp.Viewer
                     // Initialize step execution
                     var bbox = _sdfGrid.Bounds;
                     _stepSdfGrid = new SDFGrid(bbox, _sdfGrid.Resolution, narrowBandWidth: 2);
-                    _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
+                    var simulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
-                    _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
+                    _stepExecutor = new ToolpathExecutor(simulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands);
-
-
 
                     Console.WriteLine($"Step executor initialized. Total commands: {_stepExecutor.TotalCommands}, Step size: {_stepExecutor.StepSize}");
                 }
@@ -483,9 +462,9 @@ namespace MillSimSharp.Viewer
                     // Reset voxel grid
                     var bbox = _stepSdfGrid.Bounds;
                     _stepSdfGrid = new SDFGrid(bbox, _stepSdfGrid.Resolution, narrowBandWidth: 2);
-                    _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
+                    var simulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
-                    _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
+                    _stepExecutor = new ToolpathExecutor(simulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands!);
 
                     StartMeshGenerationAsync();
@@ -570,9 +549,7 @@ namespace MillSimSharp.Viewer
         {
             base.OnUnload();
 
-            _renderer?.Dispose();
             _axisRenderer?.Dispose();
-            _voxelShader?.Dispose();
             _lineShader?.Dispose();
             _meshShader?.Dispose();
             _toolpathRenderer?.Dispose();
@@ -633,10 +610,14 @@ namespace MillSimSharp.Viewer
 
                 if (t.IsCompletedSuccessfully)
                 {
-                    _pendingMesh = t.Result;
-                    _meshUpdatePending = true;
+                    var mesh = t.Result;
+                    lock (_meshLock)
+                    {
+                        _pendingMesh = mesh;
+                        _meshUpdatePending = true;
+                    }
                     _processingStatus = "";
-                    Console.WriteLine($"Mesh generation finished: vertices={_pendingMesh.Vertices.Length}, triangles={_pendingMesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
+                    Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
                 }
                 else if (t.IsFaulted)
                 {
