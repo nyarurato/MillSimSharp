@@ -15,6 +15,11 @@ namespace MillSimSharp.Simulation
     public interface ICutterSimulator
     {
         /// <summary>
+        /// Gets the sampling settings used for pose interpolation (linear/angular step limits).
+        /// </summary>
+        SimulationSettings Settings { get; }
+
+        /// <summary>
         /// Performs a linear cut from start to end using the specified tool.
         /// </summary>
         /// <param name="start">Tool tip position at start.</param>

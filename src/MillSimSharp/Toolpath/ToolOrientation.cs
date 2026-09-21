@@ -105,6 +105,43 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
+        /// Gets the quaternion representation of this orientation (rotation order C -> B -> A).
+        /// </summary>
+        /// <returns>Normalized quaternion.</returns>
+        public Quaternion GetQuaternion()
+        {
+            float aRad = A * MathF.PI / 180f;
+            float bRad = B * MathF.PI / 180f;
+            float cRad = C * MathF.PI / 180f;
+
+            var rotX = Quaternion.CreateFromAxisAngle(Vector3.UnitX, aRad);
+            var rotY = Quaternion.CreateFromAxisAngle(Vector3.UnitY, bRad);
+            var rotZ = Quaternion.CreateFromAxisAngle(Vector3.UnitZ, cRad);
+
+            // Hamilton composition: q = qx * qy * qz applies the C, then B, then A rotation,
+            // matching the row-vector matrix order rotZ * rotY * rotX used by GetRotationMatrix.
+            return Quaternion.Normalize(rotX * rotY * rotZ);
+        }
+
+        /// <summary>
+        /// Computes the shortest angular distance between two orientations in degrees.
+        /// </summary>
+        /// <param name="start">Start orientation.</param>
+        /// <param name="end">End orientation.</param>
+        /// <returns>Angular distance in degrees (0 to 180).</returns>
+        public static float AngularDistanceDegrees(ToolOrientation start, ToolOrientation end)
+        {
+            Quaternion q0 = start.GetQuaternion();
+            Quaternion q1 = end.GetQuaternion();
+
+            float dot = MathF.Abs(Quaternion.Dot(q0, q1));
+            if (dot > 1f) dot = 1f;
+
+            float angleRad = 2f * MathF.Acos(dot);
+            return angleRad * 180f / MathF.PI;
+        }
+
+        /// <summary>
         /// Gets the tool direction vector (spindle -> tip).
         /// </summary>
         [Obsolete("Use GetCuttingAxisDirection() (spindle -> tip) or GetAxisTowardSpindle() (tip -> spindle).")]

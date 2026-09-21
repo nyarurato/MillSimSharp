@@ -92,10 +92,7 @@ namespace MillSimSharp.Toolpath
             while (executed < stepsToExecute && _currentCommandIndex < _commands.Count - 1)
             {
                 _currentCommandIndex++;
-                var command = _commands[_currentCommandIndex];
-                var position = CurrentPosition;
-                command.Execute(_simulator, _tool, ref position);
-                CurrentPosition = position;
+                ExecuteCore(_commands[_currentCommandIndex]);
                 executed++;
             }
             
@@ -113,51 +110,15 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
-        /// Executes all commands in sequence.
+        /// Executes a single command while keeping position and orientation state consistent.
+        /// All execution paths (batch, single, step-by-step) share this method so that 5-axis
+        /// orientation state is never lost.
         /// </summary>
-        /// <param name="commands">List of commands to execute.</param>
-        public void ExecuteCommands(IEnumerable<IToolpathCommand> commands)
+        private void ExecuteCore(IToolpathCommand command)
         {
-            if (commands == null) throw new ArgumentNullException(nameof(commands));
-
             var position = CurrentPosition;
             var orientation = CurrentOrientation;
-            
-            foreach (var command in commands)
-            {
-                // Check if it's a 5-axis command that needs orientation
-                if (command is G1Move5Axis g1Move5Axis)
-                {
-                    g1Move5Axis.Execute(_simulator, _tool, ref position, orientation);
-                    orientation = g1Move5Axis.Orientation;
-                }
-                else if (command is G0Move5Axis g0Move5Axis)
-                {
-                    position = g0Move5Axis.Target;
-                    orientation = g0Move5Axis.Orientation;
-                }
-                else
-                {
-                    command.Execute(_simulator, _tool, ref position);
-                }
-            }
-            
-            CurrentPosition = position;
-            CurrentOrientation = orientation;
-        }
 
-        /// <summary>
-        /// Executes a single command.
-        /// </summary>
-        /// <param name="command">Command to execute.</param>
-        public void ExecuteCommand(IToolpathCommand command)
-        {
-            if (command == null) throw new ArgumentNullException(nameof(command));
-            
-            var position = CurrentPosition;
-            var orientation = CurrentOrientation;
-            
-            // Check if it's a 5-axis command that needs orientation
             if (command is G1Move5Axis g1Move5Axis)
             {
                 g1Move5Axis.Execute(_simulator, _tool, ref position, orientation);
@@ -172,9 +133,34 @@ namespace MillSimSharp.Toolpath
             {
                 command.Execute(_simulator, _tool, ref position);
             }
-            
+
             CurrentPosition = position;
             CurrentOrientation = orientation;
+        }
+
+        /// <summary>
+        /// Executes all commands in sequence.
+        /// </summary>
+        /// <param name="commands">List of commands to execute.</param>
+        public void ExecuteCommands(IEnumerable<IToolpathCommand> commands)
+        {
+            if (commands == null) throw new ArgumentNullException(nameof(commands));
+
+            foreach (var command in commands)
+            {
+                ExecuteCore(command);
+            }
+        }
+
+        /// <summary>
+        /// Executes a single command.
+        /// </summary>
+        /// <param name="command">Command to execute.</param>
+        public void ExecuteCommand(IToolpathCommand command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+
+            ExecuteCore(command);
         }
     }
 }

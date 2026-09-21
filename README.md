@@ -286,11 +286,16 @@ var stockConfig = new StockConfiguration
 
 ## Performance Optimization
 
-For 5-axis machining, the library automatically optimizes interpolation step size to balance quality and performance:
-- **3-axis**: One step per voxel resolution
-- **5-axis**: One step per 2.5× voxel resolution (configurable)
+Interpolation step counts for cutting moves are derived from both linear and angular motion
+(`SimulationSettings` on each simulator):
 
-This provides smooth orientation changes while maintaining reasonable computation times.
+- **`MaxLinearStep`**: maximum linear step in mm (default: `0.5 ×` voxel resolution)
+- **`MaxAngularStep`**: maximum angular step in degrees (default: `2°`)
+- **`MinimumSteps`**: minimum steps per cutting command (default: `1`)
+
+Orientation is interpolated with quaternion slerp (shortest rotation), and steps are computed as
+`max(linearSteps, angularSteps, MinimumSteps)`. This guarantees smooth 5-axis orientation changes
+and ensures that **rotation-only moves** (same position, different orientation) still sweep the tool.
 
 ## License
 

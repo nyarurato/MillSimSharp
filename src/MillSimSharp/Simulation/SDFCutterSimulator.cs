@@ -17,6 +17,9 @@ namespace MillSimSharp.Simulation
     {
         private readonly SDFGrid _sdfGrid;
 
+        /// <inheritdoc />
+        public SimulationSettings Settings { get; }
+
         /// <summary>
         /// Creates a new SDFCutterSimulator with the specified SDF grid.
         /// </summary>
@@ -25,12 +28,15 @@ namespace MillSimSharp.Simulation
         public SDFCutterSimulator(SDFGrid sdfGrid)
         {
             _sdfGrid = sdfGrid ?? throw new ArgumentNullException(nameof(sdfGrid));
+            Settings = new SimulationSettings { MaxLinearStep = 0.5f * _sdfGrid.Resolution };
         }
 
         /// <summary>
         /// Performs a linear cut from start to end using the specified tool.
+        /// <para>
         /// start / end は工具先端（Physical Tip）の位置です。
-        /// ボールエンドミルは球中心の軌跡を掃引し、フラットエンドミルは平底円柱を掃引します。
+        /// 実装は既定姿勢の pose sweep に委譲されるため、3軸と5軸で切削形状の経路が一致します。
+        /// </para>
         /// </summary>
         /// <param name="start">Start position of the physical tool tip.</param>
         /// <param name="end">End position of the physical tool tip.</param>
@@ -39,52 +45,8 @@ namespace MillSimSharp.Simulation
         {
             if (tool == null) throw new ArgumentNullException(nameof(tool));
 
-            float radius = tool.Diameter / 2.0f;
-            float length = tool.Length;
-            float ballOffset = tool.BallCenterOffsetFromTip;
-            Vector3 axisTowardSpindle = Vector3.UnitZ; // 3-axis tools always point downward
-
-            Vector3 centerStart = start + axisTowardSpindle * ballOffset;
-            Vector3 centerEnd = end + axisTowardSpindle * ballOffset;
-            Vector3 topOffset = axisTowardSpindle * Math.Max(length, ballOffset);
-
-            // Step 1: sweep the cutting edge along the path
-            if (tool.Type == ToolType.Ball)
-            {
-                // Ball: capsule around the ball-center path
-                _sdfGrid.RemoveCapsule(centerStart, centerEnd, radius);
-            }
-            else
-            {
-                // Flat: flat-ended cylinder swept along the tip path
-                _sdfGrid.RemoveFiniteCylinder(start, end, radius);
-            }
-
-            // Step 2: sweep the top of the tool (cutting length is measured from the physical tip)
-            _sdfGrid.RemoveFiniteCylinder(start + topOffset, end + topOffset, radius);
-
-            // Step 3: swept shaft volume between the cutting center path and the tool top
-            Vector3 motion = end - start;
-            float distance = motion.Length();
-
-            if (distance > 0)
-            {
-                float stepSize = radius * 0.5f;
-                int numSteps = Math.Max(2, (int)Math.Ceiling(distance / stepSize));
-
-                for (int i = 0; i <= numSteps; i++)
-                {
-                    float t = i / (float)numSteps;
-                    Vector3 tipPos = start + motion * t;
-                    Vector3 centerPos = tipPos + axisTowardSpindle * ballOffset;
-                    Vector3 topPos = tipPos + topOffset;
-                    _sdfGrid.RemoveFiniteCylinder(centerPos, topPos, radius);
-                }
-            }
-            else
-            {
-                _sdfGrid.RemoveFiniteCylinder(centerStart, start + topOffset, radius);
-            }
+            // 3-axis cuts are the default-orientation case of the pose sweep.
+            CutLinearWithOrientation(start, end, tool, Toolpath.ToolOrientation.Default, Toolpath.ToolOrientation.Default);
         }
 
         /// <summary>
@@ -117,6 +79,11 @@ namespace MillSimSharp.Simulation
 
         /// <summary>
         /// Performs a linear cut with specified tool orientation (for 5-axis machining).
+        /// <para>
+        /// The number of interpolation steps is derived from both linear and angular motion
+        /// (<see cref="SimulationSettings"/>), and the orientation is interpolated with a
+        /// quaternion slerp (shortest rotation). Rotation-only moves are swept as well.
+        /// </para>
         /// </summary>
         /// <param name="start">Physical tool tip position at start.</param>
         /// <param name="end">Physical tool tip position at end.</param>
@@ -132,29 +99,21 @@ namespace MillSimSharp.Simulation
             float length = tool.Length;
             float ballOffset = tool.BallCenterOffsetFromTip;
 
-            // Number of interpolation steps based on distance
-            // Limit interpolation frequency to avoid excessive computation
             Vector3 delta = end - start;
             float distance = delta.Length();
+            float angularDistance = Toolpath.ToolOrientation.AngularDistanceDegrees(startOrientation, endOrientation);
+            int steps = Settings.ComputeSteps(distance, angularDistance);
 
-            // Use fewer steps for 5-axis: one step per 2-3 voxels rather than every voxel
-            float stepSize = _sdfGrid.Resolution * 2.5f;
-            int steps = Math.Max(1, (int)Math.Ceiling(distance / stepSize));
+            Quaternion qStart = startOrientation.GetQuaternion();
+            Quaternion qEnd = endOrientation.GetQuaternion();
 
-            // Interpolate along the path with orientation
             for (int i = 0; i <= steps; i++)
             {
                 float t = i / (float)steps;
                 Vector3 position = Vector3.Lerp(start, end, t);
+                Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
+                Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
 
-                // Interpolate orientation
-                var orientation = new Toolpath.ToolOrientation(
-                    startOrientation.A + (endOrientation.A - startOrientation.A) * t,
-                    startOrientation.B + (endOrientation.B - startOrientation.B) * t,
-                    startOrientation.C + (endOrientation.C - startOrientation.C) * t
-                );
-
-                Vector3 axisTowardSpindle = orientation.GetAxisTowardSpindle();
                 Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
                 Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
 

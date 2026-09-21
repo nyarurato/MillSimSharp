@@ -20,14 +20,9 @@ namespace MillSimSharp.Toolpath
         public ToolOrientation Orientation { get; }
 
         /// <summary>
-        /// Feed rate in mm/min.
+        /// Feed rate in mm/min. Not used by geometry simulation.
         /// </summary>
         public float FeedRate { get; }
-
-        /// <summary>
-        /// Number of interpolation steps for orientation changes.
-        /// </summary>
-        public int InterpolationSteps { get; }
 
         /// <summary>
         /// Creates a new 5-axis linear move command.
@@ -35,13 +30,11 @@ namespace MillSimSharp.Toolpath
         /// <param name="target">Target position.</param>
         /// <param name="orientation">Tool orientation at target.</param>
         /// <param name="feedRate">Feed rate in mm/min.</param>
-        /// <param name="interpolationSteps">Number of steps for smooth orientation changes (default: 20).</param>
-        public G1Move5Axis(Vector3 target, ToolOrientation orientation, float feedRate = 100f, int interpolationSteps = 20)
+        public G1Move5Axis(Vector3 target, ToolOrientation orientation, float feedRate = 100f)
         {
             Target = target;
             Orientation = orientation;
             FeedRate = feedRate;
-            InterpolationSteps = Math.Max(1, interpolationSteps);
         }
 
         /// <summary>
@@ -64,17 +57,8 @@ namespace MillSimSharp.Toolpath
             if (simulator == null) throw new ArgumentNullException(nameof(simulator));
             if (tool == null) throw new ArgumentNullException(nameof(tool));
 
-            // Calculate the total distance
-            Vector3 direction = Target - currentPosition;
-            float distance = direction.Length();
-
-            if (distance < 0.001f)
-            {
-                currentPosition = Target;
-                return;
-            }
-
-            // Use 5-axis cutting with orientation
+            // Cut with orientation interpolation. Rotation-only moves (position unchanged) are
+            // swept by the simulator settings, so the tool pose sweep is still simulated.
             simulator.CutLinearWithOrientation(currentPosition, Target, tool, currentOrientation, Orientation);
 
             currentPosition = Target;
