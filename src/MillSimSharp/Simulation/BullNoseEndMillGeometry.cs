@@ -41,9 +41,13 @@ namespace MillSimSharp.Simulation
             Radius = radius;
             CornerRadius = cornerRadius;
             Length = length;
+
+            // The toroidal corner can reach z = 2 * cornerRadius; extend the bounds so the solid
+            // is always contained (analogous to the ball end mill's max(length, 2 * radius)).
+            float zMax = MathF.Max(length, 2f * cornerRadius);
             LocalBounds = new BoundingBox(
                 new Vector3(-radius, -radius, 0f),
-                new Vector3(radius, radius, length));
+                new Vector3(radius, radius, zMax));
         }
 
         /// <inheritdoc />
@@ -53,13 +57,25 @@ namespace MillSimSharp.Simulation
         public float CuttingCenterOffset => 0f;
 
         /// <inheritdoc />
+        public float RotationSweepRadius
+        {
+            get
+            {
+                float zMax = MathF.Max(Length, 2f * CornerRadius);
+                return MathF.Sqrt(Radius * Radius + zMax * zMax);
+            }
+        }
+
+        /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
             float radial = MathF.Sqrt(localPoint.X * localPoint.X + localPoint.Y * localPoint.Y);
             float z = localPoint.Z;
 
-            // Main cylinder from the corner center up to the tool top
-            float cylinder = CappedCylinderDistance(radial, z, Radius, CornerRadius, Length);
+            // Main cylinder from the corner center to the tool top. The top is at least the corner
+            // radius so the cap range stays valid for a very short cutting length.
+            float fluteTop = MathF.Max(Length, CornerRadius);
+            float cylinder = CappedCylinderDistance(radial, z, Radius, CornerRadius, fluteTop);
 
             // Flat bottom core (radius R - r) from z = 0 to the corner center height
             float core = CappedCylinderDistance(radial, z, Radius - CornerRadius, 0f, CornerRadius);

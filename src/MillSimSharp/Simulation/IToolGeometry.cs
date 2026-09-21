@@ -31,5 +31,12 @@ namespace MillSimSharp.Simulation
         /// Zero for flat tools; equal to the radius for ball end mills.
         /// </summary>
         float CuttingCenterOffset { get; }
+
+        /// <summary>
+        /// Conservative distance from the physical tip (the rotation pivot) to the farthest point
+        /// of the cutting solid in millimeters. Used to bound the path of any tool point during an
+        /// orientation change (adaptive pose sampling), so it must not underestimate the solid.
+        /// </summary>
+        float RotationSweepRadius { get; }
     }
 }

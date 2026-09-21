@@ -46,6 +46,17 @@ namespace MillSimSharp.Simulation
         public float CuttingCenterOffset => Radius;
 
         /// <inheritdoc />
+        public float RotationSweepRadius
+        {
+            get
+            {
+                // Farthest points: the top of the ball (2R) and the top corner of the flute.
+                float fluteTop = MathF.Max(Length, Radius);
+                return MathF.Max(2f * Radius, MathF.Sqrt(Radius * Radius + fluteTop * fluteTop));
+            }
+        }
+
+        /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
             // Ball with center at (0, 0, radius); the tip is the ball bottom.

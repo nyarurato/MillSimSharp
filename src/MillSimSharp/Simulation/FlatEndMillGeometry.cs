@@ -43,6 +43,9 @@ namespace MillSimSharp.Simulation
         public float CuttingCenterOffset => 0f;
 
         /// <inheritdoc />
+        public float RotationSweepRadius => MathF.Sqrt(Radius * Radius + Length * Length);
+
+        /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
             // Exact signed distance to a capped cylinder (Inigo Quilez formulation).

@@ -335,18 +335,20 @@ namespace MillSimSharp.Geometry
 
             public bool Equals(Vector3 a, Vector3 b)
             {
-                return Math.Abs(a.X - b.X) < Epsilon &&
-                       Math.Abs(a.Y - b.Y) < Epsilon &&
-                       Math.Abs(a.Z - b.Z) < Epsilon;
+                return Quantize(a) == Quantize(b);
             }
 
             public int GetHashCode(Vector3 v)
             {
-                return HashCode.Combine(
-                    (int)MathF.Round(v.X / Epsilon),
-                    (int)MathF.Round(v.Y / Epsilon),
-                    (int)MathF.Round(v.Z / Epsilon)
-                );
+                return Quantize(v).GetHashCode();
+            }
+
+            private static (long X, long Y, long Z) Quantize(Vector3 v)
+            {
+                return (
+                    (long)MathF.Round(v.X / Epsilon),
+                    (long)MathF.Round(v.Y / Epsilon),
+                    (long)MathF.Round(v.Z / Epsilon));
             }
         }
 

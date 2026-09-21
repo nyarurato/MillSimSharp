@@ -235,6 +235,49 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void BindToVoxelGrid_MismatchedDimensions_Throws()
+        {
+            var sdf = new SDFGrid(BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20)), 1f);
+            var grid = new VoxelGrid(BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 20, 20)), 1f);
+
+            Assert.Throws<ArgumentException>(() => sdf.BindToVoxelGrid(grid));
+        }
+
+        [Test]
+        public void UpdateRegionFromVoxelGrid_MismatchedResolution_Throws()
+        {
+            var bounds = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
+            var sdf = new SDFGrid(bounds, 1f);
+            var grid = new VoxelGrid(bounds, 0.5f);
+
+            Assert.Throws<ArgumentException>(() => sdf.UpdateRegionFromVoxelGrid(grid, 0, 0, 0, 1, 1, 1));
+        }
+
+        [Test]
+        public void BindToVoxelGrid_MismatchedBounds_Throws()
+        {
+            var sdf = new SDFGrid(BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20)), 1f);
+            var grid = new VoxelGrid(new BoundingBox(new Vector3(1, 0, 0), new Vector3(21, 20, 20)), 1f);
+
+            Assert.Throws<ArgumentException>(() => sdf.BindToVoxelGrid(grid));
+        }
+
+        [Test]
+        public void BindToVoxelGrid_MatchingGrid_Works()
+        {
+            var grid = new VoxelGrid(BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20)), 1f);
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 6);
+
+            Assert.DoesNotThrow(() => sdf.BindToVoxelGrid(grid));
+
+            grid.SetVoxel(10, 10, 10, false);
+
+            var full = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 6);
+            Assert.That(MaxDistanceDifference(sdf, full), Is.LessThanOrEqualTo(1e-3f),
+                "Event-driven incremental update must still work for a compatible grid");
+        }
+
+        [Test]
         public void FiniteCylinder_DiffersFromCapsuleAtEndFace()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));

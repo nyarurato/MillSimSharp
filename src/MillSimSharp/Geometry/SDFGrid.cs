@@ -166,15 +166,41 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Bind to a VoxelGrid so that we can react to its VoxelsChanged events and perform incremental SDF updates.
+        /// The grid must describe the same field (dimensions, resolution and bounds), otherwise
+        /// voxel indices and world coordinates would not correspond.
         /// </summary>
+        /// <exception cref="ArgumentException">Thrown when the grid is not compatible with this SDF grid.</exception>
         public void BindToVoxelGrid(VoxelGrid grid)
         {
             if (grid == null) throw new ArgumentNullException(nameof(grid));
+            EnsureCompatible(grid);
             if (_boundVoxelGrid != null)
                 UnbindFromVoxelGrid();
 
             _boundVoxelGrid = grid;
             grid.VoxelsChanged += OnVoxelGridChanged;
+        }
+
+        /// <summary>
+        /// Checks that a voxel grid describes the same field as this SDF grid.
+        /// </summary>
+        private void EnsureCompatible(VoxelGrid grid)
+        {
+            const float tolerance = 1e-4f;
+
+            var (sx, sy, sz) = grid.Dimensions;
+            bool compatible =
+                sx == _sizeX && sy == _sizeY && sz == _sizeZ &&
+                MathF.Abs(grid.Resolution - _resolution) <= tolerance &&
+                (grid.Bounds.Min - _bounds.Min).Length() <= tolerance &&
+                (grid.Bounds.Max - _bounds.Max).Length() <= tolerance;
+
+            if (!compatible)
+            {
+                throw new ArgumentException(
+                    "The voxel grid must have the same dimensions, resolution and bounds as the SDF grid.",
+                    nameof(grid));
+            }
         }
 
         /// <summary>
@@ -208,6 +234,7 @@ namespace MillSimSharp.Geometry
         public void UpdateRegionFromVoxelGrid(VoxelGrid voxelGrid, int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
         {
             if (voxelGrid == null) throw new ArgumentNullException(nameof(voxelGrid));
+            EnsureCompatible(voxelGrid);
             RebuildRegion(voxelGrid, minX, minY, minZ, maxX, maxY, maxZ);
         }
 

@@ -79,7 +79,7 @@ namespace MillSimSharp.Simulation
             Vector3 delta = end - start;
             float distance = delta.Length();
             float angularDistance = Toolpath.ToolOrientation.AngularDistanceDegrees(startOrientation, endOrientation);
-            int steps = Settings.ComputeSteps(distance, angularDistance, geometry.CuttingCenterOffset);
+            int steps = Settings.ComputeSteps(distance, angularDistance, geometry.RotationSweepRadius);
 
             Quaternion qStart = startOrientation.GetQuaternion();
             Quaternion qEnd = endOrientation.GetQuaternion();

@@ -225,6 +225,38 @@ namespace MillSimSharp.Tests.Toolpath
         }
 
         [Test]
+        public void FiveAxis_LongFlatTool_AdaptiveRefinement_SubdividesRotationOnlyMove()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(60, 60, 60));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var simulator = new CutterSimulator(grid);
+            var flat = new EndMill(8f, 30f, isBallEnd: false); // radius 4, length 30
+
+            // Without adaptive refinement (radius 0 for flat tools) these settings would sample
+            // only the two endpoint poses (angular step 180 degrees).
+            simulator.Settings.MaxLinearStep = 1000f;
+            simulator.Settings.MaxAngularStep = 180f;
+            simulator.Settings.MaxChordError = 0.05f;
+            simulator.Settings.EnableAdaptiveSampling = true;
+
+            // Without the rotation sweep radius the move would use a single step.
+            Assert.That(simulator.Settings.ComputeSteps(0f, 90f, 0f), Is.EqualTo(1));
+
+            simulator.CutLinearWithOrientation(
+                Vector3.Zero, Vector3.Zero, flat,
+                new ToolOrientation(0, 0, 0), new ToolOrientation(90, 0, 0));
+
+            // This point lies on the tool axis at 45 degrees and is only covered when the
+            // rotation-only move is subdivided into intermediate poses.
+            Vector3 intermediate = new Vector3(0, -14.5f, 14.5f);
+            Assert.That(grid.GetVoxelAtWorld(intermediate), Is.False,
+                "A long flat tool must refine rotation-only moves adaptively");
+
+            // Below the tip stays material at every sampled orientation.
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(0, 0, -2.5f)), Is.True);
+        }
+
+        [Test]
         public void StraightSweep_IsExact_EvenWithLargeLinearStep()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));

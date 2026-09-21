@@ -292,5 +292,37 @@ namespace MillSimSharp.Tests.Simulation
 
             Assert.That(mismatches, Is.EqualTo(0), "SDF sign must match the tool geometry exactly");
         }
+
+        [Test]
+        public void ToolGeometry_Solid_StaysWithinLocalBounds()
+        {
+            IToolGeometry[] geometries =
+            {
+                new FlatEndMillGeometry(5f, 30f),
+                new BallEndMillGeometry(5f, 30f),
+                new BallEndMillGeometry(5f, 6f),          // cutting length < 2 * radius
+                new BullNoseEndMillGeometry(5f, 2f, 30f),
+                new BullNoseEndMillGeometry(5f, 3f, 4f),  // cutting length < 2 * corner radius
+                new BullNoseEndMillGeometry(5f, 4f, 3f),  // corner radius > cutting length
+                new TaperedEndMillGeometry(2f, 10f, 20f),
+            };
+
+            foreach (IToolGeometry geometry in geometries)
+            {
+                BoundingBox bounds = geometry.LocalBounds;
+                const float margin = 2f;
+
+                for (float z = bounds.Min.Z - margin; z <= bounds.Max.Z + margin; z += 0.5f)
+                    for (float y = bounds.Min.Y - margin; y <= bounds.Max.Y + margin; y += 0.5f)
+                        for (float x = bounds.Min.X - margin; x <= bounds.Max.X + margin; x += 0.5f)
+                        {
+                            var point = new Vector3(x, y, z);
+                            if (geometry.SignedDistance(point) >= 0f) continue;
+
+                            Assert.That(bounds.Contains(point), Is.True,
+                                $"{geometry.GetType().Name}: inside point {point} is outside LocalBounds {bounds}");
+                        }
+            }
+        }
     }
 }

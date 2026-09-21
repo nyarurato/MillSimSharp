@@ -114,7 +114,9 @@ namespace MillSimSharp.Geometry
     }
 
     /// <summary>
-    /// Position comparer used to merge mesh vertices (epsilon = 1e-3).
+    /// Position comparer used to merge mesh vertices (quantization step 1e-3). Equality uses the
+    /// same quantization as <see cref="GetHashCode"/>, so the <see cref="IEqualityComparer{T}"/>
+    /// contract (Equals implies equal hash codes) is satisfied.
     /// </summary>
     internal sealed class VoxelVertexComparer : IEqualityComparer<Vector3>
     {
@@ -122,18 +124,20 @@ namespace MillSimSharp.Geometry
 
         public bool Equals(Vector3 a, Vector3 b)
         {
-            return Math.Abs(a.X - b.X) < Epsilon &&
-                   Math.Abs(a.Y - b.Y) < Epsilon &&
-                   Math.Abs(a.Z - b.Z) < Epsilon;
+            return Quantize(a) == Quantize(b);
         }
 
         public int GetHashCode(Vector3 v)
         {
-            return HashCode.Combine(
-                (int)(v.X / Epsilon),
-                (int)(v.Y / Epsilon),
-                (int)(v.Z / Epsilon)
-            );
+            return Quantize(v).GetHashCode();
+        }
+
+        private static (long X, long Y, long Z) Quantize(Vector3 v)
+        {
+            return (
+                (long)MathF.Round(v.X / Epsilon),
+                (long)MathF.Round(v.Y / Epsilon),
+                (long)MathF.Round(v.Z / Epsilon));
         }
     }
 }

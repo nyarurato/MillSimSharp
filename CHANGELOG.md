@@ -6,9 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `IToolGeometry.RotationSweepRadius`: conservative distance from the physical tip to the farthest cutting point, used to bound tool point motion during orientation changes
+
 ### Changed
 
 - Grid dimensions are rounded up to whole voxels. `VoxelGrid.Bounds` and `SDFGrid.Bounds` now report the effective voxelized extent (`Min + Dimensions * Resolution`), so non-divisible requested sizes may expand by less than one voxel per axis.
+- Adaptive pose sampling now uses `RotationSweepRadius`, so rotation-only moves of flat, bull-nose and tapered tools are subdivided by the chord-error criterion (previously only ball tools were refined).
+- `SDFGrid.BindToVoxelGrid()` / `UpdateRegionFromVoxelGrid()` now throw `ArgumentException` when the supplied voxel grid has mismatched dimensions, resolution or bounds.
 
 ### Fixed
 
@@ -17,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A normal `G1Move` after a 5-axis move cut with the default pose instead of the current orientation
 - `ToolpathExecutor.Reset()` / `LoadCommands()` did not restore the initial constructor tool
 - `SetVoxel` / `SetVoxelAtWorld` / `Clear` raised no `VoxelsChanged` event, leaving bound SDF grids stale
+- Bull-nose geometry bounds now contain the full toroidal corner even when the cutting length is shorter than the corner diameter
+- Mesh vertex comparers now satisfy the equality/hash contract (near-equal vertices could previously fail to merge)
 
 ## [0.2.0] - 2026-09-21
 

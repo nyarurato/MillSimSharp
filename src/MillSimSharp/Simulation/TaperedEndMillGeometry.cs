@@ -64,6 +64,9 @@ namespace MillSimSharp.Simulation
         public float CuttingCenterOffset => 0f;
 
         /// <inheritdoc />
+        public float RotationSweepRadius => MathF.Sqrt(TopRadius * TopRadius + Length * Length);
+
+        /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
             float radial = MathF.Sqrt(localPoint.X * localPoint.X + localPoint.Y * localPoint.Y);
