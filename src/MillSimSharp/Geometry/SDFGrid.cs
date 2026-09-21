@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace MillSimSharp.Geometry
 {
@@ -416,6 +417,35 @@ namespace MillSimSharp.Geometry
             maxZ = Math.Min(_sizeZ - 1, maxZ);
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
+            // Only cells inside the narrow band can change; clamped cells are already final.
+            // Restricting the repair to the band keeps the cost proportional to the tool surface
+            // instead of the whole tool bounding box (important for long tools / shanks).
+            int bandCells = Math.Max(1, (int)Math.Ceiling(_narrowBandWidth / _resolution)) + 2;
+            int rMinX = int.MaxValue, rMinY = int.MaxValue, rMinZ = int.MaxValue;
+            int rMaxX = int.MinValue, rMaxY = int.MinValue, rMaxZ = int.MinValue;
+
+            for (int z = minZ; z <= maxZ; z++)
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (MathF.Abs(_distances[x, y, z]) >= _narrowBandWidth) continue;
+                        if (x < rMinX) rMinX = x;
+                        if (y < rMinY) rMinY = y;
+                        if (z < rMinZ) rMinZ = z;
+                        if (x > rMaxX) rMaxX = x;
+                        if (y > rMaxY) rMaxY = y;
+                        if (z > rMaxZ) rMaxZ = z;
+                    }
+
+            if (rMinX > rMaxX) return; // nothing inside the band
+
+            minX = Math.Max(minX, rMinX - bandCells);
+            minY = Math.Max(minY, rMinY - bandCells);
+            minZ = Math.Max(minZ, rMinZ - bandCells);
+            maxX = Math.Min(maxX, rMaxX + bandCells);
+            maxY = Math.Min(maxY, rMaxY + bandCells);
+            maxZ = Math.Min(maxZ, rMaxZ + bandCells);
+
             SignedDistanceFieldBuilder.GetWindowBounds(
                 _sizeX, _sizeY, _sizeZ, _resolution, _narrowBandWidth,
                 minX, minY, minZ, maxX, maxY, maxZ,
@@ -493,13 +523,18 @@ namespace MillSimSharp.Geometry
             ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
-            for (int z = minZ; z <= maxZ; z++)
+            // Each cell is written independently, so the tool evaluation is parallelized.
+            Parallel.For(minZ, maxZ + 1, z =>
+            {
                 for (int y = minY; y <= maxY; y++)
+                {
                     for (int x = minX; x <= maxX; x++)
                     {
                         float distance = toolSignedDistance(VoxelToWorld(x, y, z));
                         Carve(x, y, z, -distance);
                     }
+                }
+            });
 
             RepairDistances(minX, minY, minZ, maxX, maxY, maxZ);
         }

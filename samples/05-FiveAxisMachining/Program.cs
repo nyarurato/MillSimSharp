@@ -46,6 +46,10 @@ namespace FiveAxisMachining
             var bbox = stockConfig.GetBoundingBox();
             var sdfGrid = new SDFGrid(bbox, resolution: 0.5f, narrowBandWidth: 5);
             var simulator = new SDFCutterSimulator(sdfGrid);
+            // Coarser sampling keeps the sample fast: the swept ball of radius 5 has a chord
+            // sagitta of only ~0.025mm at a 1mm step, well below the 0.5mm voxel size.
+            simulator.Settings.MaxLinearStep = 1.0f;
+            simulator.Settings.MaxAngularStep = 2f;
             var executor = new ToolpathExecutor(simulator, tool, Vector3.Zero);
             var size = bbox.Max - bbox.Min;
             Console.WriteLine($"  Stock: {size.X}x{size.Y}x{size.Z}mm");
@@ -54,16 +58,26 @@ namespace FiveAxisMachining
 
             // Example 1: Simple tilted cutting pass
             Console.WriteLine("Example 1: Tilted cutting pass with A-axis rotation...");
+            var sw1 = System.Diagnostics.Stopwatch.StartNew();
             SimpleTiltedPass(executor);
+            sw1.Stop();
+            Console.WriteLine($"  Time: {sw1.ElapsedMilliseconds} ms");
 
             // Example 2: Cone-shaped toolpath with continuously changing orientation
             Console.WriteLine("\nExample 2: 5-axis cone toolpath...");
+            var sw2 = System.Diagnostics.Stopwatch.StartNew();
             FiveAxisCone(executor);
+            sw2.Stop();
+            Console.WriteLine($"  Time: {sw2.ElapsedMilliseconds} ms");
 
             // Generate high-quality mesh from SDF
             Console.WriteLine("\nGenerating mesh from SDF...");
+            var swMesh = System.Diagnostics.Stopwatch.StartNew();
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
-            Console.WriteLine($"  Generated: {mesh.Vertices.Length} vertices, {mesh.Indices.Length / 3} triangles\n");
+            swMesh.Stop();
+            Console.WriteLine($"  Generated: {mesh.Vertices.Length} vertices, {mesh.Indices.Length / 3} triangles");
+            Console.WriteLine($"  Mesh time: {swMesh.ElapsedMilliseconds} ms\n");
+            Console.WriteLine($"Total simulation time: {sw1.ElapsedMilliseconds + sw2.ElapsedMilliseconds} ms\n");
 
             // Export result
             string outputFile = "five_axis_result.stl";
