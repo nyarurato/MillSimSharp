@@ -140,6 +140,11 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Creates a new voxel grid with the specified work area and resolution.
+        /// <para>
+        /// Dimensions are rounded up to whole voxels. <see cref="Bounds"/> reports the effective
+        /// voxelized extent (<c>Min + Dimensions * Resolution</c>), so a requested size that is not
+        /// divisible by the resolution expands by less than one voxel per axis (Max side only).
+        /// </para>
         /// </summary>
         /// <param name="workArea">The bounding box defining the work area.</param>
         /// <param name="resolution">Voxel size in millimeters (default: 0.5mm).</param>
@@ -148,7 +153,6 @@ namespace MillSimSharp.Geometry
             if (resolution <= 0)
                 throw new ArgumentException("Resolution must be positive.", nameof(resolution));
 
-            _bounds = workArea;
             _resolution = resolution;
 
             // Calculate grid dimensions
@@ -156,6 +160,11 @@ namespace MillSimSharp.Geometry
             _sizeX = (int)Math.Ceiling(size.X / resolution);
             _sizeY = (int)Math.Ceiling(size.Y / resolution);
             _sizeZ = (int)Math.Ceiling(size.Z / resolution);
+
+            // Effective bounds of the discretized field: whole voxels from the requested minimum.
+            _bounds = new BoundingBox(
+                workArea.Min,
+                workArea.Min + new Vector3(_sizeX, _sizeY, _sizeZ) * resolution);
 
             // Calculate max level for SVO
             int maxDim = Math.Max(_sizeX, Math.Max(_sizeY, _sizeZ));

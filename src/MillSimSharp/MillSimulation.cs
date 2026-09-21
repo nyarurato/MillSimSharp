@@ -20,9 +20,15 @@ namespace MillSimSharp
         public VoxelGrid Grid { get; private set; }
 
         /// <summary>
-        /// Current tool being used.
+        /// Current tool being used. The executor owns the tool state: the getter returns
+        /// <see cref="ToolpathExecutor.CurrentTool"/> and the setter is equivalent to
+        /// <see cref="ChangeTool"/>.
         /// </summary>
-        public Tool Tool { get; set; }
+        public Tool Tool
+        {
+            get => Executor.CurrentTool;
+            set => ChangeTool(value);
+        }
 
         /// <summary>
         /// Cutter simulator for material removal.
@@ -58,9 +64,8 @@ namespace MillSimSharp
             _initialBounds = stockConfig.GetBoundingBox();
 
             Grid = new VoxelGrid(_initialBounds, resolution);
-            Tool = toolConfig.CreateTool();
             Simulator = new CutterSimulator(Grid);
-            Executor = new ToolpathExecutor(Simulator, Tool, Vector3.Zero);
+            Executor = new ToolpathExecutor(Simulator, toolConfig.CreateTool(), Vector3.Zero);
         }
 
 
@@ -110,27 +115,21 @@ namespace MillSimSharp
         /// </summary>
         public void Reset()
         {
+            var currentTool = Tool;
             Grid = new VoxelGrid(_initialBounds, _resolution);
             Simulator = new CutterSimulator(Grid);
-            Executor = new ToolpathExecutor(Simulator, Tool, Vector3.Zero);
+            Executor = new ToolpathExecutor(Simulator, currentTool, Vector3.Zero);
         }
 
         /// <summary>
-        /// Changes the current tool.
-        /// The current position, orientation and step size are preserved.
+        /// Changes the current tool. The executor is kept, so the current pose, loaded commands,
+        /// command index, progress subscriptions and estimated time are preserved.
         /// </summary>
         /// <param name="newTool">New tool to use.</param>
         public void ChangeTool(Tool newTool)
         {
             if (newTool == null) throw new ArgumentNullException(nameof(newTool));
-            Tool = newTool;
-
-            // Recreate the executor with the new tool while preserving the current pose
-            var newExecutor = new ToolpathExecutor(Simulator, Tool, Executor.CurrentPosition, Executor.CurrentOrientation)
-            {
-                StepSize = Executor.StepSize
-            };
-            Executor = newExecutor;
+            Executor.ChangeTool(newTool);
         }
     }
 }

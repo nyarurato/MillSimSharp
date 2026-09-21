@@ -351,6 +351,40 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(sdf.GetDistance(new Vector3(halfSize, 0, 0)), Is.EqualTo(0f).Within(1.5f * resolution));
         }
 
+        [Test]
+        public void SDFGrid_NativeConstructor_OuterBoundaryDistance_MatchesAnalyticBox()
+        {
+            const float halfSize = 10f;
+            const float narrowBand = 6f;
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(2 * halfSize, 2 * halfSize, 2 * halfSize));
+            var sdf = new SDFGrid(bbox, 1.0f, narrowBandWidth: (int)narrowBand);
+
+            // Probes near each face at voxel centers, so the analytic value is exact.
+            var probes = new[]
+            {
+                new Vector3(-halfSize + 0.5f, 0.5f, 0.5f),
+                new Vector3(-halfSize + 1.5f, 0.5f, 0.5f),
+                new Vector3(-halfSize + 3.5f, 0.5f, 0.5f),
+                new Vector3(halfSize - 0.5f, 0.5f, 0.5f),
+                new Vector3(0.5f, -halfSize + 0.5f, 0.5f),
+                new Vector3(0.5f, halfSize - 0.5f, 0.5f),
+                new Vector3(0.5f, 0.5f, -halfSize + 0.5f),
+                new Vector3(0.5f, 0.5f, halfSize - 0.5f),
+            };
+
+            foreach (var probe in probes)
+            {
+                float expected = Math.Clamp(BoxSignedDistance(probe, halfSize), -narrowBand, narrowBand);
+                Assert.That(sdf.GetDistance(probe), Is.EqualTo(expected).Within(1e-4f), $"probe {probe}");
+            }
+
+            // The boundary-adjacent samples must not stay saturated at -narrowBandWidth.
+            float nearBoundary = sdf.GetDistance(new Vector3(-halfSize + 0.5f, 0.5f, 0.5f));
+            Assert.That(nearBoundary, Is.EqualTo(-0.5f).Within(1e-4f));
+            Assert.That(nearBoundary, Is.GreaterThan(-narrowBand),
+                "The outer boundary distance must be analytic, not the -narrowBand placeholder");
+        }
+
         [TestCase(1.0f)]
         [TestCase(0.5f)]
         public void SDF_ContainsNoNaNOrInfinity(float resolution)

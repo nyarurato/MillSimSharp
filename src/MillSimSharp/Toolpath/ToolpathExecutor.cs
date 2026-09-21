@@ -12,7 +12,7 @@ namespace MillSimSharp.Toolpath
     public class ToolpathExecutor
     {
         private readonly ICutterSimulator _simulator;
-        private readonly Tool _initialTool;
+        private Tool _initialTool;
         private Tool _tool;
         private List<IToolpathCommand>? _commands;
         private int _currentCommandIndex = -1;
@@ -86,6 +86,21 @@ namespace MillSimSharp.Toolpath
             _initialOrientation = initialOrientation ?? ToolOrientation.Default;
             CurrentPosition = initialPosition;
             CurrentOrientation = _initialOrientation;
+        }
+
+        /// <summary>
+        /// Changes the active tool and makes it the baseline for <see cref="Reset"/> /
+        /// <see cref="LoadCommands"/>. Execution state (position, orientation, loaded commands,
+        /// progress and estimated time) is preserved.
+        /// </summary>
+        /// <param name="tool">New tool to use.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="tool"/> is null.</exception>
+        public void ChangeTool(Tool tool)
+        {
+            if (tool == null) throw new ArgumentNullException(nameof(tool));
+
+            _tool = tool;
+            _initialTool = tool;
         }
 
         /// <summary>

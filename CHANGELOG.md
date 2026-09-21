@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Grid dimensions are rounded up to whole voxels. `VoxelGrid.Bounds` and `SDFGrid.Bounds` now report the effective voxelized extent (`Min + Dimensions * Resolution`), so non-divisible requested sizes may expand by less than one voxel per axis.
+
+### Fixed
+
+- Dual contouring used face diagonals as cube edges, degrading QEF vertex placement; the edge table now uses the true 12 cube edges
+- `VoxelGrid.GetOccupiedVoxels()` reported the SVO power-of-two padding region as occupied voxels
+- A normal `G1Move` after a 5-axis move cut with the default pose instead of the current orientation
+- `ToolpathExecutor.Reset()` / `LoadCommands()` did not restore the initial constructor tool
+- `SetVoxel` / `SetVoxelAtWorld` / `Clear` raised no `VoxelsChanged` event, leaving bound SDF grids stale
+
 ## [0.2.0] - 2026-09-21
 
 ### Added

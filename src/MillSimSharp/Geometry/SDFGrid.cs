@@ -51,6 +51,12 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Creates an SDF grid with all material (negative distances).
+        /// <para>
+        /// Dimensions are rounded up to whole voxels. <see cref="Bounds"/> reports the effective
+        /// voxelized extent (<c>Min + Dimensions * Resolution</c>), matching
+        /// <see cref="VoxelGrid"/>: a requested size that is not divisible by the resolution
+        /// expands by less than one voxel per axis (Max side only).
+        /// </para>
         /// </summary>
         /// <param name="bounds">Bounding box of the SDF grid.</param>
         /// <param name="resolution">Voxel size in millimeters.</param>
@@ -66,12 +72,14 @@ namespace MillSimSharp.Geometry
             _sizeY = Math.Max(1, (int)Math.Ceiling(size.Y / resolution));
             _sizeZ = Math.Max(1, (int)Math.Ceiling(size.Z / resolution));
             _resolution = resolution;
-            _bounds = bounds;
+            _bounds = new BoundingBox(
+                bounds.Min,
+                bounds.Min + new Vector3(_sizeX, _sizeY, _sizeZ) * resolution);
             _narrowBandWidth = narrowBandWidth * resolution;
             _distances = new float[_sizeX, _sizeY, _sizeZ];
             _boundVoxelGrid = null;
 
-            FillMaterial();
+            FillSolidBlock();
         }
 
         /// <summary>
@@ -116,14 +124,44 @@ namespace MillSimSharp.Geometry
             _boundVoxelGrid = voxelGrid;
         }
 
-        private void FillMaterial()
+        /// <summary>
+        /// Initializes the field as a solid block filling the effective bounds: material inside
+        /// (negative) with the analytic distance to the nearest boundary face, clamped to the
+        /// narrow band. Outside the bounds is air, matching <see cref="GetDistance(Vector3)"/>.
+        /// </summary>
+        private void FillSolidBlock()
         {
             for (int z = 0; z < _sizeZ; z++)
                 for (int y = 0; y < _sizeY; y++)
                     for (int x = 0; x < _sizeX; x++)
                     {
-                        _distances[x, y, z] = -_narrowBandWidth;
+                        Vector3 center = VoxelToWorld(x, y, z);
+                        float distance = BoxSignedDistance(center);
+                        _distances[x, y, z] = ClampToNarrowBand(distance);
                     }
+        }
+
+        /// <summary>
+        /// Signed distance to the effective bounds box (negative inside, positive outside).
+        /// </summary>
+        private float BoxSignedDistance(Vector3 point)
+        {
+            float dx = MathF.Max(_bounds.Min.X - point.X, point.X - _bounds.Max.X);
+            float dy = MathF.Max(_bounds.Min.Y - point.Y, point.Y - _bounds.Max.Y);
+            float dz = MathF.Max(_bounds.Min.Z - point.Z, point.Z - _bounds.Max.Z);
+
+            float outsideSquared = MathF.Max(dx, 0f) * MathF.Max(dx, 0f)
+                                 + MathF.Max(dy, 0f) * MathF.Max(dy, 0f)
+                                 + MathF.Max(dz, 0f) * MathF.Max(dz, 0f);
+            float inside = MathF.Min(MathF.Max(dx, MathF.Max(dy, dz)), 0f);
+            return MathF.Sqrt(outsideSquared) + inside;
+        }
+
+        private float ClampToNarrowBand(float value)
+        {
+            if (value < -_narrowBandWidth) return -_narrowBandWidth;
+            if (value > _narrowBandWidth) return _narrowBandWidth;
+            return value;
         }
 
         /// <summary>
