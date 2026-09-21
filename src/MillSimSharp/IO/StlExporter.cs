@@ -75,6 +75,35 @@ namespace MillSimSharp.IO
         }
 
         /// <summary>
+        /// Exports a mesh to an STL file in ASCII format.
+        /// </summary>
+        /// <param name="mesh">The mesh to export.</param>
+        /// <param name="filePath">Output file path.</param>
+        public static void ExportAscii(Mesh mesh, string filePath)
+        {
+            if (mesh == null) throw new ArgumentNullException(nameof(mesh));
+            if (filePath == null) throw new ArgumentNullException(nameof(filePath));
+
+            List<Triangle> triangles = GenerateTriangles(mesh);
+
+            using var writer = new StreamWriter(filePath, false, new System.Text.UTF8Encoding(false));
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+
+            writer.WriteLine("solid MillSimSharp");
+            foreach (Triangle tri in triangles)
+            {
+                writer.WriteLine(FormattableString.Invariant($"  facet normal {tri.Normal.X} {tri.Normal.Y} {tri.Normal.Z}"));
+                writer.WriteLine("    outer loop");
+                writer.WriteLine(FormattableString.Invariant($"      vertex {tri.V1.X} {tri.V1.Y} {tri.V1.Z}"));
+                writer.WriteLine(FormattableString.Invariant($"      vertex {tri.V2.X} {tri.V2.Y} {tri.V2.Z}"));
+                writer.WriteLine(FormattableString.Invariant($"      vertex {tri.V3.X} {tri.V3.Y} {tri.V3.Z}"));
+                writer.WriteLine("    endloop");
+                writer.WriteLine("  endfacet");
+            }
+            writer.WriteLine("endsolid MillSimSharp");
+        }
+
+        /// <summary>
         /// Exports a mesh to STL binary data.
         /// </summary>
         /// <param name="mesh">The mesh to export.</param>
