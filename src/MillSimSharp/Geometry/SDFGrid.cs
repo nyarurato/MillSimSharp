@@ -401,6 +401,81 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Repairs the air-side distances in the region using an exact distance transform of the
+        /// current sign pattern. CSG updates (max) are exact on the material side but can leave
+        /// inflated values where removed volumes overlap (for example at crossing cuts), which
+        /// would displace the reconstructed surface. Material-side values are preserved.
+        /// </summary>
+        private void RepairDistances(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+        {
+            minX = Math.Max(0, minX);
+            minY = Math.Max(0, minY);
+            minZ = Math.Max(0, minZ);
+            maxX = Math.Min(_sizeX - 1, maxX);
+            maxY = Math.Min(_sizeY - 1, maxY);
+            maxZ = Math.Min(_sizeZ - 1, maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return;
+
+            SignedDistanceFieldBuilder.GetWindowBounds(
+                _sizeX, _sizeY, _sizeZ, _resolution, _narrowBandWidth,
+                minX, minY, minZ, maxX, maxY, maxZ,
+                out int padMinX, out int padMinY, out int padMinZ, out int nx, out int ny, out int nz);
+
+            var occupancy = new bool[nx, ny, nz];
+            for (int wz = 0; wz < nz; wz++)
+            {
+                int gz = padMinZ + wz;
+                for (int wy = 0; wy < ny; wy++)
+                {
+                    int gy = padMinY + wy;
+                    for (int wx = 0; wx < nx; wx++)
+                    {
+                        int gx = padMinX + wx;
+                        bool inside = gx >= 0 && gx < _sizeX && gy >= 0 && gy < _sizeY && gz >= 0 && gz < _sizeZ;
+                        occupancy[wx, wy, wz] = inside && _distances[gx, gy, gz] < 0f;
+                    }
+                }
+            }
+
+            int cellCount = (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+            var savedValues = new float[cellCount];
+            var savedMaterial = new bool[cellCount];
+
+            int index = 0;
+            for (int z = minZ; z <= maxZ; z++)
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        float value = _distances[x, y, z];
+                        savedValues[index] = value;
+                        savedMaterial[index] = value < 0f;
+                        index++;
+                    }
+
+            SignedDistanceFieldBuilder.ComputeRegion(
+                occupancy, padMinX, padMinY, padMinZ, _resolution, _narrowBandWidth, _distances,
+                minX, minY, minZ, maxX, maxY, maxZ);
+
+            // Keep exact material-side values and air values that were not inflated.
+            float threshold = 0.5f * _resolution;
+            index = 0;
+            for (int z = minZ; z <= maxZ; z++)
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        float original = savedValues[index];
+                        bool material = savedMaterial[index];
+                        float built = _distances[x, y, z];
+                        index++;
+
+                        if (material || original - built <= threshold)
+                        {
+                            _distances[x, y, z] = original;
+                        }
+                    }
+        }
+
+        /// <summary>
         /// Applies a CSG difference for the tool solid described by <paramref name="toolSignedDistance"/>
         /// (negative inside the tool) over the given world bounds.
         /// </summary>
@@ -425,6 +500,8 @@ namespace MillSimSharp.Geometry
                         float distance = toolSignedDistance(VoxelToWorld(x, y, z));
                         Carve(x, y, z, -distance);
                     }
+
+            RepairDistances(minX, minY, minZ, maxX, maxY, maxZ);
         }
 
         /// <summary>
@@ -451,6 +528,8 @@ namespace MillSimSharp.Geometry
                         float distToCenter = Vector3.Distance(VoxelToWorld(x, y, z), center);
                         Carve(x, y, z, radius - distToCenter);
                     }
+
+            RepairDistances(minX, minY, minZ, maxX, maxY, maxZ);
         }
 
         /// <summary>
@@ -491,6 +570,8 @@ namespace MillSimSharp.Geometry
                         float distToSegment = (toVoxel - axisDir * projection).Length();
                         Carve(x, y, z, radius - distToSegment);
                     }
+
+            RepairDistances(minX, minY, minZ, maxX, maxY, maxZ);
         }
 
         /// <summary>
@@ -530,6 +611,8 @@ namespace MillSimSharp.Geometry
                         float toolDistance = Math.Max(radial - radius, Math.Abs(axial) - halfLength);
                         Carve(x, y, z, -toolDistance);
                     }
+
+            RepairDistances(minX, minY, minZ, maxX, maxY, maxZ);
         }
     }
 }

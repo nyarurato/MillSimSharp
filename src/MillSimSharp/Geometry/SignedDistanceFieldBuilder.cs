@@ -46,23 +46,82 @@ namespace MillSimSharp.Geometry
             if (writeMinX > writeMaxX || writeMinY > writeMaxY || writeMinZ > writeMaxZ)
                 return;
 
+            GetWindowBounds(sizeX, sizeY, sizeZ, resolution, narrowBand,
+                writeMinX, writeMinY, writeMinZ, writeMaxX, writeMaxY, writeMaxZ,
+                out int padMinX, out int padMinY, out int padMinZ, out int nx, out int ny, out int nz);
+
+            // Snapshot the occupancy first: the transform mutates the target while classifying cells.
+            var occupancy = new bool[nx, ny, nz];
+            for (int wz = 0; wz < nz; wz++)
+            {
+                int gz = padMinZ + wz;
+                for (int wy = 0; wy < ny; wy++)
+                {
+                    int gy = padMinY + wy;
+                    for (int wx = 0; wx < nx; wx++)
+                    {
+                        int gx = padMinX + wx;
+                        bool inside = gx >= 0 && gx < sizeX && gy >= 0 && gy < sizeY && gz >= 0 && gz < sizeZ;
+                        occupancy[wx, wy, wz] = inside && isMaterial(gx, gy, gz);
+                    }
+                }
+            }
+
+            ComputeRegion(occupancy, padMinX, padMinY, padMinZ, resolution, narrowBand, target,
+                writeMinX, writeMinY, writeMinZ, writeMaxX, writeMaxY, writeMaxZ);
+        }
+
+        /// <summary>
+        /// Computes the padded compute window used when rebuilding a region.
+        /// </summary>
+        internal static void GetWindowBounds(
+            int sizeX, int sizeY, int sizeZ,
+            float resolution, float narrowBand,
+            int writeMinX, int writeMinY, int writeMinZ,
+            int writeMaxX, int writeMaxY, int writeMaxZ,
+            out int padMinX, out int padMinY, out int padMinZ,
+            out int nx, out int ny, out int nz)
+        {
             int band = Math.Max(1, (int)Math.Ceiling(narrowBand / resolution));
 
-            int padMinX = Math.Max(0, writeMinX - band) - 1;
-            int padMinY = Math.Max(0, writeMinY - band) - 1;
-            int padMinZ = Math.Max(0, writeMinZ - band) - 1;
+            padMinX = Math.Max(0, writeMinX - band) - 1;
+            padMinY = Math.Max(0, writeMinY - band) - 1;
+            padMinZ = Math.Max(0, writeMinZ - band) - 1;
             int padMaxX = Math.Min(sizeX - 1, writeMaxX + band) + 1;
             int padMaxY = Math.Min(sizeY - 1, writeMaxY + band) + 1;
             int padMaxZ = Math.Min(sizeZ - 1, writeMaxZ + band) + 1;
 
-            int nx = padMaxX - padMinX + 1;
-            int ny = padMaxY - padMinY + 1;
-            int nz = padMaxZ - padMinZ + 1;
+            nx = padMaxX - padMinX + 1;
+            ny = padMaxY - padMinY + 1;
+            nz = padMaxZ - padMinZ + 1;
+        }
+
+        /// <summary>
+        /// Recomputes signed distances for the write region from a precomputed occupancy window.
+        /// <paramref name="occupancy"/> is indexed relative to (padMinX, padMinY, padMinZ);
+        /// cells outside the grid must already be marked as air (false).
+        /// </summary>
+        public static void ComputeRegion(
+            bool[,,] occupancy,
+            int padMinX, int padMinY, int padMinZ,
+            float resolution, float narrowBand,
+            float[,,] target,
+            int writeMinX, int writeMinY, int writeMinZ,
+            int writeMaxX, int writeMaxY, int writeMaxZ)
+        {
+            if (occupancy == null) throw new ArgumentNullException(nameof(occupancy));
+            if (target == null) throw new ArgumentNullException(nameof(target));
+            if (writeMinX > writeMaxX || writeMinY > writeMaxY || writeMinZ > writeMaxZ)
+                return;
+
+            int nx = occupancy.GetLength(0);
+            int ny = occupancy.GetLength(1);
+            int nz = occupancy.GetLength(2);
 
             var work = new float[nx, ny, nz];
 
             // Pass 1: distance to the nearest empty voxel (seeds = empty, including outside the grid).
-            Initialize(work, isMaterial, padMinX, padMinY, padMinZ, sizeX, sizeY, sizeZ, seedMaterial: false);
+            Initialize(work, occupancy, seedMaterial: false);
             DistanceTransform3D(work, nx, ny, nz);
             for (int z = writeMinZ; z <= writeMaxZ; z++)
             {
@@ -70,7 +129,7 @@ namespace MillSimSharp.Geometry
                 {
                     for (int x = writeMinX; x <= writeMaxX; x++)
                     {
-                        if (!isMaterial(x, y, z)) continue;
+                        if (!occupancy[x - padMinX, y - padMinY, z - padMinZ]) continue;
                         float d = MathF.Sqrt(work[x - padMinX, y - padMinY, z - padMinZ]) - 0.5f;
                         target[x, y, z] = Clamp(-d * resolution, narrowBand);
                     }
@@ -78,7 +137,7 @@ namespace MillSimSharp.Geometry
             }
 
             // Pass 2: distance to the nearest material voxel (seeds = material).
-            Initialize(work, isMaterial, padMinX, padMinY, padMinZ, sizeX, sizeY, sizeZ, seedMaterial: true);
+            Initialize(work, occupancy, seedMaterial: true);
             DistanceTransform3D(work, nx, ny, nz);
             for (int z = writeMinZ; z <= writeMaxZ; z++)
             {
@@ -86,7 +145,7 @@ namespace MillSimSharp.Geometry
                 {
                     for (int x = writeMinX; x <= writeMaxX; x++)
                     {
-                        if (isMaterial(x, y, z)) continue;
+                        if (occupancy[x - padMinX, y - padMinY, z - padMinZ]) continue;
                         float d = MathF.Sqrt(work[x - padMinX, y - padMinY, z - padMinZ]) - 0.5f;
                         target[x, y, z] = Clamp(d * resolution, narrowBand);
                     }
@@ -101,12 +160,7 @@ namespace MillSimSharp.Geometry
             return value;
         }
 
-        private static void Initialize(
-            float[,,] work,
-            Func<int, int, int, bool> isMaterial,
-            int padMinX, int padMinY, int padMinZ,
-            int sizeX, int sizeY, int sizeZ,
-            bool seedMaterial)
+        private static void Initialize(float[,,] work, bool[,,] occupancy, bool seedMaterial)
         {
             int nx = work.GetLength(0);
             int ny = work.GetLength(1);
@@ -114,15 +168,11 @@ namespace MillSimSharp.Geometry
 
             for (int wz = 0; wz < nz; wz++)
             {
-                int gz = padMinZ + wz;
                 for (int wy = 0; wy < ny; wy++)
                 {
-                    int gy = padMinY + wy;
                     for (int wx = 0; wx < nx; wx++)
                     {
-                        int gx = padMinX + wx;
-                        bool inside = gx >= 0 && gx < sizeX && gy >= 0 && gy < sizeY && gz >= 0 && gz < sizeZ;
-                        bool material = inside && isMaterial(gx, gy, gz);
+                        bool material = occupancy[wx, wy, wz];
                         bool seed = seedMaterial ? material : !material;
                         work[wx, wy, wz] = seed ? 0f : HugeValue;
                     }

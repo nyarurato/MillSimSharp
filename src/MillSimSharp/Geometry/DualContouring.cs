@@ -113,7 +113,7 @@ namespace MillSimSharp.Geometry
 
             // Regularization keeps the system solvable for planar configurations.
             float trace = a00 + a11 + a22;
-            float lambda = MathF.Max(trace * 1e-4f, 1e-6f);
+            float lambda = MathF.Max(trace * 1e-3f, 1e-6f);
             a00 += lambda;
             a11 += lambda;
             a22 += lambda;
@@ -440,11 +440,47 @@ namespace MillSimSharp.Geometry
                 }
             }
 
-            // Normalize accumulated normals
+            // Project vertices onto the zero level set with a few bounded Newton steps.
+            // This removes small placement errors and reduces tucked/folded quads at sharp features
+            // such as the junction of two crossing cuts.
+            float maxStep = res * 0.5f;
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                Vector3 p = vertices[i];
+                for (int iter = 0; iter < 3; iter++)
+                {
+                    float d = sdf.GetDistance(p);
+                    if (MathF.Abs(d) < 1e-4f) break;
+
+                    Vector3 gradient = sdf.GetGradient(p);
+                    if (gradient.LengthSquared() < 1e-8f) break;
+
+                    Vector3 step = gradient * d;
+                    float length = step.Length();
+                    if (length > maxStep)
+                        step *= maxStep / length;
+
+                    p -= step;
+                }
+                vertices[i] = p;
+            }
+
+            // Recompute normals from the projected triangles so they always match the geometry.
+            var normalSums2 = new Vector3[vertices.Count];
+            for (int i = 0; i + 2 < indices.Count; i += 3)
+            {
+                int a = indices[i], b = indices[i + 1], c = indices[i + 2];
+                Vector3 normal = Vector3.Cross(vertices[b] - vertices[a], vertices[c] - vertices[a]);
+                if (normal.LengthSquared() < 1e-12f) continue;
+                normalSums2[a] += normal;
+                normalSums2[b] += normal;
+                normalSums2[c] += normal;
+            }
+
             var normals = new List<Vector3>(vertices.Count);
             for (int i = 0; i < vertices.Count; i++)
             {
-                Vector3 sum = normalSums[i];
+                Vector3 sum = normalSums2[i];
                 if (sum.LengthSquared() > 1e-12f)
                     normals.Add(Vector3.Normalize(sum));
                 else
