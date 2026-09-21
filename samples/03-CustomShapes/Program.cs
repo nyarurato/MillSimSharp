@@ -68,11 +68,8 @@ sw.Restart();
 
 // Spherical spiral finishing path
 // Cutting a hemisphere-like shape
-float centerX = 0;
-float centerY = 0;
-float sphereRadius = 30; // Matches the roughing radius at top
+float sphereRadius = 30; // Approach radius (matches the roughing radius at top)
 float zStart = 60; // Start height (top of hemisphere)
-float zEnd = 30;   // End height (bottom of hemisphere cut)
 int spiralTurns = 10;
 int pointsPerTurn = 36;
 

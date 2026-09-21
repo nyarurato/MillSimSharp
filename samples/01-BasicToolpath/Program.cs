@@ -30,8 +30,8 @@ var simulator = new CutterSimulator(voxelGrid);
 var startPosition = new Vector3(0, 0, 60);  // Start above the stock
 var executor = new ToolpathExecutor(simulator, tool, startPosition);
 
-// 4. Create a simple toolpath - cut a square pocket
-Console.WriteLine("Executing toolpath (square pocket)...");
+// 4. Create a simple toolpath - cut a square contour
+Console.WriteLine("Executing toolpath (square contour)...");
 var commands = new List<IToolpathCommand>
 {
     // Move to start position

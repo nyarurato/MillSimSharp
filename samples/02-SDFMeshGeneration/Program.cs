@@ -81,7 +81,7 @@ Console.WriteLine($"  Mesh generated in {sw.ElapsedMilliseconds}ms");
 Console.WriteLine($"  Vertices: {mesh.Vertices.Length:N0}");
 Console.WriteLine($"  Triangles: {mesh.Indices.Length / 3:N0}\n");
 
-// 7. Export to STL
+// 5. Export to STL
 Console.WriteLine("Exporting to STL...");
 var outputPath = Path.Combine(outputDir, "sdf_mesh.stl");
 sw.Restart();

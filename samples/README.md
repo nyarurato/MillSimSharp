@@ -10,7 +10,7 @@ A basic sample of toolpath simulation using VoxelGrid.
 **Features**:
 - Creating a VoxelGrid
 - Defining an EndMill tool
-- Executing a simple toolpath (square pocket)
+- Executing a simple toolpath (square contour)
 - Exporting to STL
 
 **Output**: `output/basic_toolpath.stl`
@@ -97,9 +97,9 @@ Sample demonstrating 5-axis machining capabilities with rotary axes.
 **Features**:
 - Tool orientation control using A, B, C rotary axes
 - Tilted cutting passes with angular tool positioning
-- 5-axis spiral toolpath with continuously changing orientation
+- 5-axis cone toolpath with continuously changing orientation
 - Curved surface machining with normal-controlled tool orientation
-- Coordinate transformations for multi-axis positioning
+- Physical-tip tool pose with quaternion orientation interpolation
 
 **Output**: `output/five_axis_result.stl`
 <img width="827" height="772" alt="image" src="https://github.com/user-attachments/assets/5ed18368-9b97-41c7-8954-f342c60087fb" />

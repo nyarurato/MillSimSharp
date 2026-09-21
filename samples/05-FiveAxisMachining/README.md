@@ -6,10 +6,13 @@ This sample demonstrates the 5-axis machining capabilities of MillSimSharp using
 
 ### XYZ Coordinates (Linear Axes)
 
-**All XYZ coordinates represent the tool tip (cutting edge) position.**
+**All XYZ coordinates represent the physical tool tip position** (the lowest point of the tool), independent of tool type.
 
-- **End Mill**: Center of the bottom cutting edge
-- **Ball End Mill**: Center of the spherical tip (lowest point of the sphere)
+- **Flat end mill**: center of the flat bottom cutting edge (= physical tip)
+- **Ball end mill**: physical tip (lowest point of the ball); the ball center is `tip + AxisTowardSpindle * radius`
+- **Bull nose / taper**: physical tip
+
+See the "Tool Reference Point and Ball Compensation" section in the main README for details.
 
 ```
       Spindle
@@ -115,7 +118,7 @@ dotnet run
 
 The program will:
 1. Create a 100x100x50mm stock represented as an SDF
-2. Execute three different 5-axis toolpath examples
+2. Execute two different 5-axis toolpath examples (tilted pass and cone path)
 3. Generate a high-quality mesh from the SDF using Dual Contouring
 4. Export the result to `five_axis_result.stl`
 
@@ -182,7 +185,17 @@ The default tool direction is along the negative Z-axis (0, 0, -1).
 
 ### Interpolation
 
-The `G1Move5Axis` command interpolates both position and orientation to create smooth transitions. The `interpolationSteps` parameter controls the granularity.
+`G1Move5Axis` interpolates both position and orientation. The granularity is controlled by
+`SimulationSettings` on the simulator:
+
+- `MaxLinearStep` (default `0.5 × resolution`)
+- `MaxAngularStep` (default `2°`)
+- `MaxChordError` for adaptive refinement of the curved cutting-center path (ball tools)
+- `MinimumSteps`
+
+Orientation is interpolated with quaternion slerp (shortest rotation), and rotation-only moves
+(same position, changed orientation) are swept as well. Straight moves with constant orientation
+and no axial motion use an exact swept solid.
 
 ### Coordinate Systems
 
@@ -223,13 +236,15 @@ if (CheckCollision(spindlePos))
 
 ## Limitations
 
-1. The current implementation simulates material removal at the tool tip position
-2. Full tool geometry rotation and swept volume calculation is not yet implemented
-3. Collision detection between tool holder and workpiece is not included
+1. Pose sweeps other than straight constant-orientation moves are sampled at discrete poses
+   (`SimulationSettings`); no continuous envelope (swept surface) is computed.
+2. Tool holder geometry is not modelled. `ToolCollisionDetector` can check the cutting part and
+   shank (`Tool.GetShankGeometry`) against the stock.
+3. Machine kinematics / inverse kinematics for specific 5-axis configurations are not included;
+   orientation is a machine-independent tool direction only.
 
 ## Next Steps
 
-- Implement full rotary axis kinematics
-- Add tool holder geometry and collision detection
-- Support for simultaneous 5-axis interpolation
+- Machine-specific inverse kinematics and holder geometry
 - Automatic tool axis optimization for surface machining
+- Continuous swept-envelope computation for 5-axis moves

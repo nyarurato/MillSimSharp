@@ -6,7 +6,6 @@ using MillSimSharp.Geometry;
 using MillSimSharp.IO;
 using MillSimSharp.Simulation;
 using MillSimSharp.Toolpath;
-using MillSimSharp.Util;
 
 namespace FiveAxisMachining
 {
@@ -32,7 +31,7 @@ namespace FiveAxisMachining
                 OriginType = StockOriginType.Center
             };
 
-            // Create tool configuration (20mm ball end mill)
+            // Create tool configuration (10mm ball end mill)
             var toolConfig = new ToolConfiguration
             {
                 Diameter = 10f,
@@ -83,7 +82,7 @@ namespace FiveAxisMachining
             // Start position - above the stock
             var startPos = new Vector3(-10, -30, 10);
             
-            // Tilted orientation (30 degrees on A-axis)
+            // Tilted orientation (A=30, B=-20, C=20 degrees)
             var orientation = new ToolOrientation(a_deg: 30, b_deg: -20, c_deg: 20);
 
             // Rapid move to start position with orientation
