@@ -132,12 +132,23 @@ namespace MillSimSharp.Viewer
 
                 bool isArc = moveMotion == 2 || moveMotion == 3;
 
-                if (isArc && (hasI || hasJ || hasR))
+                if (isArc)
                 {
-                    EmitArc(commands, moveMotion == 2,
-                        new Vector3((float)x, (float)y, (float)z),
-                        new Vector3((float)nx, (float)ny, (float)nz),
-                        i, j, r, hasR, feed, arcSegmentAngleDegrees);
+                    // An arc without I/J/R cannot be simulated (ignore it instead of turning it
+                    // into a linear move), and an arc with an impossible radius is ignored as well.
+                    bool valid = (hasI || hasJ || hasR)
+                        && EmitArc(commands, moveMotion == 2,
+                            new Vector3((float)x, (float)y, (float)z),
+                            new Vector3((float)nx, (float)ny, (float)nz),
+                            i, j, r, hasR, feed, arcSegmentAngleDegrees);
+
+                    if (!valid)
+                    {
+                        // Ignored line: keep the current position.
+                        nx = x;
+                        ny = y;
+                        nz = z;
+                    }
                 }
                 else if (hasAxis)
                 {
@@ -175,7 +186,7 @@ namespace MillSimSharp.Viewer
             return absolute ? scaled : current + scaled;
         }
 
-        private static void EmitArc(
+        private static bool EmitArc(
             List<IToolpathCommand> commands, bool clockwise,
             Vector3 start, Vector3 end,
             double i, double j, double r, bool useRadius, double feed, float arcSegmentAngleDegrees)
@@ -184,21 +195,30 @@ namespace MillSimSharp.Viewer
 
             if (useRadius)
             {
-                // Center from radius (positive R = minor arc)
                 double dx = end.X - start.X;
                 double dy = end.Y - start.Y;
                 double distance = Math.Sqrt(dx * dx + dy * dy);
-                if (distance < 1e-9) return;
+                if (distance < 1e-9) return false;
+
+                // Radius must reach at least half of the chord length.
+                if (Math.Abs(r) < distance * 0.5 - 1e-9) return false;
 
                 double hSquared = r * r - distance * distance / 4.0;
                 double h = hSquared > 0 ? Math.Sqrt(hSquared) : 0;
                 double mx = (start.X + end.X) / 2.0;
                 double my = (start.Y + end.Y) / 2.0;
 
-                // Perpendicular direction, sign chosen by direction
-                double sign = clockwise ? 1.0 : -1.0;
-                cx = mx + sign * (-dy / distance) * h;
-                cy = my + sign * (dx / distance) * h;
+                // Left normal of the chord direction.
+                double perpX = -dy / distance;
+                double perpY = dx / distance;
+
+                // Positive R selects the minor arc (below 180 degrees), negative R the major arc.
+                // For CCW motion the center lies to the left of the chord, for CW to the right.
+                double side = clockwise ? -1.0 : 1.0;
+                if (r < 0) side = -side;
+
+                cx = mx + side * perpX * h;
+                cy = my + side * perpY * h;
             }
             else
             {
@@ -209,7 +229,7 @@ namespace MillSimSharp.Viewer
             double startAngle = Math.Atan2(start.Y - cy, start.X - cx);
             double endAngle = Math.Atan2(end.Y - cy, end.X - cx);
             double radius = Math.Sqrt((start.X - cx) * (start.X - cx) + (start.Y - cy) * (start.Y - cy));
-            if (radius < 1e-9) return;
+            if (radius < 1e-9) return false;
 
             double sweep = endAngle - startAngle;
             const double twoPi = Math.PI * 2.0;
@@ -237,6 +257,8 @@ namespace MillSimSharp.Viewer
                     (float)(start.Z + (end.Z - start.Z) * t));
                 commands.Add(new G1Move(target, (float)feed));
             }
+
+            return true;
         }
 
         private static string StripComments(string line)

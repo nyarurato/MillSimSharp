@@ -161,5 +161,36 @@ namespace MillSimSharp.Tests.Geometry
 
             Assert.That(grid.GetOccupiedVoxels().Count, Is.EqualTo(grid.CountMaterialVoxels()));
         }
+
+        [Test]
+        public void RemoveVoxelsInSphere_SurfaceSample_IsNotRemoved()
+        {
+            // Bounds chosen so that voxel centers land exactly on the sphere surface.
+            var bbox = new BoundingBox(new Vector3(-3.5f, -4.5f, -0.5f), new Vector3(3.5f, 4.5f, 0.5f));
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            // (3,4,0) is exactly 5mm from the origin; (2,3,0) is strictly inside.
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 5f);
+
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(3, 4, 0)), Is.True,
+                "A voxel center exactly on the sphere surface must be preserved");
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(2, 3, 0)), Is.False,
+                "A voxel center strictly inside the sphere must be removed");
+        }
+
+        [Test]
+        public void RemoveVoxelsInCylinder_SurfaceSample_IsNotRemoved()
+        {
+            var bbox = new BoundingBox(new Vector3(-3.5f, -4.5f, -0.5f), new Vector3(3.5f, 4.5f, 0.5f));
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            // Cylinder along +Z through the origin, radius 5: (3,4,0) is exactly on the side surface.
+            grid.RemoveVoxelsInCylinder(new Vector3(0, 0, -10), new Vector3(0, 0, 10), 5f, flatEnds: true);
+
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(3, 4, 0)), Is.True,
+                "A voxel center exactly on the cylinder surface must be preserved");
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(2, 3, 0)), Is.False,
+                "A voxel center strictly inside the cylinder must be removed");
+        }
     }
 }

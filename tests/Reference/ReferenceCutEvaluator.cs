@@ -69,12 +69,91 @@ namespace MillSimSharp.Tests.Reference
         }
 
         /// <summary>
-        /// Default-orientation ball test (axis toward spindle = +Z).
+        /// Signed distance to a ball (negative inside, positive outside), computed independently
+        /// of the production geometry helpers.
+        /// </summary>
+        public static float ReferenceSignedDistanceBall(Vector3 point, Vector3 center, float radius)
+        {
+            return Vector3.Distance(point, center) - radius;
+        }
+
+        /// <summary>
+        /// Signed distance to a flat-ended cylinder (negative inside). A zero-length cylinder has
+        /// no interior, so every point is reported outside.
+        /// </summary>
+        public static float ReferenceSignedDistanceCylinder(Vector3 point, Vector3 start, Vector3 end, float radius)
+        {
+            Vector3 axis = end - start;
+            float length = axis.Length();
+            if (length < 1e-9f)
+                return Vector3.Distance(point, start) + radius;
+
+            Vector3 dir = axis / length;
+            Vector3 rel = point - start;
+            float axial = Vector3.Dot(rel, dir);
+            float radial = (rel - dir * axial).Length();
+
+            float radialDistance = radial - radius;
+            float axialDistance = MathF.Max(-axial, axial - length);
+
+            float outside = MathF.Sqrt(
+                MathF.Max(radialDistance, 0f) * MathF.Max(radialDistance, 0f) +
+                MathF.Max(axialDistance, 0f) * MathF.Max(axialDistance, 0f));
+
+            return MathF.Min(MathF.Max(radialDistance, axialDistance), 0f) + outside;
+        }
+
+        /// <summary>
+        /// Signed distance to a capsule (negative inside).
+        /// </summary>
+        public static float ReferenceSignedDistanceCapsule(Vector3 point, Vector3 start, Vector3 end, float radius)
+        {
+            Vector3 axis = end - start;
+            float length = axis.Length();
+            if (length < 1e-9f)
+                return Vector3.Distance(point, start) - radius;
+
+            Vector3 dir = axis / length;
+            Vector3 rel = point - start;
+            float t = Math.Clamp(Vector3.Dot(rel, dir), 0f, length);
+            return (rel - dir * t).Length() - radius;
+        }
+
+        /// <summary>
+        /// Signed distance to the ball end mill cutting solid (ball union flute cylinder) for an
+        /// arbitrary orientation (negative inside).
+        /// </summary>
+        public static float ReferenceSignedDistanceBallTool(Vector3 point, Vector3 tip,
+            float aDeg, float bDeg, float cDeg, float radius, float length)
+        {
+            Vector3 axis = ExpectedAxisTowardSpindle(aDeg, bDeg, cDeg);
+            Vector3 center = tip + axis * radius;
+            Vector3 top = tip + axis * MathF.Max(length, radius);
+
+            float ball = ReferenceSignedDistanceBall(point, center, radius);
+            float flute = ReferenceSignedDistanceCylinder(point, center, top, radius);
+            return MathF.Min(ball, flute);
+        }
+
+        /// <summary>
+        /// Signed distance to the flat end mill cutting solid (flat-ended cylinder) for an
+        /// arbitrary orientation (negative inside).
+        /// </summary>
+        public static float ReferenceSignedDistanceFlatTool(Vector3 point, Vector3 tip,
+            float aDeg, float bDeg, float cDeg, float radius, float length)
+        {
+            Vector3 axis = ExpectedAxisTowardSpindle(aDeg, bDeg, cDeg);
+            return ReferenceSignedDistanceCylinder(point, tip, tip + axis * length, radius);
+        }
+
+        /// <summary>
+        /// Default-orientation ball test (axis toward spindle = +Z). Matches the production
+        /// convention <c>signedDistance &lt; 0</c>: points on the surface are not inside.
         /// </summary>
         public static bool IsInsideBall(Vector3 point, Vector3 tip, float radius)
         {
             Vector3 center = tip + new Vector3(0, 0, radius);
-            return Vector3.DistanceSquared(point, center) <= radius * radius;
+            return ReferenceSignedDistanceBall(point, center, radius) < 0f;
         }
 
         /// <summary>
@@ -83,7 +162,7 @@ namespace MillSimSharp.Tests.Reference
         public static bool IsInsideBall(Vector3 point, Vector3 tip, float aDeg, float bDeg, float cDeg, float radius)
         {
             Vector3 center = ExpectedBallCenter(tip, aDeg, bDeg, cDeg, radius);
-            return Vector3.DistanceSquared(point, center) <= radius * radius;
+            return ReferenceSignedDistanceBall(point, center, radius) < 0f;
         }
 
         /// <summary>
@@ -91,16 +170,7 @@ namespace MillSimSharp.Tests.Reference
         /// </summary>
         public static bool IsInsideCylinder(Vector3 point, Vector3 start, Vector3 end, float radius)
         {
-            Vector3 axis = end - start;
-            float length = axis.Length();
-            if (length < 1e-9f) return false;
-
-            Vector3 dir = axis / length;
-            Vector3 rel = point - start;
-            float t = Vector3.Dot(rel, dir);
-            if (t < 0f || t > length) return false;
-
-            return (rel - dir * t).LengthSquared() <= radius * radius;
+            return ReferenceSignedDistanceCylinder(point, start, end, radius) < 0f;
         }
 
         /// <summary>
@@ -108,14 +178,7 @@ namespace MillSimSharp.Tests.Reference
         /// </summary>
         public static bool IsInsideCapsule(Vector3 point, Vector3 start, Vector3 end, float radius)
         {
-            Vector3 axis = end - start;
-            float length = axis.Length();
-            if (length < 1e-9f) return Vector3.DistanceSquared(point, start) <= radius * radius;
-
-            Vector3 dir = axis / length;
-            Vector3 rel = point - start;
-            float t = Math.Clamp(Vector3.Dot(rel, dir), 0f, length);
-            return (rel - dir * t).LengthSquared() <= radius * radius;
+            return ReferenceSignedDistanceCapsule(point, start, end, radius) < 0f;
         }
 
         /// <summary>
@@ -124,10 +187,7 @@ namespace MillSimSharp.Tests.Reference
         /// </summary>
         public static bool IsInsideBallCutPointTool(Vector3 point, Vector3 tip, float radius, float length)
         {
-            Vector3 center = tip + new Vector3(0, 0, radius);
-            Vector3 top = tip + new Vector3(0, 0, Math.Max(length, radius));
-            return Vector3.DistanceSquared(point, center) <= radius * radius
-                || IsInsideCylinder(point, center, top, radius);
+            return ReferenceSignedDistanceBallTool(point, tip, 0f, 0f, 0f, radius, length) < 0f;
         }
 
         /// <summary>
@@ -136,7 +196,7 @@ namespace MillSimSharp.Tests.Reference
         /// </summary>
         public static bool IsInsideFlatCutPointTool(Vector3 point, Vector3 tip, float radius, float length)
         {
-            return IsInsideCylinder(point, tip, tip + new Vector3(0, 0, length), radius);
+            return ReferenceSignedDistanceFlatTool(point, tip, 0f, 0f, 0f, radius, length) < 0f;
         }
 
         /// <summary>

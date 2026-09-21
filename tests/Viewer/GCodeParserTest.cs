@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using MillSimSharp.Toolpath;
@@ -70,6 +71,105 @@ namespace MillSimSharp.Tests.Viewer
 
             Assert.That(commands.Count, Is.EqualTo(1));
             Assert.That(((G1Move)commands[0]).Target, Is.EqualTo(new Vector3(5, 0, 0)));
+        }
+
+        // ---------------------------------------------------------------------
+        // R-format arcs: positive R = minor arc, negative R = major arc
+        // ---------------------------------------------------------------------
+
+        private static List<Vector3> ParseArcTargets(string gcode, Vector3 start, float segmentAngleDegrees = 1f)
+        {
+            return GCodeParser.ParseText(gcode, start, segmentAngleDegrees)
+                .OfType<G1Move>()
+                .Select(m => m.Target)
+                .ToList();
+        }
+
+        private static bool HasPointNear(List<Vector3> points, float x, float y, float tolerance = 0.05f)
+        {
+            return points.Any(p => Math.Abs(p.X - x) <= tolerance && Math.Abs(p.Y - y) <= tolerance);
+        }
+
+        [Test]
+        public void Parse_G3_PositiveR_MinorArc()
+        {
+            // CCW minor arc from (1,0) to (0,1) is centered at (0,0).
+            var points = ParseArcTargets("G3 X0 Y1 R1\n", new Vector3(1, 0, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(1f).Within(1e-3f));
+            Assert.That(HasPointNear(points, 0.7071f, 0.7071f), Is.True,
+                "The minor arc must pass through (0.707, 0.707)");
+            Assert.That(HasPointNear(points, 1.7071f, 1.7071f), Is.False,
+                "The minor arc must not take the major route");
+        }
+
+        [Test]
+        public void Parse_G2_PositiveR_MinorArc()
+        {
+            // CW minor arc from (0,1) to (1,0) is centered at (0,0).
+            var points = ParseArcTargets("G2 X1 Y0 R1\n", new Vector3(0, 1, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(1f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(HasPointNear(points, 0.7071f, 0.7071f), Is.True,
+                "The minor arc must pass through (0.707, 0.707)");
+            Assert.That(HasPointNear(points, 1.7071f, 1.7071f), Is.False,
+                "The minor arc must not take the major route");
+        }
+
+        [Test]
+        public void Parse_G3_NegativeR_MajorArc()
+        {
+            // Negative R: CCW major arc from (1,0) to (0,1), centered at (1,1).
+            var points = ParseArcTargets("G3 X0 Y1 R-1\n", new Vector3(1, 0, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(1f).Within(1e-3f));
+            Assert.That(HasPointNear(points, 1.7071f, 1.7071f), Is.True,
+                "The major arc must pass through (1.707, 1.707)");
+        }
+
+        [Test]
+        public void Parse_G2_NegativeR_MajorArc()
+        {
+            // Negative R: CW major arc from (0,1) to (1,0), centered at (1,1).
+            var points = ParseArcTargets("G2 X1 Y0 R-1\n", new Vector3(0, 1, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(1f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(HasPointNear(points, 1.7071f, 1.7071f), Is.True,
+                "The major arc must pass through (1.707, 1.707)");
+        }
+
+        [Test]
+        public void Parse_ImpossibleRadius_IsHandledClearly()
+        {
+            // |R| < chord / 2: the line must not be turned into a circle.
+            var commands = GCodeParser.ParseText("G3 X1 Y0 R0.4\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "An impossible radius must not emit moves");
+
+            // The ignored line must not move the tool.
+            var relative = GCodeParser.ParseText("G91\nG3 X1 Y0 R0.4\nG1 X1 Y0 F100\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
+                "The ignored arc must leave the position unchanged");
+        }
+
+        [Test]
+        public void Parse_ArcWithoutCenter_IsNotTreatedAsG1()
+        {
+            var commands = GCodeParser.ParseText("G3 X10 Y0\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "An arc without I/J/R must not be emitted as a linear move");
+
+            var relative = GCodeParser.ParseText("G91\nG3 X10 Y0\nG1 X1 Y0 F100\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
+                "The ignored arc must leave the position unchanged");
         }
     }
 }

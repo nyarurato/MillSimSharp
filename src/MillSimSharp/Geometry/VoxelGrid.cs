@@ -504,7 +504,9 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Removes all voxels within a sphere (sets them to empty).
+        /// Removes all voxels whose center lies strictly inside a sphere (sets them to empty).
+        /// A voxel center exactly on the surface is preserved (<c>signedDistance &lt; 0</c>
+        /// convention), matching the tool geometry path.
         /// <para>
         /// Large removals collect candidate voxels in parallel but commit to the sparse voxel
         /// octree on a single thread, so results are deterministic.
@@ -534,14 +536,16 @@ namespace MillSimSharp.Geometry
                 // Early rejection: skip Y slice if too far from center
                 float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
                 if (yDist > radius) return false;
-                return Vector3.DistanceSquared(VoxelToWorld(x, y, z), center) <= radiusSquared;
+                return Vector3.DistanceSquared(VoxelToWorld(x, y, z), center) < radiusSquared;
             }
 
             RemoveVoxelsInRegion(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
         }
 
         /// <summary>
-        /// Removes all voxels within a cylinder (sets them to empty).
+        /// Removes all voxels whose center lies strictly inside a cylinder (sets them to empty).
+        /// A voxel center exactly on the surface is preserved (<c>signedDistance &lt; 0</c>
+        /// convention), matching the tool geometry path.
         /// <para>
         /// Large removals collect candidate voxels in parallel but commit to the sparse voxel
         /// octree on a single thread, so results are deterministic.
@@ -603,7 +607,7 @@ namespace MillSimSharp.Geometry
                 if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
                 {
                     Vector3 closestPoint = start + axisDir * projectionLength;
-                    return Vector3.DistanceSquared(voxelCenter, closestPoint) <= radiusSquared;
+                    return Vector3.DistanceSquared(voxelCenter, closestPoint) < radiusSquared;
                 }
 
                 if (!flatEnds)
@@ -611,7 +615,7 @@ namespace MillSimSharp.Geometry
                     // Check distance to end caps (spheres)
                     float distToStart = Vector3.DistanceSquared(voxelCenter, start);
                     float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
-                    return distToStart <= radiusSquared || distToEnd <= radiusSquared;
+                    return distToStart < radiusSquared || distToEnd < radiusSquared;
                 }
 
                 return false;

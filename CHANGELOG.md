@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SetVoxel` / `SetVoxelAtWorld` / `Clear` raised no `VoxelsChanged` event, leaving bound SDF grids stale
 - Bull-nose geometry bounds now contain the full toroidal corner even when the cutting length is shorter than the corner diameter
 - Mesh vertex comparers now satisfy the equality/hash contract (near-equal vertices could previously fail to merge)
+- G-code R-format arcs: positive R selects the minor arc and negative R the major arc; an arc without I/J/R or with an impossible radius is ignored instead of being emitted as a linear move
+- `VoxelGrid.RemoveVoxelsInSphere` / `RemoveVoxelsInCylinder` now use the strict `signedDistance < 0` convention (a voxel center exactly on the surface is preserved)
 
 ## [0.2.0] - 2026-09-21
 

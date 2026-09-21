@@ -395,6 +395,53 @@ namespace MillSimSharp.Tests.Simulation
         // ---------------------------------------------------------------------
 
         [Test]
+        public void ReferenceSurfaceSample_SignedDistanceIsZero_IsNotInside()
+        {
+            Assert.That(ReferenceCutEvaluator.ReferenceSignedDistanceBall(new Vector3(5, 0, 0), Vector3.Zero, 5f),
+                Is.EqualTo(0f).Within(1e-5f));
+            Assert.That(ReferenceCutEvaluator.IsInsideBall(new Vector3(5, 0, 5), Vector3.Zero, 5f), Is.False,
+                "Surface samples must not be treated as inside (signedDistance < 0 convention)");
+
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(0, 0, 10);
+
+            Assert.That(ReferenceCutEvaluator.IsInsideCylinder(new Vector3(5, 0, 5), start, end, 5f), Is.False,
+                "Cylinder side surface");
+            Assert.That(ReferenceCutEvaluator.IsInsideCylinder(new Vector3(2, 0, 0), start, end, 5f), Is.False,
+                "Cylinder cap surface");
+            Assert.That(ReferenceCutEvaluator.IsInsideCapsule(new Vector3(0, 0, -5), start, end, 5f), Is.False,
+                "Capsule end-cap surface");
+
+            Assert.That(ReferenceCutEvaluator.IsInsideBall(new Vector3(4.9f, 0, 5f), Vector3.Zero, 5f), Is.True);
+            Assert.That(ReferenceCutEvaluator.IsInsideCylinder(new Vector3(4.9f, 0, 5), start, end, 5f), Is.True);
+        }
+
+        [Test]
+        public void ReferenceSignedDistance_MatchesInsidePredicates()
+        {
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(0, 0, 10);
+
+            for (float x = -6f; x <= 6f; x += 1.3f)
+                for (float y = -6f; y <= 6f; y += 1.3f)
+                    for (float z = -6f; z <= 14f; z += 1.3f)
+                    {
+                        var p = new Vector3(x, y, z);
+
+                        Assert.That(ReferenceCutEvaluator.IsInsideCylinder(p, start, end, 3f),
+                            Is.EqualTo(ReferenceCutEvaluator.ReferenceSignedDistanceCylinder(p, start, end, 3f) < 0f));
+                        Assert.That(ReferenceCutEvaluator.IsInsideCapsule(p, start, end, 3f),
+                            Is.EqualTo(ReferenceCutEvaluator.ReferenceSignedDistanceCapsule(p, start, end, 3f) < 0f));
+                        Assert.That(ReferenceCutEvaluator.IsInsideBall(p, Vector3.Zero, 3f),
+                            Is.EqualTo(ReferenceCutEvaluator.ReferenceSignedDistanceBall(p, new Vector3(0, 0, 3f), 3f) < 0f));
+                        Assert.That(ReferenceCutEvaluator.IsInsideBallCutPointTool(p, Vector3.Zero, 3f, 10f),
+                            Is.EqualTo(ReferenceCutEvaluator.ReferenceSignedDistanceBallTool(p, Vector3.Zero, 0f, 0f, 0f, 3f, 10f) < 0f));
+                        Assert.That(ReferenceCutEvaluator.IsInsideFlatCutPointTool(p, Vector3.Zero, 3f, 10f),
+                            Is.EqualTo(ReferenceCutEvaluator.ReferenceSignedDistanceFlatTool(p, Vector3.Zero, 0f, 0f, 0f, 3f, 10f) < 0f));
+                    }
+        }
+
+        [Test]
         public void ReferenceEvaluator_AxisDirections_MatchHandDerivedValues()
         {
             var def = ReferenceCutEvaluator.ExpectedCuttingAxisDirection(0, 0, 0);
