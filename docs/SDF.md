@@ -50,6 +50,11 @@ sdfGrid.RemoveCapsule(start, end, radius);
 sdfGrid.RemoveFiniteCylinder(start, end, radius);
 ```
 
+**0.2.1 の仕様**:
+
+- `new SDFGrid(...)` は **effective bounds**（`Min + Dimensions × Resolution`、Max 側のみ拡張）を占める solid block として初期化されます。初期距離は境界面までの解析的な box 距離（narrow band でクランプ）で、境界近傍も `-narrowBand` の一様値ではありません。
+- `BindToVoxelGrid` / `UpdateRegionFromVoxelGrid` は **dimensions / resolution / bounds が一致する `VoxelGrid` のみ**受け付けます（不一致は `ArgumentException`）。`SDFGrid.FromVoxelGrid` は元の `VoxelGrid` の effective bounds をそのまま継承します。
+
 ### 内部実装
 
 #### 1. `SignedDistanceFieldBuilder` (internal)
@@ -119,7 +124,7 @@ dResult = max(dCurrent, -dTool)
 |---|---|---|
 | `RemoveSphere(center, r)` | 球 | |
 | `RemoveCapsule(start, end, r)` | 線分＋球（カプセル） | 球エンドミルの掃引 |
-| `RemoveFiniteCylinder(start, end, r)` | 平底の有限円柱 | フラットエンドミルの掃引。カプセルとは端面形状が異なる |
+| `RemoveFiniteCylinder(start, end, r)` | 平底の有限円柱 | フラットエンドミルの掃引。カプセルとは端面形状が異なる。距離は端面コーナーを含む厳密な capped cylinder 距離（0.2.1 で改善） |
 
 書き込みは表面バンド（`narrowBandWidth` 分）をマージンとして拡張した領域のみに行い、書き込み後は
 影響範囲の距離を再計算します。工具 AABB が広い（シャンクが長い）場合でも、セル単位の並列書き込みで高速化されています。
