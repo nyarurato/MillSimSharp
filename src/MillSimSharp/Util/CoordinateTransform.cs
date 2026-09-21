@@ -85,11 +85,11 @@ namespace MillSimSharp.Util
         /// <returns>Spindle position in machine coordinates.</returns>
         public static Vector3 ToolTipToSpindlePosition(Vector3 toolTipPosition, ToolOrientation orientation, float toolLength)
         {
-            // Get tool direction vector
-            Vector3 toolDirection = orientation.GetToolDirection();
+            // Get the axis direction from the physical tool tip toward the spindle
+            Vector3 axisTowardSpindle = orientation.GetAxisTowardSpindle();
             
-            // Move along tool direction by tool length
-            return toolTipPosition - toolDirection * toolLength;
+            // Move from the tip toward the spindle by the tool length
+            return toolTipPosition + axisTowardSpindle * toolLength;
         }
 
         /// <summary>

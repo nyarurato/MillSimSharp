@@ -251,6 +251,23 @@ var orientation = new ToolOrientation(a_deg: 30, b_deg: 0, c_deg: 0);
 Vector3 direction = orientation.GetToolDirection();
 ```
 
+### Tool Reference Point and Ball Compensation
+
+All toolpath positions in the API are the **physical tool tip** (the lowest point of the tool), regardless of tool type:
+
+- `ToolOrientation.GetCuttingAxisDirection()`: spindle → tip direction (default `(0, 0, -1)`)
+- `ToolOrientation.GetAxisTowardSpindle()`: tip → spindle direction (direction the tool body extends)
+- `ToolPose` holds `Position` (physical tip) and `Orientation`
+- `Tool.BallCenterOffsetFromTip`: `0` for flat tools, `radius` for ball end mills
+
+For ball end mills the cutting ball center is derived from the tip:
+
+```text
+BallCenter = PhysicalTip + AxisTowardSpindle * (Diameter / 2)
+```
+
+CAM output that uses the ball center as its CL point must be converted at the importer/post layer; the core simulator always expects the physical tip.
+
 ### Stock Origin Configuration
 
 Configure where the work origin (0,0,0) is located on the stock:

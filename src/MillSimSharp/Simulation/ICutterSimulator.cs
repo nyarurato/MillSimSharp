@@ -6,10 +6,10 @@ namespace MillSimSharp.Simulation
     /// Interface for cutting simulators.
     /// Allows ToolpathExecutor to work with both VoxelGrid-based and SDF-based simulators.
     /// 
-    /// <para><b>座標系の基準：</b></para>
+    /// <para><b>Tool Reference Point：</b></para>
     /// <para>
-    /// すべての位置パラメータは工具先端（ツールチップ）の座標を表します。
-    /// これは、エンドミルの切削刃の中心点、またはボールエンドミルの球の中心点です。
+    /// すべての位置パラメータは工具先端（Physical Tip）の座標を表します。工具種別によって意味は変わりません。
+    /// ボールエンドミルの切削球中心は <c>tip + AxisTowardSpindle * radius</c> として内部で導出されます。
     /// </para>
     /// </summary>
     public interface ICutterSimulator

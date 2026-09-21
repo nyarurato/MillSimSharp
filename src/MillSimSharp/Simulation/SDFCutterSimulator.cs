@@ -7,6 +7,11 @@ namespace MillSimSharp.Simulation
     /// <summary>
     /// Simulator for cutting operations on SDF grids.
     /// Provides the same interface as CutterSimulator but operates on SDFGrid instead of VoxelGrid.
+    /// <para>
+    /// All positions passed to this class are the <b>physical tool tip</b>.
+    /// For ball end mills the cutting sphere center is derived internally as
+    /// <c>tip + AxisTowardSpindle * radius</c>.
+    /// </para>
     /// </summary>
     public class SDFCutterSimulator : ICutterSimulator
     {
@@ -24,10 +29,11 @@ namespace MillSimSharp.Simulation
 
         /// <summary>
         /// Performs a linear cut from start to end using the specified tool.
-        /// Removes material both at the tool tip and along the tool shaft.
+        /// start / end は工具先端（Physical Tip）の位置です。
+        /// ボールエンドミルは球中心の軌跡を掃引し、フラットエンドミルは平底円柱を掃引します。
         /// </summary>
-        /// <param name="start">Start position of the tool tip.</param>
-        /// <param name="end">End position of the tool tip.</param>
+        /// <param name="start">Start position of the physical tool tip.</param>
+        /// <param name="end">End position of the physical tool tip.</param>
         /// <param name="tool">The cutting tool.</param>
         public void CutLinear(Vector3 start, Vector3 end, Tool tool)
         {
@@ -35,35 +41,34 @@ namespace MillSimSharp.Simulation
 
             float radius = tool.Diameter / 2.0f;
             float length = tool.Length;
+            float ballOffset = tool.BallCenterOffsetFromTip;
+            Vector3 axisTowardSpindle = Vector3.UnitZ; // 3-axis tools always point downward
 
-            // Step 1: Remove material along the tool tip path
+            Vector3 centerStart = start + axisTowardSpindle * ballOffset;
+            Vector3 centerEnd = end + axisTowardSpindle * ballOffset;
+            Vector3 topOffset = axisTowardSpindle * Math.Max(length, ballOffset);
+
+            // Step 1: sweep the cutting edge along the path
             if (tool.Type == ToolType.Ball)
             {
-                // Ball end mill: sweep a capsule (line segment with spherical ends)
-                _sdfGrid.RemoveCapsule(start, end, radius);
+                // Ball: capsule around the ball-center path
+                _sdfGrid.RemoveCapsule(centerStart, centerEnd, radius);
             }
             else
             {
-                // Flat end mill: sweep a finite flat-ended cylinder
+                // Flat: flat-ended cylinder swept along the tip path
                 _sdfGrid.RemoveFiniteCylinder(start, end, radius);
             }
 
-            // Step 2: Remove material along the tool shaft
-            // The shaft extends vertically upward (in +Z direction) from the tip
-            Vector3 shaftOffset = new Vector3(0, 0, length);
-            Vector3 shaftStart = start + shaftOffset;
-            Vector3 shaftEnd = end + shaftOffset;
+            // Step 2: sweep the top of the tool (cutting length is measured from the physical tip)
+            _sdfGrid.RemoveFiniteCylinder(start + topOffset, end + topOffset, radius);
 
-            // Remove material in the shaft path
-            _sdfGrid.RemoveFiniteCylinder(shaftStart, shaftEnd, radius);
-
-            // Step 3: Remove material in the swept volume connecting tip to shaft
+            // Step 3: swept shaft volume between the cutting center path and the tool top
             Vector3 motion = end - start;
             float distance = motion.Length();
 
             if (distance > 0)
             {
-                // Create vertical shaft cylinders at intervals along the path
                 float stepSize = radius * 0.5f;
                 int numSteps = Math.Max(2, (int)Math.Ceiling(distance / stepSize));
 
@@ -71,24 +76,21 @@ namespace MillSimSharp.Simulation
                 {
                     float t = i / (float)numSteps;
                     Vector3 tipPos = start + motion * t;
-                    Vector3 shaftTop = tipPos + shaftOffset;
-
-                    // Create vertical cylinder from tip to shaft top at this position
-                    _sdfGrid.RemoveFiniteCylinder(tipPos, shaftTop, radius);
+                    Vector3 centerPos = tipPos + axisTowardSpindle * ballOffset;
+                    Vector3 topPos = tipPos + topOffset;
+                    _sdfGrid.RemoveFiniteCylinder(centerPos, topPos, radius);
                 }
             }
             else
             {
-                // Zero-length movement: just remove vertical shaft at this point
-                _sdfGrid.RemoveFiniteCylinder(start, shaftStart, radius);
+                _sdfGrid.RemoveFiniteCylinder(centerStart, start + topOffset, radius);
             }
         }
 
         /// <summary>
-        /// Performs a point cut (drilling/plunging) at the specified position.
-        /// Removes material at the tool tip and along the tool shaft.
+        /// Performs a point cut (drilling/plunging) at the specified physical tip position.
         /// </summary>
-        /// <param name="position">Position of the tool tip.</param>
+        /// <param name="position">Position of the physical tool tip.</param>
         /// <param name="tool">The cutting tool.</param>
         public void CutPoint(Vector3 position, Tool tool)
         {
@@ -96,20 +98,28 @@ namespace MillSimSharp.Simulation
 
             float radius = tool.Diameter / 2.0f;
             float length = tool.Length;
+            float ballOffset = tool.BallCenterOffsetFromTip;
+            Vector3 axisTowardSpindle = Vector3.UnitZ;
 
-            // Remove material at the tool tip
-            _sdfGrid.RemoveSphere(position, radius);
+            Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
+            Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
 
-            // Remove material along the tool shaft (vertical cylinder above the tip)
-            Vector3 shaftTop = position + new Vector3(0, 0, length);
-            _sdfGrid.RemoveFiniteCylinder(position, shaftTop, radius);
+            if (tool.Type == ToolType.Ball)
+            {
+                // Ball: full sphere at the cutting center (the tip is the sphere bottom).
+                _sdfGrid.RemoveSphere(cuttingCenter, radius);
+            }
+
+            // Tool body from the cutting center to the tool top.
+            // For flat tools the cutting center equals the physical tip (flat bottom).
+            _sdfGrid.RemoveFiniteCylinder(cuttingCenter, top, radius);
         }
 
         /// <summary>
         /// Performs a linear cut with specified tool orientation (for 5-axis machining).
         /// </summary>
-        /// <param name="start">Tool tip position at start.</param>
-        /// <param name="end">Tool tip position at end.</param>
+        /// <param name="start">Physical tool tip position at start.</param>
+        /// <param name="end">Physical tool tip position at end.</param>
         /// <param name="tool">Cutting tool to use.</param>
         /// <param name="startOrientation">Tool orientation at start.</param>
         /// <param name="endOrientation">Tool orientation at end.</param>
@@ -120,12 +130,13 @@ namespace MillSimSharp.Simulation
 
             float radius = tool.Diameter / 2.0f;
             float length = tool.Length;
+            float ballOffset = tool.BallCenterOffsetFromTip;
 
             // Number of interpolation steps based on distance
             // Limit interpolation frequency to avoid excessive computation
             Vector3 delta = end - start;
             float distance = delta.Length();
-            
+
             // Use fewer steps for 5-axis: one step per 2-3 voxels rather than every voxel
             float stepSize = _sdfGrid.Resolution * 2.5f;
             int steps = Math.Max(1, (int)Math.Ceiling(distance / stepSize));
@@ -143,25 +154,19 @@ namespace MillSimSharp.Simulation
                     startOrientation.C + (endOrientation.C - startOrientation.C) * t
                 );
 
-                // Get tool direction at this orientation
-                Vector3 toolDirection = orientation.GetToolDirection();
+                Vector3 axisTowardSpindle = orientation.GetAxisTowardSpindle();
+                Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
+                Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
 
-                // Calculate shaft endpoint
-                Vector3 shaftEnd = position - toolDirection * length;
-
-                // Remove material for tool tip
                 if (tool.Type == ToolType.Ball)
                 {
-                    _sdfGrid.RemoveSphere(position, radius);
-                }
-                else
-                {
-                    // For flat end mill, remove a small sphere at the tip
-                    _sdfGrid.RemoveSphere(position, radius * 0.5f);
+                    // Ball: sphere at the cutting center
+                    _sdfGrid.RemoveSphere(cuttingCenter, radius);
                 }
 
-                // Remove material along the tool shaft
-                _sdfGrid.RemoveFiniteCylinder(position, shaftEnd, radius);
+                // Tool body: flat-ended cylinder from the cutting center to the tool top.
+                // For flat tools this is the full tool (flat bottom at the tip plane).
+                _sdfGrid.RemoveFiniteCylinder(cuttingCenter, top, radius);
             }
         }
     }

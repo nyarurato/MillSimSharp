@@ -8,9 +8,10 @@ namespace MillSimSharp.Toolpath
     /// 
     /// <para><b>座標系の基準：</b></para>
     /// <list type="bullet">
-    /// <item>XYZ座標：工具先端（ツールチップ）の位置を表します</item>
+    /// <item>XYZ座標：工具先端（Physical Tip）の位置を表します（工具種別に依存しません）</item>
     /// <item>デフォルト姿勢：工具軸はZ軸負方向（0, 0, -1）に向いています</item>
     /// <item>回転中心：工具先端を中心に回転します</item>
+    /// <item>軸方向：<see cref="GetCuttingAxisDirection"/>（spindle → tip）と <see cref="GetAxisTowardSpindle"/>（tip → spindle）</item>
     /// </list>
     /// 
     /// <para><b>回転角度の定義（右手座標系）：</b></para>
@@ -61,15 +62,14 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
-        /// Gets the tool direction vector based on the rotation angles.
-        /// 
+        /// Gets the cutting axis direction (spindle -> physical tool tip) for the current orientation.
         /// <para>
         /// デフォルトの工具方向（A=B=C=0）は、Z軸負方向（0, 0, -1）です。
         /// これは、工具が下向き（ワークに向かって）に配置された状態を表します。
         /// </para>
         /// </summary>
-        /// <returns>Normalized direction vector pointing from tool tip toward spindle.</returns>
-        public Vector3 GetToolDirection()
+        /// <returns>Normalized direction vector pointing from the spindle toward the tool tip.</returns>
+        public Vector3 GetCuttingAxisDirection()
         {
             // Convert degrees to radians
             float aRad = A * MathF.PI / 180f;
@@ -92,6 +92,25 @@ namespace MillSimSharp.Toolpath
             var direction = Vector3.Transform(defaultDirection, rotation);
 
             return Vector3.Normalize(direction);
+        }
+
+        /// <summary>
+        /// Gets the axis direction from the physical tool tip toward the spindle (tip -> spindle).
+        /// This is the direction in which the tool body extends from the tip.
+        /// </summary>
+        /// <returns>Normalized direction vector pointing from the tool tip toward the spindle.</returns>
+        public Vector3 GetAxisTowardSpindle()
+        {
+            return -GetCuttingAxisDirection();
+        }
+
+        /// <summary>
+        /// Gets the tool direction vector (spindle -> tip).
+        /// </summary>
+        [Obsolete("Use GetCuttingAxisDirection() (spindle -> tip) or GetAxisTowardSpindle() (tip -> spindle).")]
+        public Vector3 GetToolDirection()
+        {
+            return GetCuttingAxisDirection();
         }
 
         /// <summary>

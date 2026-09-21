@@ -19,6 +19,12 @@ namespace MillSimSharp.Simulation
         }
 
         /// <summary>
+        /// Gets the distance from the physical tool tip to the cutting ball center.
+        /// Equal to the radius for ball end mills, zero for flat end mills.
+        /// </summary>
+        public override float BallCenterOffsetFromTip => Type == ToolType.Ball ? Diameter / 2.0f : 0f;
+
+        /// <summary>
         /// Gets the radius of the tool at a given height from the tip.
         /// </summary>
         /// <param name="heightFromTip"></param>

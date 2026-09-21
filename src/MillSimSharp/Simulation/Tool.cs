@@ -38,6 +38,12 @@ namespace MillSimSharp.Simulation
         public ToolType Type { get; }
 
         /// <summary>
+        /// Distance from the physical tool tip to the center of the cutting ball, measured along
+        /// the tool axis (tip -> spindle). Zero for flat tools; equal to the radius for ball end mills.
+        /// </summary>
+        public abstract float BallCenterOffsetFromTip { get; }
+
+        /// <summary>
         /// Protected constructor for Tool.
         /// </summary>
         /// <param name="diameter"></param>
