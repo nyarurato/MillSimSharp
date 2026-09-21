@@ -44,6 +44,13 @@ namespace MillSimSharp.Simulation
         public abstract float BallCenterOffsetFromTip { get; }
 
         /// <summary>
+        /// Gets the cutting solid geometry of this tool in tool-local coordinates
+        /// (origin = physical tip, +Z = toward the spindle).
+        /// </summary>
+        /// <returns>Cutting geometry used by the simulators.</returns>
+        public abstract IToolGeometry GetCuttingGeometry();
+
+        /// <summary>
         /// Protected constructor for Tool.
         /// </summary>
         /// <param name="diameter"></param>

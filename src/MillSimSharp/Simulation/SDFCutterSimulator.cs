@@ -8,9 +8,8 @@ namespace MillSimSharp.Simulation
     /// Simulator for cutting operations on SDF grids.
     /// Provides the same interface as CutterSimulator but operates on SDFGrid instead of VoxelGrid.
     /// <para>
-    /// All positions passed to this class are the <b>physical tool tip</b>.
-    /// For ball end mills the cutting sphere center is derived internally as
-    /// <c>tip + AxisTowardSpindle * radius</c>.
+    /// All positions passed to this class are the <b>physical tool tip</b>. The SDF is updated by
+    /// a CSG difference with the tool cutting solid (<see cref="IToolGeometry"/>) placed at the tip.
     /// </para>
     /// </summary>
     public class SDFCutterSimulator : ICutterSimulator
@@ -32,11 +31,7 @@ namespace MillSimSharp.Simulation
         }
 
         /// <summary>
-        /// Performs a linear cut from start to end using the specified tool.
-        /// <para>
-        /// start / end は工具先端（Physical Tip）の位置です。
-        /// 実装は既定姿勢の pose sweep に委譲されるため、3軸と5軸で切削形状の経路が一致します。
-        /// </para>
+        /// Performs a linear cut from start to end using the specified tool (default orientation).
         /// </summary>
         /// <param name="start">Start position of the physical tool tip.</param>
         /// <param name="end">End position of the physical tool tip.</param>
@@ -58,23 +53,7 @@ namespace MillSimSharp.Simulation
         {
             if (tool == null) throw new ArgumentNullException(nameof(tool));
 
-            float radius = tool.Diameter / 2.0f;
-            float length = tool.Length;
-            float ballOffset = tool.BallCenterOffsetFromTip;
-            Vector3 axisTowardSpindle = Vector3.UnitZ;
-
-            Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
-            Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
-
-            if (tool.Type == ToolType.Ball)
-            {
-                // Ball: full sphere at the cutting center (the tip is the sphere bottom).
-                _sdfGrid.RemoveSphere(cuttingCenter, radius);
-            }
-
-            // Tool body from the cutting center to the tool top.
-            // For flat tools the cutting center equals the physical tip (flat bottom).
-            _sdfGrid.RemoveFiniteCylinder(cuttingCenter, top, radius);
+            RemoveToolSolid(tool.GetCuttingGeometry(), position, Vector3.UnitZ);
         }
 
         /// <summary>
@@ -95,9 +74,7 @@ namespace MillSimSharp.Simulation
         {
             if (tool == null) throw new ArgumentNullException(nameof(tool));
 
-            float radius = tool.Diameter / 2.0f;
-            float length = tool.Length;
-            float ballOffset = tool.BallCenterOffsetFromTip;
+            IToolGeometry geometry = tool.GetCuttingGeometry();
 
             Vector3 delta = end - start;
             float distance = delta.Length();
@@ -114,19 +91,16 @@ namespace MillSimSharp.Simulation
                 Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
                 Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
 
-                Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
-                Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
-
-                if (tool.Type == ToolType.Ball)
-                {
-                    // Ball: sphere at the cutting center
-                    _sdfGrid.RemoveSphere(cuttingCenter, radius);
-                }
-
-                // Tool body: flat-ended cylinder from the cutting center to the tool top.
-                // For flat tools this is the full tool (flat bottom at the tip plane).
-                _sdfGrid.RemoveFiniteCylinder(cuttingCenter, top, radius);
+                RemoveToolSolid(geometry, position, axisTowardSpindle);
             }
+        }
+
+        private void RemoveToolSolid(IToolGeometry geometry, Vector3 tip, Vector3 axisTowardSpindle)
+        {
+            BoundingBox worldBounds = ToolPoseMath.GetWorldBounds(geometry, tip, axisTowardSpindle);
+            _sdfGrid.CarveRegion(
+                worldBounds,
+                point => geometry.SignedDistance(ToolPoseMath.ToLocalPoint(point, tip, axisTowardSpindle)));
         }
     }
 }

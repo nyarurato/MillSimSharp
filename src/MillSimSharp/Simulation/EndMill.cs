@@ -25,6 +25,16 @@ namespace MillSimSharp.Simulation
         public override float BallCenterOffsetFromTip => Type == ToolType.Ball ? Diameter / 2.0f : 0f;
 
         /// <summary>
+        /// Gets the cutting solid geometry for this end mill.
+        /// </summary>
+        public override IToolGeometry GetCuttingGeometry()
+        {
+            return Type == ToolType.Ball
+                ? new BallEndMillGeometry(Diameter / 2.0f, Length)
+                : new FlatEndMillGeometry(Diameter / 2.0f, Length);
+        }
+
+        /// <summary>
         /// Gets the radius of the tool at a given height from the tip.
         /// </summary>
         /// <param name="heightFromTip"></param>

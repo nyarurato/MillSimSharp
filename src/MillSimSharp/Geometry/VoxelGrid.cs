@@ -399,6 +399,48 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Removes voxels in the specified index region for which <paramref name="shouldRemove"/>
+        /// returns true. The region is clamped to the grid. Large regions use the deterministic
+        /// two-phase parallel path.
+        /// </summary>
+        internal void RemoveVoxelsInRegion(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, Func<int, int, int, bool> shouldRemove)
+        {
+            minX = Math.Max(0, minX);
+            minY = Math.Max(0, minY);
+            minZ = Math.Max(0, minZ);
+            maxX = Math.Min(_sizeX - 1, maxX);
+            maxY = Math.Min(_sizeY - 1, maxY);
+            maxZ = Math.Min(_sizeZ - 1, maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return;
+
+            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+            if (UseParallelRemoval && volumeSize > ParallelRemovalThreshold && volumeSize <= MaxParallelRemovalVolume)
+            {
+                RemoveInParallel(minX, minY, minZ, maxX, maxY, maxZ, shouldRemove);
+            }
+            else
+            {
+                RemoveSequentially(minX, minY, minZ, maxX, maxY, maxZ, shouldRemove);
+            }
+        }
+
+        /// <summary>
+        /// Removes voxels whose center lies inside the tool solid described by
+        /// <paramref name="signedDistance"/> (negative = inside) within <paramref name="worldBounds"/>.
+        /// </summary>
+        internal void RemoveVoxelsInRegion(BoundingBox worldBounds, Func<Vector3, float> signedDistance)
+        {
+            if (worldBounds == null) throw new ArgumentNullException(nameof(worldBounds));
+            if (signedDistance == null) throw new ArgumentNullException(nameof(signedDistance));
+
+            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min);
+            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max);
+
+            RemoveVoxelsInRegion(minX, minY, minZ, maxX, maxY, maxZ,
+                (x, y, z) => signedDistance(VoxelToWorld(x, y, z)) < 0f);
+        }
+
+        /// <summary>
         /// Removes all voxels within a sphere (sets them to empty).
         /// <para>
         /// Large removals collect candidate voxels in parallel but commit to the sparse voxel
@@ -432,15 +474,7 @@ namespace MillSimSharp.Geometry
                 return Vector3.DistanceSquared(VoxelToWorld(x, y, z), center) <= radiusSquared;
             }
 
-            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
-            if (UseParallelRemoval && volumeSize > ParallelRemovalThreshold && volumeSize <= MaxParallelRemovalVolume)
-            {
-                RemoveInParallel(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
-            }
-            else
-            {
-                RemoveSequentially(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
-            }
+            RemoveVoxelsInRegion(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
         }
 
         /// <summary>
@@ -520,15 +554,7 @@ namespace MillSimSharp.Geometry
                 return false;
             }
 
-            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
-            if (UseParallelRemoval && volumeSize > ParallelRemovalThreshold && volumeSize <= MaxParallelRemovalVolume)
-            {
-                RemoveInParallel(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
-            }
-            else
-            {
-                RemoveSequentially(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
-            }
+            RemoveVoxelsInRegion(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
         }
 
         /// <summary>

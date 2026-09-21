@@ -368,6 +368,29 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Applies a CSG difference for the tool solid described by <paramref name="toolSignedDistance"/>
+        /// (negative inside the tool) over the given world bounds.
+        /// </summary>
+        internal void CarveRegion(BoundingBox worldBounds, Func<Vector3, float> toolSignedDistance)
+        {
+            if (worldBounds == null) throw new ArgumentNullException(nameof(worldBounds));
+            if (toolSignedDistance == null) throw new ArgumentNullException(nameof(toolSignedDistance));
+
+            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min);
+            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max);
+            ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return;
+
+            for (int z = minZ; z <= maxZ; z++)
+            for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                float distance = toolSignedDistance(VoxelToWorld(x, y, z));
+                Carve(x, y, z, -distance);
+            }
+        }
+
+        /// <summary>
         /// Removes material in a spherical region using the CSG difference operation
         /// <c>d = max(d, radius - |p - center|)</c>.
         /// </summary>
