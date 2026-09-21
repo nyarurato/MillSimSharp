@@ -45,12 +45,12 @@ namespace MillSimSharp.Geometry
             _fastMode = fastMode;
             _sampleCache = new System.Collections.Concurrent.ConcurrentDictionary<int, float>();
             
-            Console.WriteLine($"  Building octree SDF (narrowBand={narrowBand}, fastMode={fastMode})...");
+            System.Diagnostics.Trace.WriteLine($"  Building octree SDF (narrowBand={narrowBand}, fastMode={fastMode})...");
             var sw = System.Diagnostics.Stopwatch.StartNew();
             
             // Use Fast Sweeping Algorithm to pre-compute dense SDF grid
             _precomputedSDF = FastSweepingSDF.ComputeSDF(voxelGrid, sizeX, sizeY, sizeZ, narrowBand);
-            Console.WriteLine($"  Fast Sweeping SDF computed in {sw.ElapsedMilliseconds} ms");
+            System.Diagnostics.Trace.WriteLine($"  Fast Sweeping SDF computed in {sw.ElapsedMilliseconds} ms");
             
             // Surface voxels not needed anymore - SDF is already computed
             _surfaceVoxels = new List<(int, int, int)>();
@@ -62,7 +62,7 @@ namespace MillSimSharp.Geometry
             
             sw.Restart();
             BuildNode(_root);
-            Console.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
+            System.Diagnostics.Trace.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
         }
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace MillSimSharp.Geometry
             _fastMode = false;
             _sampleCache = new System.Collections.Concurrent.ConcurrentDictionary<int, float>();
             
-            Console.WriteLine($"  Building octree from SDF array (narrowBand={narrowBand})...");
+            System.Diagnostics.Trace.WriteLine($"  Building octree from SDF array (narrowBand={narrowBand})...");
             var sw = System.Diagnostics.Stopwatch.StartNew();
             
             // Use pre-computed SDF directly
@@ -93,7 +93,7 @@ namespace MillSimSharp.Geometry
             _root = new OctreeNode(0, 0, 0, pow2);
             
             BuildNode(_root);
-            Console.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
+            System.Diagnostics.Trace.WriteLine($"  Octree built in {sw.ElapsedMilliseconds} ms");
         }
         
         private int GetGridKey(int x, int y, int z)

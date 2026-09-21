@@ -24,12 +24,12 @@
 var sdfGrid = SDFGrid.FromVoxelGrid(
     voxelGrid, 
     narrowBandWidth: 2,    // Narrow band幅（ボクセル単位）
-    useSparse: true,       // スパースストレージを使用（大規模グリッド向け）
+    useSparse: true,       // ※未実装（予約）。密配列が常に確保される
     fastMode: false        // 高速モード（精度とのトレードオフ）
 );
 
 // メッシュ生成
-var mesh = sdfGrid.GenerateMesh();
+var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 
 // VoxelGridとバインドして増分更新を有効化
 sdfGrid.BindToVoxelGrid(voxelGrid);
@@ -77,11 +77,11 @@ sdfGrid.BindToVoxelGrid(voxelGrid);
   - 小さい値（2）: 高速だが粗いメッシュ
   - 大きい値（10）: 高品質だが低速
 
-### 2. スパースストレージ
+### 2. スパースストレージ（未実装・予約）
 
-- **対象**: 100万ボクセル以上の大規模グリッド
-- **実装**: `ConcurrentDictionary` を使用して非ゼロ値のみ保存
-- **効果**: メモリ使用量を大幅に削減
+- **現状**: `useSparse: true` を指定しても密配列（`float[,,]`）が確保され、メモリ削減効果はない
+- **予定**: `ConcurrentDictionary` ベースの実装は PR6 で再検討
+- **注意**: 現時点で `useSparse` による挙動・メモリ使用量の差はない
 
 ### 3. 増分更新
 
@@ -123,13 +123,13 @@ voxelGrid.RemoveVoxelsInSphere(position, radius);
 ### パフォーマンスが遅い場合
 
 1. **Narrow Band幅を減らす**: `narrowBandWidth: 2` に設定
-2. **スパースストレージを有効化**: `useSparse: true`
+2. **スパースストレージ（未実装）**: 現在は指定してもメモリ・速度は変わらない（PR6 で再検討）
 3. **Fast Modeを使用**: プレビュー時は `fastMode: true`
 4. **解像度を下げる**: VoxelGrid の `resolution` を大きくする
 
 ### メモリ不足の場合
 
-1. **スパースストレージを有効化**: 必須
+1. **現状の注意**: スパースストレージは未実装。密配列が確保されるため `resolution` / バウンディングボックスで調整する
 2. **Narrow Band幅を最小化**: `narrowBandWidth: 2`
 3. **グリッドサイズを分割**: 複数の小さいグリッドに分割して処理
 

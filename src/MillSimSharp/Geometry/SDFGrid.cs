@@ -12,6 +12,7 @@ namespace MillSimSharp.Geometry
     {
         private readonly object _sync = new object();
         private OctreeSDF _octree;
+        // Reserved for future sparse storage; not used yet (dense arrays are always allocated).
         private readonly System.Collections.Concurrent.ConcurrentDictionary<int, float>? _sparseDistances;
         private readonly bool _useSparse;
         private readonly int _sizeX;
@@ -48,7 +49,7 @@ namespace MillSimSharp.Geometry
         /// <param name="bounds">Bounding box of the SDF grid.</param>
         /// <param name="resolution">Voxel size in millimeters.</param>
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
-        /// <param name="useSparse">Use sparse storage for large grids.</param>
+        /// <param name="useSparse">Reserved for future sparse storage support. Currently ignored: dense storage is always used.</param>
         public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10, bool useSparse = false)
         {
             var size = bounds.Max - bounds.Min;
@@ -72,7 +73,7 @@ namespace MillSimSharp.Geometry
         /// </summary>
         /// <param name="voxelGrid"></param>
         /// <param name="narrowBandWidth"></param>
-        /// <param name="useSparse"></param>
+        /// <param name="useSparse">Reserved for future sparse storage support. Currently ignored: dense storage is always used.</param>
         /// <param name="fastMode"></param>
         /// <returns></returns>
         public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10, bool useSparse = false, bool fastMode = false)

@@ -25,13 +25,13 @@ namespace MillSimSharp.Geometry
             var sw = System.Diagnostics.Stopwatch.StartNew();
             
             // Step 1: Initialize distances
-            Console.WriteLine($"  Fast Sweeping: Initializing {sizeX}x{sizeY}x{sizeZ} grid...");
+            System.Diagnostics.Trace.WriteLine($"  Fast Sweeping: Initializing {sizeX}x{sizeY}x{sizeZ} grid...");
             InitializeDistances(voxelGrid, sdf, sizeX, sizeY, sizeZ, narrowBand);
-            Console.WriteLine($"  Initialization complete in {sw.ElapsedMilliseconds} ms");
+            System.Diagnostics.Trace.WriteLine($"  Initialization complete in {sw.ElapsedMilliseconds} ms");
             
             // Step 2: Sweep in 8 directions (2^3 combinations of +/- along each axis)
             sw.Restart();
-            Console.WriteLine($"  Fast Sweeping: Running 8-directional sweeps (parallel)...");
+            System.Diagnostics.Trace.WriteLine($"  Fast Sweeping: Running 8-directional sweeps (parallel)...");
             
             // We need 2-3 iterations for convergence, but 2 is usually sufficient
             int iterations = 2;
@@ -49,7 +49,7 @@ namespace MillSimSharp.Geometry
                 SweepParallel(sdf, sizeX, sizeY, sizeZ, -1, -1, -1, narrowBand);
             }
             
-            Console.WriteLine($"  Fast Sweeping complete in {sw.ElapsedMilliseconds} ms");
+            System.Diagnostics.Trace.WriteLine($"  Fast Sweeping complete in {sw.ElapsedMilliseconds} ms");
             return sdf;
         }
         

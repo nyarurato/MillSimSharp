@@ -7,7 +7,7 @@ using MillSimSharp.Geometry;
 namespace MillSimSharp.IO
 {
     /// <summary>
-    /// Exports voxel grids to STL mesh format using the Marching Cubes algorithm.
+    /// Exports voxel grids and meshes to binary STL format.
     /// </summary>
     public static class StlExporter
     {

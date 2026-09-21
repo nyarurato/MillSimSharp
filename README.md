@@ -11,7 +11,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **3-axis and 5-axis machining support** with tool orientation control
 - **Voxel-based material representation** for accurate, conservative milling simulation (fast incremental operations)
 - **Signed Distance Field (SDF) generation** (Fast Sweeping algorithm) for high-quality mesh conversion and fast distance queries
-- **High-quality mesh export** using Dual Contouring and Marching Cubes
+- **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
 - **Flexible stock origin configuration** (center or corner-based)
 - **G-code parser independence** - bring your own parser (gsGCode is used for the viewer demo)
 - **Flexible resolution** - adjust voxel size based on your needs
@@ -153,7 +153,7 @@ sdfGrid.RemoveSphere(new Vector3(0, 0, 0), radius: 15.0f);
 sdfGrid.RemoveSphere(new Vector3(20, 0, 0), radius: 10.0f);
 
 // 3. Generate high-quality mesh using Dual Contouring
-var mesh = sdfGrid.GenerateMesh();
+var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 
 // 4. Export to STL
 StlExporter.Export(mesh, "output_sdf.stl");
@@ -170,12 +170,14 @@ using MillSimSharp.Geometry;
 var sdfGrid = SDFGrid.FromVoxelGrid(
     voxelGrid, 
     narrowBandWidth: 2,
-    useSparse: true
+    useSparse: false  // reserved; not implemented (dense storage is always used)
 );
 
-var mesh = sdfGrid.GenerateMesh();
+var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 StlExporter.Export(mesh, "output_from_voxel.stl");
 ```
+
+> **Note:** `useSparse` is currently a reserved parameter and has no effect. Sparse storage is not implemented yet; a dense `float[,,]` array is always allocated.
 
 ## Viewer and Samples (Repository Only)
 
