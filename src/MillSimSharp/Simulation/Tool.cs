@@ -66,12 +66,5 @@ namespace MillSimSharp.Simulation
             Length = length;
             Type = type;
         }
-
-        /// <summary>
-        /// Gets the radius of the tool at a specific height from the tip.
-        /// </summary>
-        /// <param name="heightFromTip">Height from the tool tip (0 is the tip).</param>
-        /// <returns>Radius at the given height.</returns>
-        public abstract float GetRadiusAtHeight(float heightFromTip);
     }
 }

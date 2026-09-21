@@ -33,37 +33,5 @@ namespace MillSimSharp.Simulation
                 ? new BallEndMillGeometry(Diameter / 2.0f, Length)
                 : new FlatEndMillGeometry(Diameter / 2.0f, Length);
         }
-
-        /// <summary>
-        /// Gets the radius of the tool at a given height from the tip.
-        /// </summary>
-        /// <param name="heightFromTip"></param>
-        /// <returns></returns>
-        public override float GetRadiusAtHeight(float heightFromTip)
-        {
-            if (heightFromTip < 0 || heightFromTip > Length)
-            {
-                return 0; // Outside cutting length
-            }
-
-            float radius = Diameter / 2.0f;
-
-            if (Type == ToolType.Ball)
-            {
-                // Ball end logic: radius varies in the spherical part
-                if (heightFromTip < radius)
-                {
-                    // Calculate radius of the circle slice at this height
-                    // Using Pythagorean theorem: r^2 + (R-h)^2 = R^2
-                    // r = sqrt(R^2 - (R-h)^2)
-                    float R = radius;
-                    float h = heightFromTip;
-                    float distFromCenter = R - h;
-                    return MathF.Sqrt(R * R - distFromCenter * distFromCenter);
-                }
-            }
-
-            return radius;
-        }
     }
 }

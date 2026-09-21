@@ -179,5 +179,64 @@ namespace MillSimSharp.Tests.Integration
             // Should succeed without error
             Assert.That(sim.Tool.Diameter, Is.EqualTo(5.0f));
         }
+
+        [Test]
+        public void TestChangeToolPreservesPose()
+        {
+            var stockConfig = new StockConfiguration
+            {
+                WorkOrigin = new Vector3Data(0, 0, 0),
+                WorkSize = new Vector3Data(10, 10, 10)
+            };
+            var toolConfig = new ToolConfiguration
+            {
+                Diameter = 2.0f,
+                Length = 10.0f,
+                IsBallEnd = false
+            };
+
+            var sim = new MillSimulation(stockConfig, toolConfig, resolution: 1.0f);
+            sim.Executor.ExecuteCommand(new G0Move5Axis(new Vector3(1, 2, 3), new ToolOrientation(30, 10, 0)));
+            sim.Executor.StepSize = 7;
+
+            sim.ChangeTool(new EndMill(5.0f, 20.0f, false));
+
+            Assert.That(sim.Executor.CurrentPosition, Is.EqualTo(new Vector3(1, 2, 3)));
+            Assert.That(sim.Executor.CurrentOrientation.A, Is.EqualTo(30f).Within(1e-5f));
+            Assert.That(sim.Executor.CurrentOrientation.B, Is.EqualTo(10f).Within(1e-5f));
+            Assert.That(sim.Executor.StepSize, Is.EqualTo(7));
+        }
+
+        [Test]
+        public void TestExportToStlViaSdf()
+        {
+            var stockConfig = new StockConfiguration
+            {
+                WorkOrigin = new Vector3Data(0, 0, 0),
+                WorkSize = new Vector3Data(20, 20, 20)
+            };
+            var toolConfig = new ToolConfiguration
+            {
+                Diameter = 5.0f,
+                Length = 20.0f,
+                IsBallEnd = true
+            };
+
+            var sim = new MillSimulation(stockConfig, toolConfig, resolution: 2.0f);
+            sim.ExecuteToolpath(new List<IToolpathCommand>
+            {
+                new G0Move(new Vector3(0, 0, 10)),
+                new G1Move(new Vector3(10, 10, 10))
+            });
+
+            var outputPath = Path.Combine(Path.GetTempPath(), "test_output_sdf.stl");
+            sim.ExportToStlViaSdf(outputPath, narrowBandWidth: 5);
+
+            Assert.That(File.Exists(outputPath), Is.True);
+            Assert.That(new FileInfo(outputPath).Length, Is.GreaterThan(84)); // header + triangle count
+
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
+        }
     }
 }

@@ -222,5 +222,124 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(grid.GetVoxel(0, 5, 5), Is.True,
                 "Writing outside the grid must not modify voxel index 0");
         }
+
+        private static float BoxSignedDistance(Vector3 point, float halfSize)
+        {
+            Vector3 q = new Vector3(
+                MathF.Abs(point.X) - halfSize,
+                MathF.Abs(point.Y) - halfSize,
+                MathF.Abs(point.Z) - halfSize);
+            Vector3 outside = Vector3.Max(q, Vector3.Zero);
+            return outside.Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f);
+        }
+
+        private static SDFGrid BuildBoxVoidSdf(float resolution, float halfSize, float narrowBand)
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));
+            var grid = new VoxelGrid(bbox, resolution);
+            var (sx, sy, sz) = grid.Dimensions;
+
+            for (int x = 0; x < sx; x++)
+            for (int y = 0; y < sy; y++)
+            for (int z = 0; z < sz; z++)
+            {
+                Vector3 center = bbox.Min + new Vector3(
+                    (x + 0.5f) * resolution,
+                    (y + 0.5f) * resolution,
+                    (z + 0.5f) * resolution);
+
+                if (Math.Abs(center.X) <= halfSize &&
+                    Math.Abs(center.Y) <= halfSize &&
+                    Math.Abs(center.Z) <= halfSize)
+                {
+                    grid.SetVoxel(x, y, z, false);
+                }
+            }
+
+            return SDFGrid.FromVoxelGrid(grid, narrowBandWidth: (int)MathF.Round(narrowBand / resolution));
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        [TestCase(0.25f)]
+        public void SDF_Box_MatchesAnalyticDistance(float resolution)
+        {
+            const float halfSize = 4f;
+            var sdf = BuildBoxVoidSdf(resolution, halfSize, narrowBand: 10f);
+
+            double sumSquares = 0;
+            int count = 0;
+            float maxError = 0;
+
+            // Sample along the axes at 0.5mm steps: the discrete surface is at x = +/-halfSize,
+            // so the half-voxel correction makes these close to the analytic values.
+            for (float d = 0.5f; d <= 9f; d += 0.5f)
+            {
+                var samples = new[]
+                {
+                    new Vector3(d, 0, 0), new Vector3(-d, 0, 0),
+                    new Vector3(0, d, 0), new Vector3(0, -d, 0),
+                    new Vector3(0, 0, d), new Vector3(0, 0, -d),
+                };
+
+                foreach (var p in samples)
+                {
+                    float expected = -BoxSignedDistance(p, halfSize);
+                    float actual = sdf.GetDistance(p);
+                    float error = MathF.Abs(actual - expected);
+
+                    sumSquares += (double)error * error;
+                    if (error > maxError) maxError = error;
+                    count++;
+                }
+            }
+
+            double rms = Math.Sqrt(sumSquares / count);
+            Assert.That(rms, Is.LessThanOrEqualTo(1.5 * resolution), $"RMS error {rms:F4} at res={resolution}");
+            Assert.That(maxError, Is.LessThanOrEqualTo(3.0 * resolution), $"max error {maxError:F4} at res={resolution}");
+
+            // The surface on the +X axis must sit at the box face.
+            Assert.That(sdf.GetDistance(new Vector3(halfSize, 0, 0)), Is.EqualTo(0f).Within(1.5f * resolution));
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void SDF_ContainsNoNaNOrInfinity(float resolution)
+        {
+            var sdf = BuildSphereSdf(resolution, radius: 5f, out _);
+
+            var (sx, sy, sz) = sdf.Dimensions;
+            for (int x = 0; x < sx; x++)
+            for (int y = 0; y < sy; y++)
+            for (int z = 0; z < sz; z++)
+            {
+                float value = sdf.GetDistance(x, y, z);
+                Assert.That(float.IsNaN(value) || float.IsInfinity(value), Is.False,
+                    $"SDF value at ({x},{y},{z}) must be finite (was {value})");
+            }
+
+            // Interpolated queries around the surface must also be finite.
+            for (float d = -8f; d <= 8f; d += 0.5f)
+            {
+                float value = sdf.GetDistance(new Vector3(d, 0.25f, -0.25f));
+                Assert.That(float.IsNaN(value) || float.IsInfinity(value), Is.False);
+            }
+        }
+
+        [Test]
+        public void SDF_Build_IsDeterministic()
+        {
+            var first = BuildSphereSdf(0.5f, 5f, out _);
+            var second = BuildSphereSdf(0.5f, 5f, out _);
+
+            var (sx, sy, sz) = first.Dimensions;
+            for (int x = 0; x < sx; x++)
+            for (int y = 0; y < sy; y++)
+            for (int z = 0; z < sz; z++)
+            {
+                Assert.That(second.GetDistance(x, y, z), Is.EqualTo(first.GetDistance(x, y, z)),
+                    $"Deterministic build mismatch at ({x},{y},{z})");
+            }
+        }
     }
 }

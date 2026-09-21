@@ -142,15 +142,6 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
-        /// Gets the tool direction vector (spindle -> tip).
-        /// </summary>
-        [Obsolete("Use GetCuttingAxisDirection() (spindle -> tip) or GetAxisTowardSpindle() (tip -> spindle).")]
-        public Vector3 GetToolDirection()
-        {
-            return GetCuttingAxisDirection();
-        }
-
-        /// <summary>
         /// Gets the rotation matrix for this orientation.
         /// </summary>
         /// <returns>4x4 rotation matrix.</returns>

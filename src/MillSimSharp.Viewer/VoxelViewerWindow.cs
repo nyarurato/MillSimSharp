@@ -21,20 +21,15 @@ namespace MillSimSharp.Viewer
         private Shader? _voxelShader;
         private Shader? _lineShader;
         private MeshRenderer? _meshRenderer;
-        private bool _useSDF = true;
-        private int _sdfNarrowBandWidth = 10;
         // Async mesh generation fields
         private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
         private bool _meshUpdatePending = false;
         // Key state helper for toggles
-        private bool _sKeyPrev = false;
         private bool _rKeyPrev = false;
-        private bool _nKeyPrev = false;
         private bool _cKeyPrev = false;
         private bool _eKeyPrev = false;
         private MillSimSharp.Geometry.Mesh? _currentMesh;
-        private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
         private SDFGrid? _sdfGrid;
         private ToolpathRenderer? _toolpathRenderer;
@@ -109,8 +104,11 @@ namespace MillSimSharp.Viewer
                 Pitch = 30.0f
             };
 
-            // First try to load a gcodes/test.nc file and run it; otherwise fall back to demo scene
-            string gcodeFile = Path.Combine(baseDir, "gcodes", "test2.nc");
+            // First try to load gcodes/test.nc, then test2.nc; otherwise fall back to demo scene
+            string gcodeFile = Path.Combine(baseDir, "gcodes", "test.nc");
+            if (!File.Exists(gcodeFile))
+                gcodeFile = Path.Combine(baseDir, "gcodes", "test2.nc");
+
             if (File.Exists(gcodeFile))
             {
                 // Create a work area that covers reasonable size for the demo G-code
@@ -205,18 +203,6 @@ namespace MillSimSharp.Viewer
 
             stopwatch.Stop();
             Console.WriteLine($"OnLoad took {stopwatch.ElapsedMilliseconds} ms");
-        }
-
-        /// <summary>
-        /// Estimate SDF generation time based on voxel count and narrow band width
-        /// </summary>
-        private int EstimateSdfTime(long voxelCount, int narrowBand)
-        {
-            // Rough estimation based on observed performance
-            // Approximately 0.5-1 second per million voxels with narrow band of 2
-            double baseTime = (voxelCount / 1_000_000.0) * 0.7;
-            double bandFactor = narrowBand / 2.0; // Wider band takes longer
-            return (int)Math.Ceiling(baseTime * bandFactor);
         }
 
         private void CreateDemoScene()
@@ -367,16 +353,6 @@ namespace MillSimSharp.Viewer
                 Close();
             }
 
-            // S key -> toggle SDF mode
-            bool sDown = KeyboardState.IsKeyDown(Keys.S);
-            if (sDown && !_sKeyPrev)
-            {
-                _useSDF = !_useSDF;
-                Console.WriteLine($"SDF mode toggled. Now using SDF: {_useSDF}. Recomputing mesh...");
-                StartMeshGenerationAsync();
-            }
-            _sKeyPrev = sDown;
-
             // R key -> recompute mesh
             bool rDown = KeyboardState.IsKeyDown(Keys.R);
             if (rDown && !_rKeyPrev)
@@ -385,19 +361,6 @@ namespace MillSimSharp.Viewer
                 StartMeshGenerationAsync();
             }
             _rKeyPrev = rDown;
-
-            // N key -> cycle narrow band widths for SDF
-            bool nDown = KeyboardState.IsKeyDown(Keys.N);
-            if (nDown && !_nKeyPrev)
-            {
-                // Cycle to next band option
-                int currentIndex = Array.IndexOf(_bandOptions, _sdfNarrowBandWidth);
-                if (currentIndex < 0) currentIndex = 0;
-                int nextIndex = (currentIndex + 1) % _bandOptions.Length;
-                _sdfNarrowBandWidth = _bandOptions[nextIndex];
-                Console.WriteLine($"SDF narrow band width changed to: {_sdfNarrowBandWidth}");
-            }
-            _nKeyPrev = nDown;
 
             // C key -> toggle backface culling (debug)
             bool cDown = KeyboardState.IsKeyDown(Keys.C);
@@ -627,10 +590,6 @@ namespace MillSimSharp.Viewer
                 return;
             }
 
-            // Capture local state
-            bool localUseSDF = _useSDF;
-            int localNarrow = _sdfNarrowBandWidth;
-            
             // Use step grid if in step mode, otherwise use original grid
             var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
             if (gridCopy == null)
@@ -641,7 +600,7 @@ namespace MillSimSharp.Viewer
 
             _meshGenerationInProgress = true;
             _processingStatus = "Generating mesh...";
-            Console.WriteLine($"Starting mesh generation (useSDF={localUseSDF}, narrowBand={localNarrow})...");
+            Console.WriteLine("Starting mesh generation...");
             
             var meshGenStopwatch = new Stopwatch();
             meshGenStopwatch.Start();

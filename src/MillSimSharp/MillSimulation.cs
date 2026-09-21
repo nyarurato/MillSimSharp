@@ -84,6 +84,19 @@ namespace MillSimSharp
         }
 
         /// <summary>
+        /// Exports the current state as a high-quality mesh generated from an SDF
+        /// (Dual Contouring) to an STL file.
+        /// </summary>
+        /// <param name="filepath">Output file path.</param>
+        /// <param name="narrowBandWidth">Width of the SDF narrow band in voxels.</param>
+        public void ExportToStlViaSdf(string filepath, int narrowBandWidth = 10)
+        {
+            var sdf = SDFGrid.FromVoxelGrid(Grid, narrowBandWidth);
+            var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
+            StlExporter.Export(mesh, filepath);
+        }
+
+        /// <summary>
         /// Gets the number of voxels containing material.
         /// </summary>
         /// <returns>Material voxel count.</returns>
@@ -104,14 +117,20 @@ namespace MillSimSharp
 
         /// <summary>
         /// Changes the current tool.
+        /// The current position, orientation and step size are preserved.
         /// </summary>
         /// <param name="newTool">New tool to use.</param>
         public void ChangeTool(Tool newTool)
         {
             if (newTool == null) throw new ArgumentNullException(nameof(newTool));
             Tool = newTool;
-            // Recreate executor with new tool
-            Executor = new ToolpathExecutor(Simulator, Tool, Executor.CurrentPosition);
+
+            // Recreate the executor with the new tool while preserving the current pose
+            var newExecutor = new ToolpathExecutor(Simulator, Tool, Executor.CurrentPosition, Executor.CurrentOrientation)
+            {
+                StepSize = Executor.StepSize
+            };
+            Executor = newExecutor;
         }
     }
 }
