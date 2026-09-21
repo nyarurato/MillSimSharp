@@ -64,6 +64,11 @@ namespace MillSimSharp.Viewer.Rendering
             GL.BindVertexArray(0);
         }
 
+        public void Clear()
+        {
+            _indexCount = 0;
+        }
+
         public void Render()
         {
             if (_indexCount == 0)

@@ -37,12 +37,39 @@ namespace MillSimSharp.Viewer.Rendering
 
         public void ProcessMouseMove(float deltaX, float deltaY, float sensitivity = 0.2f)
         {
-            Yaw += deltaX * sensitivity;
+            // Horizontal rotation is inverted on purpose (drag right rotates the view the other way)
+            Yaw -= deltaX * sensitivity;
             // Flip vertical direction relative to previous behavior (user requested inverted up/down)
             Pitch += deltaY * sensitivity;
 
             // Clamp pitch to prevent flipping
             Pitch = Math.Clamp(Pitch, MinPitch, MaxPitch);
+        }
+
+        /// <summary>
+        /// Pans the camera target in its view plane (used for middle-button dragging).
+        /// </summary>
+        /// <param name="deltaX">Mouse delta X in pixels.</param>
+        /// <param name="deltaY">Mouse delta Y in pixels.</param>
+        /// <param name="sensitivity">Pan speed relative to the camera distance.</param>
+        public void ProcessMousePan(float deltaX, float deltaY, float sensitivity = 0.0015f)
+        {
+            float yawRad = MathHelper.DegreesToRadians(Yaw);
+            float pitchRad = MathHelper.DegreesToRadians(Pitch);
+
+            OpenTK.Mathematics.Vector3 forward = new OpenTK.Mathematics.Vector3(
+                -MathF.Cos(pitchRad) * MathF.Cos(yawRad),
+                -MathF.Cos(pitchRad) * MathF.Sin(yawRad),
+                -MathF.Sin(pitchRad));
+
+            OpenTK.Mathematics.Vector3 right =
+                OpenTK.Mathematics.Vector3.Normalize(OpenTK.Mathematics.Vector3.Cross(forward, OpenTK.Mathematics.Vector3.UnitZ));
+            OpenTK.Mathematics.Vector3 up =
+                OpenTK.Mathematics.Vector3.Normalize(OpenTK.Mathematics.Vector3.Cross(right, forward));
+
+            float scale = Distance * sensitivity;
+            Target -= right * (deltaX * scale);
+            Target += up * (deltaY * scale);
         }
 
         public void ProcessMouseWheel(float delta, float sensitivity = 5.0f)

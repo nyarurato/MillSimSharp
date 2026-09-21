@@ -48,6 +48,15 @@ namespace MillSimSharp.Viewer
 
         private Vector2 _lastMousePos;
         private bool _isMouseDragging;
+        private bool _isMousePanning;
+
+        // End mill display model
+        private MeshRenderer? _toolRenderer;
+        private Tool? _displayTool;
+        private SysVector3 _displayToolPosition;
+        private ToolOrientation _displayToolOrientation = ToolOrientation.Default;
+        private bool _showToolModel = true;
+        private bool _mKeyPrev = false;
 
         // Processing state tracking
         private string _processingStatus = "";
@@ -139,6 +148,11 @@ namespace MillSimSharp.Viewer
                 var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                 Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
 
+                // Remember the tool for the display model
+                _displayTool = tool;
+                _displayToolPosition = startPos;
+                _displayToolOrientation = ToolOrientation.Default;
+
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
                 var execStopwatch = new Stopwatch();
                 execStopwatch.Start();
@@ -168,6 +182,7 @@ namespace MillSimSharp.Viewer
             _axisRenderer = new AxisRenderer();
             _toolpathRenderer = new ToolpathRenderer();
             _meshRenderer = new MeshRenderer();
+            _toolRenderer = new MeshRenderer();
 
             // Update toolpath renderer if we have pending commands
             if (_toolpathRenderer != null && _pendingToolpathCommands != null)
@@ -175,6 +190,8 @@ namespace MillSimSharp.Viewer
                 _toolpathRenderer.UpdateFromCommands(_pendingToolpathCommands, _pendingToolpathStartPos);
                 Console.WriteLine($"Toolpath segments loaded: {_pendingToolpathCommands.Count}");
             }
+
+            UpdateToolModel();
 
             if (_sdfGrid != null)
             {
@@ -185,7 +202,9 @@ namespace MillSimSharp.Viewer
             Console.WriteLine($"Voxel Viewer initialized");
             Console.WriteLine($"Controls:");
             Console.WriteLine($"  - Mouse drag: Rotate camera");
+            Console.WriteLine($"  - Middle drag: Pan camera");
             Console.WriteLine($"  - Mouse wheel: Zoom in/out");
+            Console.WriteLine($"  - M: Toggle end mill model display");
             Console.WriteLine($"  - T: Toggle step-by-step execution mode");
             Console.WriteLine($"  - Space: Execute next step(s) (in step mode)");
             Console.WriteLine($"  - Home: Reset to beginning (in step mode)");
@@ -272,6 +291,23 @@ namespace MillSimSharp.Viewer
                 }
             }
             _meshRenderer.Render();
+
+            // Render the end mill display model (never culled so it is visible from any angle)
+            if (_showToolModel && _toolRenderer != null)
+            {
+                bool cullingEnabled = GL.IsEnabled(EnableCap.CullFace);
+                if (cullingEnabled)
+                {
+                    GL.Disable(EnableCap.CullFace);
+                }
+
+                _toolRenderer.Render();
+
+                if (cullingEnabled)
+                {
+                    GL.Enable(EnableCap.CullFace);
+                }
+            }
 
             // Render axes
             _axisRenderer?.Render(view, projection);
@@ -361,6 +397,16 @@ namespace MillSimSharp.Viewer
             }
             _cKeyPrev = cDown;
 
+            // M key -> toggle end mill model display
+            bool mDown = KeyboardState.IsKeyDown(Keys.M);
+            if (mDown && !_mKeyPrev)
+            {
+                _showToolModel = !_showToolModel;
+                Console.WriteLine($"End mill model: {(_showToolModel ? "ON" : "OFF")}");
+                UpdateToolModel();
+            }
+            _mKeyPrev = mDown;
+
             // E key -> export current mesh or voxel grid to STL
             bool eDown = KeyboardState.IsKeyDown(Keys.E);
             if (eDown && !_eKeyPrev)
@@ -430,6 +476,8 @@ namespace MillSimSharp.Viewer
                         StartMeshGenerationAsync();
                     }
                 }
+
+                UpdateToolModel();
             }
             _tKeyPrev = tDown;
 
@@ -444,6 +492,7 @@ namespace MillSimSharp.Viewer
                     Console.WriteLine($"Executed {executed} step(s). Progress: {_stepExecutor.CurrentCommandIndex + 1}/{_stepExecutor.TotalCommands}");
                     // Trigger mesh update
                     StartMeshGenerationAsync();
+                    UpdateToolModel();
                 }
                 else
                 {
@@ -469,6 +518,7 @@ namespace MillSimSharp.Viewer
 
                     StartMeshGenerationAsync();
                 }
+                UpdateToolModel();
                 Console.WriteLine("Reset to beginning.");
             }
             _homeKeyPrev = homeDown;
@@ -511,6 +561,11 @@ namespace MillSimSharp.Viewer
                 _isMouseDragging = true;
                 _lastMousePos = MousePosition;
             }
+            else if (e.Button == MouseButton.Middle)
+            {
+                _isMousePanning = true;
+                _lastMousePos = MousePosition;
+            }
         }
 
         protected override void OnMouseUp(MouseButtonEventArgs e)
@@ -521,16 +576,31 @@ namespace MillSimSharp.Viewer
             {
                 _isMouseDragging = false;
             }
+            else if (e.Button == MouseButton.Middle)
+            {
+                _isMousePanning = false;
+            }
         }
 
         protected override void OnMouseMove(MouseMoveEventArgs e)
         {
             base.OnMouseMove(e);
 
-            if (_isMouseDragging && _camera != null)
+            if (_camera == null)
+            {
+                return;
+            }
+
+            if (_isMouseDragging)
             {
                 Vector2 delta = MousePosition - _lastMousePos;
                 _camera.ProcessMouseMove(delta.X, delta.Y);
+                _lastMousePos = MousePosition;
+            }
+            else if (_isMousePanning)
+            {
+                Vector2 delta = MousePosition - _lastMousePos;
+                _camera.ProcessMousePan(delta.X, delta.Y);
                 _lastMousePos = MousePosition;
             }
         }
@@ -554,6 +624,36 @@ namespace MillSimSharp.Viewer
             _meshShader?.Dispose();
             _toolpathRenderer?.Dispose();
             _meshRenderer?.Dispose();
+            _toolRenderer?.Dispose();
+        }
+
+        /// <summary>
+        /// Rebuild the display-only end mill model at the current tool pose.
+        /// In step mode the pose follows the executor; otherwise the tool sits at the toolpath start.
+        /// </summary>
+        private void UpdateToolModel()
+        {
+            if (_toolRenderer == null)
+            {
+                return;
+            }
+
+            if (!_showToolModel || _displayTool == null)
+            {
+                _toolRenderer.Clear();
+                return;
+            }
+
+            SysVector3 position = _displayToolPosition;
+            ToolOrientation orientation = _displayToolOrientation;
+
+            if (_stepByStepMode && _stepExecutor != null)
+            {
+                position = _stepExecutor.CurrentPosition;
+                orientation = _stepExecutor.CurrentOrientation;
+            }
+
+            _toolRenderer.UpdateMesh(ToolModelBuilder.BuildEndMill(_displayTool, position, orientation));
         }
 
         /// <summary>
