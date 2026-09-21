@@ -17,14 +17,14 @@ namespace MillSimSharp.Config
         /// Machine name.
         /// </summary>
         [XmlElement("name")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// List of machine axes.
         /// </summary>
         [XmlArray("axes")]
         [XmlArrayItem("axis")]
-        public List<AxisConfig> Axes { get; set; }
+        public List<AxisConfig> Axes { get; set; } = new List<AxisConfig>();
 
         /// <summary>
         /// Loads machine configuration from XML file.
@@ -36,7 +36,8 @@ namespace MillSimSharp.Config
             var serializer = new XmlSerializer(typeof(MachineConfiguration));
             using (var reader = new StreamReader(path))
             {
-                return (MachineConfiguration)serializer.Deserialize(reader);
+                return (MachineConfiguration)(serializer.Deserialize(reader)
+                    ?? throw new InvalidOperationException("Failed to load machine configuration."));
             }
         }
 
@@ -72,7 +73,7 @@ namespace MillSimSharp.Config
         /// Axis name (e.g., "X", "Y", "Z", "A", "B", "C").
         /// </summary>
         [XmlElement("name")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         /// <summary>
         /// Minimum axis position in millimeters or degrees for rotary axes.
@@ -96,7 +97,7 @@ namespace MillSimSharp.Config
         /// For rotary axes, the axis of rotation (X, Y, or Z).
         /// </summary>
         [XmlElement("rotationAxis")]
-        public string RotationAxis { get; set; }
+        public string RotationAxis { get; set; } = string.Empty;
     }
 
     /// <summary>

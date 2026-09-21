@@ -39,7 +39,8 @@ namespace MillSimSharp.Config
             var serializer = new XmlSerializer(typeof(ToolConfiguration));
             using (var reader = new StreamReader(path))
             {
-                return (ToolConfiguration)serializer.Deserialize(reader);
+                return (ToolConfiguration)(serializer.Deserialize(reader)
+                    ?? throw new InvalidOperationException("Failed to load tool configuration."));
             }
         }
 

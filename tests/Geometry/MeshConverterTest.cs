@@ -37,7 +37,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
 
-            var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10, fastMode: true);
+            var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10);
 
             Assert.That(mesh, Is.Not.Null);
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -55,7 +55,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
 
-            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
+            var sdf = SDFGrid.FromVoxelGrid(grid);
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -129,7 +129,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
 
-            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
+            var sdf = SDFGrid.FromVoxelGrid(grid);
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             int totalVerts = mesh.Vertices.Length;
@@ -180,7 +180,7 @@ namespace MillSimSharp.Tests.Geometry
             {
                 var grid = new VoxelGrid(bbox, resolution: res);
                 grid.RemoveVoxelsInSphere(Vector3.Zero, 5.0f);  // Smaller sphere
-                var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10, fastMode: true);
+                var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10);
                 Console.WriteLine($"res={res:F3}, vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}");
                 
                 // Verify that higher resolution produces more vertices
@@ -196,7 +196,7 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
             // No removals -> solid block. Expect outer shell to be present around bounds.
 
-            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
+            var sdf = SDFGrid.FromVoxelGrid(grid);
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
@@ -217,7 +217,7 @@ namespace MillSimSharp.Tests.Geometry
             // Additionally ensure both min and max bounds are present for each axis on a small grid
             var smallBbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10,10,10));
             var smallGrid = new VoxelGrid(smallBbox, resolution: 1.0f);
-            var smallSdf = SDFGrid.FromVoxelGrid(smallGrid, fastMode: true);
+            var smallSdf = SDFGrid.FromVoxelGrid(smallGrid);
             var smallMesh = MeshConverter.ConvertToMeshFromSDF(smallSdf);
             int minX=0, maxX=0, minY=0, maxY=0, minZ=0, maxZ=0;
             float tol = 1.25f; // tolerance for mesh being near the outer boundary in world units
@@ -244,7 +244,7 @@ namespace MillSimSharp.Tests.Geometry
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
             var grid = new VoxelGrid(bbox, resolution: 1.0f);
-            var sdf = SDFGrid.FromVoxelGrid(grid, fastMode: true);
+            var sdf = SDFGrid.FromVoxelGrid(grid);
 
             var (sizeX, sizeY, sizeZ) = sdf.Dimensions;
             bool[] xCross = new bool[sizeX + 1]; // slices for base x=-1..sizeX-1

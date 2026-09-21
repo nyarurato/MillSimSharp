@@ -64,6 +64,9 @@ namespace MillSimSharp.Toolpath
             currentPosition = Target;
         }
 
+        /// <summary>
+        /// Returns a human-readable description of the command.
+        /// </summary>
         public override string ToString()
         {
             return $"G1 5-Axis to ({Target.X:F3}, {Target.Y:F3}, {Target.Z:F3}) {Orientation} F{FeedRate:F1}";
@@ -108,6 +111,9 @@ namespace MillSimSharp.Toolpath
             currentPosition = Target;
         }
 
+        /// <summary>
+        /// Returns a human-readable description of the command.
+        /// </summary>
         public override string ToString()
         {
             return $"G0 5-Axis to ({Target.X:F3}, {Target.Y:F3}, {Target.Z:F3}) {Orientation}";

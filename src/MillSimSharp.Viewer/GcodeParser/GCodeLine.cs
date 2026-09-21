@@ -62,23 +62,23 @@ namespace gs
 		public int lineNumber;
 
 		public LType type;
-		public string orig_string;
+		public string orig_string = string.Empty;
 
 		public int N;       // N number of line
 		public int code;    // G or M code
-		public GCodeParam[] parameters;      // arguments/parameters
+		public GCodeParam[] parameters = Array.Empty<GCodeParam>();      // arguments/parameters
 
-		public string comment;
+		public string comment = string.Empty;
 
 		public GCodeLine(int num, LType type)
 		{
 			lineNumber = num;
 			this.type = type;
 
-			orig_string = null;
+			orig_string = string.Empty;
 			N = code = -1;
-			parameters = null;
-			comment = null;
+			parameters = Array.Empty<GCodeParam>();
+			comment = string.Empty;
 		}
 
 		public GCodeLine(int lineNum, LType type, string comment) {

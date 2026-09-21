@@ -9,6 +9,8 @@ namespace MillSimSharp.Tests.Performance
     [TestFixture]
     public class VoxelGridPerformanceTest
     {
+        private const long MaxMilliseconds = 10_000;
+
         [Test]
         [Category("Performance")]
         public void BenchmarkRemoveVoxelsInSphere_Small()
@@ -21,8 +23,9 @@ namespace MillSimSharp.Tests.Performance
             grid.RemoveVoxelsInSphere(Vector3.Zero, 2.0f);
             sw.Stop();
 
-            Console.WriteLine($"Small Sphere: {sw.ElapsedMilliseconds}ms");
-            Assert.Pass($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Console.WriteLine($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"Execution time must stay below {MaxMilliseconds}ms");
         }
 
         [Test]
@@ -38,7 +41,8 @@ namespace MillSimSharp.Tests.Performance
             sw.Stop();
 
             Console.WriteLine($"Medium Sphere: {sw.ElapsedMilliseconds}ms");
-            Assert.Pass($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"Execution time must stay below {MaxMilliseconds}ms");
         }
 
         [Test]
@@ -54,7 +58,8 @@ namespace MillSimSharp.Tests.Performance
             sw.Stop();
 
             Console.WriteLine($"Large Sphere: {sw.ElapsedMilliseconds}ms");
-            Assert.Pass($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"Execution time must stay below {MaxMilliseconds}ms");
         }
 
         [Test]
@@ -73,7 +78,8 @@ namespace MillSimSharp.Tests.Performance
             sw.Stop();
 
             Console.WriteLine($"Medium Cylinder: {sw.ElapsedMilliseconds}ms");
-            Assert.Pass($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"Execution time must stay below {MaxMilliseconds}ms");
         }
 
         [Test]
@@ -100,7 +106,46 @@ namespace MillSimSharp.Tests.Performance
             sw.Stop();
 
             Console.WriteLine($"10 Cylinder Cuts: {sw.ElapsedMilliseconds}ms");
-            Assert.Pass($"Execution time: {sw.ElapsedMilliseconds}ms");
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"Execution time must stay below {MaxMilliseconds}ms");
+        }
+
+        [Test]
+        [Category("Performance")]
+        public void BenchmarkSdfBuild_Medium()
+        {
+            // 50x50x50mm grid, 1mm resolution, sphere cut
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(50, 50, 50));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 10.0f);
+
+            var sw = Stopwatch.StartNew();
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 5);
+            sw.Stop();
+
+            Console.WriteLine($"SDF build (50^3): {sw.ElapsedMilliseconds}ms");
+            Assert.That(sdf, Is.Not.Null);
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"SDF build time must stay below {MaxMilliseconds}ms");
+        }
+
+        [Test]
+        [Category("Performance")]
+        public void BenchmarkSdfMesh_Medium()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 8.0f);
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 5);
+
+            var sw = Stopwatch.StartNew();
+            var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
+            sw.Stop();
+
+            Console.WriteLine($"SDF mesh (30^3): {sw.ElapsedMilliseconds}ms, triangles={mesh.Indices.Length / 3}");
+            Assert.That(mesh.Indices.Length, Is.GreaterThan(0));
+            Assert.That(sw.ElapsedMilliseconds, Is.LessThan(MaxMilliseconds),
+                $"SDF mesh time must stay below {MaxMilliseconds}ms");
         }
     }
 }

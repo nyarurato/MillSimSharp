@@ -17,7 +17,7 @@ var workArea = BoundingBox.FromCenterAndSize(
     new Vector3(80, 80, 60)
 );
 var sw = System.Diagnostics.Stopwatch.StartNew();
-var sdfGrid = new SDFGrid(workArea, resolution: 0.5f, narrowBandWidth: 2, useSparse: true);
+var sdfGrid = new SDFGrid(workArea, resolution: 0.5f, narrowBandWidth: 2);
 sw.Stop();
 Console.WriteLine($"  SDF grid created in {sw.ElapsedMilliseconds}ms");
 Console.WriteLine($"  Dimensions: {sdfGrid.Dimensions.X}×{sdfGrid.Dimensions.Y}×{sdfGrid.Dimensions.Z}");

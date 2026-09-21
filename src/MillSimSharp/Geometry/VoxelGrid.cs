@@ -634,7 +634,7 @@ namespace MillSimSharp.Geometry
                 int cx = x + ((i & 1) != 0 ? childSize : 0);
                 int cy = y + ((i & 2) != 0 ? childSize : 0);
                 int cz = z + ((i & 4) != 0 ? childSize : 0);
-                SVONode child = node?.children[i];
+                SVONode? child = node?.children[i];
                 TraverseOccupied(child, cx, cy, cz, level + 1, maxLevel, list);
             }
         }

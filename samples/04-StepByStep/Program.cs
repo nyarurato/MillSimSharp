@@ -16,7 +16,7 @@ var workArea = BoundingBox.FromCenterAndSize(
     new Vector3(0, 0, 20),
     new Vector3(60, 60, 40)
 );
-var sdfGrid = new SDFGrid(workArea, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
+var sdfGrid = new SDFGrid(workArea, resolution: 1.0f, narrowBandWidth: 2);
 Console.WriteLine($"  Grid created: {sdfGrid.Resolution}mm resolution\n");
 
 // 2. Define tool and create simulator

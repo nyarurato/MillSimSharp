@@ -25,9 +25,6 @@ namespace MillSimSharp.Geometry
         private readonly float _resolution;
         private readonly BoundingBox _bounds;
         private readonly float _narrowBandWidth;
-        private readonly bool _useSparse;
-        // Reserved for future sparse storage; not used yet (dense arrays are always allocated).
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<int, float>? _sparseDistances;
         private readonly float[,,] _distances;
         private VoxelGrid? _boundVoxelGrid;
 
@@ -57,8 +54,7 @@ namespace MillSimSharp.Geometry
         /// <param name="bounds">Bounding box of the SDF grid.</param>
         /// <param name="resolution">Voxel size in millimeters.</param>
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
-        /// <param name="useSparse">Reserved for future sparse storage support. Currently ignored: dense storage is always used.</param>
-        public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10, bool useSparse = false)
+        public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10)
         {
             if (bounds == null) throw new ArgumentNullException(nameof(bounds));
             if (resolution <= 0) throw new ArgumentException("Resolution must be positive.", nameof(resolution));
@@ -71,8 +67,6 @@ namespace MillSimSharp.Geometry
             _resolution = resolution;
             _bounds = bounds;
             _narrowBandWidth = narrowBandWidth * resolution;
-            _useSparse = useSparse;
-            _sparseDistances = useSparse ? new System.Collections.Concurrent.ConcurrentDictionary<int, float>() : null;
             _distances = new float[_sizeX, _sizeY, _sizeZ];
             _boundVoxelGrid = null;
 
@@ -84,15 +78,13 @@ namespace MillSimSharp.Geometry
         /// </summary>
         /// <param name="voxelGrid">Source voxel grid.</param>
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
-        /// <param name="useSparse">Reserved for future sparse storage support. Currently ignored: dense storage is always used.</param>
-        /// <param name="fastMode">Ignored. Retained for API compatibility; the current implementation is exact.</param>
-        public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10, bool useSparse = false, bool fastMode = false)
+        public static SDFGrid FromVoxelGrid(VoxelGrid voxelGrid, int narrowBandWidth = 10)
         {
             if (voxelGrid == null) throw new ArgumentNullException(nameof(voxelGrid));
 
             var dimensions = voxelGrid.Dimensions;
             var sdf = new SDFGrid(voxelGrid, dimensions.X, dimensions.Y, dimensions.Z,
-                                  voxelGrid.Resolution, voxelGrid.Bounds, narrowBandWidth, useSparse);
+                                  voxelGrid.Resolution, voxelGrid.Bounds, narrowBandWidth);
 
             SignedDistanceFieldBuilder.ComputeRegion(
                 (x, y, z) => voxelGrid.GetVoxel(x, y, z),
@@ -109,7 +101,7 @@ namespace MillSimSharp.Geometry
         /// Private constructor used by FromVoxelGrid. Distances are filled by the caller.
         /// </summary>
         private SDFGrid(VoxelGrid voxelGrid, int sizeX, int sizeY, int sizeZ,
-               float resolution, BoundingBox bounds, int narrowBandWidth, bool useSparse)
+               float resolution, BoundingBox bounds, int narrowBandWidth)
         {
             if (narrowBandWidth <= 0) throw new ArgumentException("Narrow band width must be positive.", nameof(narrowBandWidth));
 
@@ -119,8 +111,6 @@ namespace MillSimSharp.Geometry
             _resolution = resolution;
             _bounds = bounds;
             _narrowBandWidth = narrowBandWidth * resolution;
-            _useSparse = useSparse;
-            _sparseDistances = useSparse ? new System.Collections.Concurrent.ConcurrentDictionary<int, float>() : null;
             _distances = new float[_sizeX, _sizeY, _sizeZ];
             _boundVoxelGrid = voxelGrid;
         }

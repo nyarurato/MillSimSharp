@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 
 namespace MillSimSharp.Geometry
@@ -10,15 +11,15 @@ namespace MillSimSharp.Geometry
         /// <summary>
         /// Array of vertex positions.
         /// </summary>
-        public Vector3[] Vertices { get; set; }
+        public Vector3[] Vertices { get; set; } = Array.Empty<Vector3>();
         /// <summary>
         /// Array of vertex normals.
         /// </summary>
-        public Vector3[] Normals { get; set; }
+        public Vector3[] Normals { get; set; } = Array.Empty<Vector3>();
         /// <summary>
         /// Array of triangle vertex indices.
         /// </summary>
-        public int[] Indices { get; set; }
+        public int[] Indices { get; set; } = Array.Empty<int>();
 
         /// <summary>
         /// Default constructor.

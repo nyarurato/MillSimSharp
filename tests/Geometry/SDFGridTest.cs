@@ -16,7 +16,7 @@ namespace MillSimSharp.Tests.Geometry
             // Create a small cut near the center
             grid.RemoveVoxelsInSphere(new Vector3(5, 0, 0), 2.0f);
 
-            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 5, useSparse: false);
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 5);
 
             // pick a region near where we will cut and record distances
             var idx = (x: 5, y: 0, z: 0);

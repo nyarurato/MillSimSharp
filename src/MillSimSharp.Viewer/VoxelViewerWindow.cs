@@ -33,7 +33,6 @@ namespace MillSimSharp.Viewer
         private bool _nKeyPrev = false;
         private bool _cKeyPrev = false;
         private bool _eKeyPrev = false;
-        private bool _fKeyPrev = false; // For full execution
         private MillSimSharp.Geometry.Mesh? _currentMesh;
         private int[] _bandOptions = new int[] { 1, 2, 5, 10 };
         private Shader? _meshShader;
@@ -59,7 +58,6 @@ namespace MillSimSharp.Viewer
         
         // Processing state tracking
         private string _processingStatus = "";
-        private bool _sdfGenerationInProgress = false;
         private bool _meshGenerationInProgress = false;
 
         public VoxelViewerWindow(GameWindowSettings gameWindowSettings, NativeWindowSettings nativeWindowSettings)
@@ -82,7 +80,7 @@ namespace MillSimSharp.Viewer
 
             // Enable backface culling
             GL.Enable(EnableCap.CullFace);
-            GL.CullFace(CullFaceMode.Back);
+            GL.CullFace(TriangleFace.Back);
             GL.FrontFace(FrontFaceDirection.Ccw);  // Standard SDF: CCW winding faces outward from material
 
             // Load shaders
@@ -123,7 +121,7 @@ namespace MillSimSharp.Viewer
                 );
                 var gridStopwatch = new Stopwatch();
                 gridStopwatch.Start();
-                _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
+                _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2);
                 gridStopwatch.Stop();
                 Console.WriteLine($"SDF grid creation time: {gridStopwatch.ElapsedMilliseconds} ms");
                 Console.WriteLine($"Workpiece bounds: Min=({bbox.Min.X}, {bbox.Min.Y}, {bbox.Min.Z}), Max=({bbox.Max.X}, {bbox.Max.Y}, {bbox.Max.Z})");
@@ -228,7 +226,7 @@ namespace MillSimSharp.Viewer
                 SysVector3.Zero,
                 new SysVector3(100, 100, 100)
             );
-            _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2, useSparse: true);
+            _sdfGrid = new SDFGrid(bbox, resolution: 1.0f, narrowBandWidth: 2);
 
             // Remove a sphere in the center
             _sdfGrid.RemoveSphere(SysVector3.Zero, radius: 50.0f);
@@ -470,7 +468,7 @@ namespace MillSimSharp.Viewer
                 {
                     // Initialize step execution
                     var bbox = _sdfGrid.Bounds;
-                    _stepSdfGrid = new SDFGrid(bbox, _sdfGrid.Resolution, narrowBandWidth: 2, useSparse: true);
+                    _stepSdfGrid = new SDFGrid(bbox, _sdfGrid.Resolution, narrowBandWidth: 2);
                     _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
@@ -519,7 +517,7 @@ namespace MillSimSharp.Viewer
                 {
                     // Reset voxel grid
                     var bbox = _stepSdfGrid.Bounds;
-                    _stepSdfGrid = new SDFGrid(bbox, _stepSdfGrid.Resolution, narrowBandWidth: 2, useSparse: true);
+                    _stepSdfGrid = new SDFGrid(bbox, _stepSdfGrid.Resolution, narrowBandWidth: 2);
                     _stepSimulator = new SDFCutterSimulator(_stepSdfGrid);
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
@@ -635,13 +633,10 @@ namespace MillSimSharp.Viewer
             
             // Use step grid if in step mode, otherwise use original grid
             var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
-            var sdfCopy = _sdfGrid; // may be null
-            
-            // If user toggles SDF and no SDFGrid exists yet, create one with safe fast-mode settings
-            if (localUseSDF && sdfCopy == null && gridCopy != null)
+            if (gridCopy == null)
             {
-                const long SDF_VOXEL_THRESHOLD = 1_000_000;
-                
+                Console.WriteLine("No SDF grid available for mesh generation.");
+                return;
             }
 
             _meshGenerationInProgress = true;

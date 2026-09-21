@@ -315,9 +315,9 @@ namespace MillSimSharp.Geometry
         /// <summary>
         /// Convenience method to convert voxel grid to SDF then to mesh.
         /// </summary>
-        public static Mesh ConvertToMeshViaSDF(VoxelGrid grid, int narrowBandWidth = 10, bool fastMode = false)
+        public static Mesh ConvertToMeshViaSDF(VoxelGrid grid, int narrowBandWidth = 10)
         {
-            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth, false, fastMode);
+            var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth);
             return ConvertToMeshFromSDF(sdf);
         }
     }

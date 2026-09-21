@@ -169,15 +169,12 @@ using MillSimSharp.Geometry;
 // After voxel simulation (see first example)...
 var sdfGrid = SDFGrid.FromVoxelGrid(
     voxelGrid, 
-    narrowBandWidth: 2,
-    useSparse: false  // reserved; not implemented (dense storage is always used)
+    narrowBandWidth: 2
 );
 
 var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 StlExporter.Export(mesh, "output_from_voxel.stl");
 ```
-
-> **Note:** `useSparse` is currently a reserved parameter and has no effect. Sparse storage is not implemented yet; a dense `float[,,]` array is always allocated.
 
 ## Viewer and Samples (Repository Only)
 

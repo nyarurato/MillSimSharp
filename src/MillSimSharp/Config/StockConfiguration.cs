@@ -34,13 +34,13 @@ namespace MillSimSharp.Config
         /// Work origin (reference point on stock).
         /// </summary>
         [XmlElement("WorkOrigin")]
-        public Vector3Data WorkOrigin { get; set; }
+        public Vector3Data WorkOrigin { get; set; } = new Vector3Data();
 
         /// <summary>
         /// Work size (dimensions of stock).
         /// </summary>
         [XmlElement("WorkSize")]
-        public Vector3Data WorkSize { get; set; }
+        public Vector3Data WorkSize { get; set; } = new Vector3Data();
 
         /// <summary>
         /// Defines where the WorkOrigin point is located on the stock.
@@ -59,7 +59,8 @@ namespace MillSimSharp.Config
             var serializer = new XmlSerializer(typeof(StockConfiguration));
             using (var reader = new StreamReader(path))
             {
-                return (StockConfiguration)serializer.Deserialize(reader);
+                return (StockConfiguration)(serializer.Deserialize(reader)
+                    ?? throw new InvalidOperationException("Failed to load stock configuration."));
             }
         }
 
@@ -90,19 +91,31 @@ namespace MillSimSharp.Config
     /// </summary>
     public class Vector3Data
     {
+        /// <summary>X component.</summary>
         [XmlElement("X")]
         public float X { get; set; }
 
+        /// <summary>Y component.</summary>
         [XmlElement("Y")]
         public float Y { get; set; }
 
+        /// <summary>Z component.</summary>
         [XmlElement("Z")]
         public float Z { get; set; }
 
+        /// <summary>
+        /// Creates a zero vector.
+        /// </summary>
         public Vector3Data()
         {
         }
 
+        /// <summary>
+        /// Creates a vector from components.
+        /// </summary>
+        /// <param name="x">X component.</param>
+        /// <param name="y">Y component.</param>
+        /// <param name="z">Z component.</param>
         public Vector3Data(float x, float y, float z)
         {
             X = x;
@@ -110,6 +123,10 @@ namespace MillSimSharp.Config
             Z = z;
         }
 
+        /// <summary>
+        /// Converts this data to a <see cref="Vector3"/>.
+        /// </summary>
+        /// <returns>Vector with the same components.</returns>
         public Vector3 ToVector3()
         {
             return new Vector3(X, Y, Z);

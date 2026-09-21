@@ -167,6 +167,9 @@ namespace MillSimSharp.Toolpath
             return rotZ * rotY * rotX;
         }
 
+        /// <summary>
+        /// Returns a human-readable description of the orientation.
+        /// </summary>
         public override string ToString()
         {
             return $"A:{A:F3}° B:{B:F3}° C:{C:F3}°";

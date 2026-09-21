@@ -18,7 +18,8 @@ namespace gs
 
             int lines = 0;
             while ( input.Peek() >= 0 ) {
-                string line = input.ReadLine();
+                string? line = input.ReadLine();
+                if (line == null) break;
                 int nLineNum = lines++;
 
                 GCodeLine l = ParseLine(line, nLineNum);
@@ -38,7 +39,7 @@ namespace gs
                 return make_comment(line, nLineNum);
 
 			// strip off trailing comment
-			string comment = null;
+			string? comment = null;
 			int ci = line.IndexOf(';');
 			if ( ci < 0 ) {
 				int bo = line.IndexOf('(');
@@ -52,13 +53,13 @@ namespace gs
 			}
 				
 
-            string[] tokens = line.Split( (char[])null , StringSplitOptions.RemoveEmptyEntries);
+            string[] tokens = line.Split( (char[]?)null , StringSplitOptions.RemoveEmptyEntries);
 
             // handle extra spaces at start...?
             if (tokens.Length == 0)
                 return make_blank(nLineNum);
             
-			GCodeLine gcode = null;
+			GCodeLine gcode;
 			switch ( tokens[0][0]) {
 				case ';':
 					gcode = make_comment(line, nLineNum);
