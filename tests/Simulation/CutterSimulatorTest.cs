@@ -26,11 +26,11 @@ namespace MillSimSharp.Tests.Simulation
         {
             // Tool: 2mm diameter (1mm radius)
             var tool = new EndMill(2.0f, 10.0f, isBallEnd: false);
-            
+
             // Cut from (-2, 0, 0) to (2, 0, 0)
             var start = new Vector3(-2, 0, 0);
             var end = new Vector3(2, 0, 0);
-            
+
             _simulator.CutLinear(start, end, tool);
 
             // Check center (should be removed)
@@ -55,11 +55,11 @@ namespace MillSimSharp.Tests.Simulation
         {
             // Tool: 2mm diameter (1mm radius)
             var tool = new EndMill(2.0f, 10.0f, isBallEnd: true);
-            
+
             // Cut from (-2, 0, 0) to (2, 0, 0)
             var start = new Vector3(-2, 0, 0);
             var end = new Vector3(2, 0, 0);
-            
+
             _simulator.CutLinear(start, end, tool);
 
             // Check center (should be removed)
@@ -70,7 +70,7 @@ namespace MillSimSharp.Tests.Simulation
             // Point at x=2.5 is within radius (0.5 distance from end).
             // Should be removed.
             Assert.That(_grid.GetVoxelAtWorld(new Vector3(2.5f, 0, 0)), Is.False);
-            
+
             // Point at x=3.5 (1.5 distance) should be solid
             Assert.That(_grid.GetVoxelAtWorld(new Vector3(3.5f, 0, 0)), Is.True);
         }

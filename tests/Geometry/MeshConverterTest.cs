@@ -21,10 +21,10 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(mesh, Is.Not.Null);
             Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
             Assert.That(mesh.Indices.Length % 3, Is.EqualTo(0));
-            
+
             // Verify mesh has normals for each vertex
             Assert.That(mesh.Normals.Length, Is.EqualTo(mesh.Vertices.Length));
-            
+
             // Verify we have triangles for the sphere surface
             int triangleCount = mesh.Indices.Length / 3;
             Assert.That(triangleCount, Is.GreaterThan(100)); // Marching cubes generates many triangles
@@ -82,29 +82,29 @@ namespace MillSimSharp.Tests.Geometry
                 Vector3 edge1 = v1 - v0;
                 Vector3 edge2 = v2 - v0;
                 Vector3 crossProduct = Vector3.Cross(edge1, edge2);
-                
+
                 // Skip degenerate triangles
                 if (crossProduct.LengthSquared() < 1e-8f)
                     continue;
-                    
+
                 var faceNormal = Vector3.Normalize(crossProduct);
-                
+
                 // Compute average of vertex normals
                 Vector3 normalSum = n0 + n1 + n2;
-                
+
                 // Skip if normals contain NaN or sum to near-zero
                 if (float.IsNaN(normalSum.X) || float.IsNaN(normalSum.Y) || float.IsNaN(normalSum.Z) ||
                     normalSum.LengthSquared() < 1e-8f)
                     continue;
-                    
+
                 var avgGradient = Vector3.Normalize(normalSum);
-                
+
                 // Check if face normal is valid
                 if (float.IsNaN(faceNormal.X) || float.IsNaN(faceNormal.Y) || float.IsNaN(faceNormal.Z))
                     continue;
-                
+
                 validTriangles++;
-                
+
                 // For Dual Contouring, we expect most triangles to have consistent winding
                 // (face normal and vertex normals pointing in similar direction)
                 float dot = Vector3.Dot(faceNormal, avgGradient);
@@ -114,11 +114,11 @@ namespace MillSimSharp.Tests.Geometry
 
             // Ensure we have some valid triangles to test
             Assert.That(validTriangles, Is.GreaterThan(0), "Should have valid triangles to test");
-            
+
             // At least 90% of triangles should have consistent winding
             // (allowing for some edge cases in complex geometry)
             float consistencyRatio = (float)consistentTriangles / validTriangles;
-            Assert.That(consistencyRatio, Is.GreaterThan(0.9f), 
+            Assert.That(consistencyRatio, Is.GreaterThan(0.9f),
                 $"Expected >90% consistent winding, got {consistencyRatio:P1} ({consistentTriangles}/{validTriangles})");
         }
 
@@ -182,7 +182,7 @@ namespace MillSimSharp.Tests.Geometry
                 grid.RemoveVoxelsInSphere(Vector3.Zero, 5.0f);  // Smaller sphere
                 var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10);
                 Console.WriteLine($"res={res:F3}, vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}");
-                
+
                 // Verify that higher resolution produces more vertices
                 Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
             }
@@ -215,11 +215,11 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(hasBoundary, Is.True, "Expected SDF mesh to include outer boundary vertices near voxel bounds.");
 
             // Additionally ensure both min and max bounds are present for each axis on a small grid
-            var smallBbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10,10,10));
+            var smallBbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
             var smallGrid = new VoxelGrid(smallBbox, resolution: 1.0f);
             var smallSdf = SDFGrid.FromVoxelGrid(smallGrid);
             var smallMesh = MeshConverter.ConvertToMeshFromSDF(smallSdf);
-            int minX=0, maxX=0, minY=0, maxY=0, minZ=0, maxZ=0;
+            int minX = 0, maxX = 0, minY = 0, maxY = 0, minZ = 0, maxZ = 0;
             float tol = 1.25f; // tolerance for mesh being near the outer boundary in world units
             foreach (var v in smallMesh.Vertices)
             {
@@ -230,7 +230,7 @@ namespace MillSimSharp.Tests.Geometry
                 if (Math.Abs(v.Z - smallBbox.Min.Z) < tol) minZ++;
                 if (Math.Abs(v.Z - smallBbox.Max.Z) < tol) maxZ++;
             }
-            
+
             Assert.That(minX, Is.GreaterThan(0));
             Assert.That(maxX, Is.GreaterThan(0));
             Assert.That(minY, Is.GreaterThan(0));
@@ -260,14 +260,14 @@ namespace MillSimSharp.Tests.Geometry
                                                     z * sdf.Resolution);
                         float[] val = new float[8];
                         Vector3[] cornerPos = new Vector3[8];
-                        cornerPos[0] = basePos + new Vector3(0,0,0);
-                        cornerPos[1] = basePos + new Vector3(sdf.Resolution,0,0);
-                        cornerPos[2] = basePos + new Vector3(sdf.Resolution,sdf.Resolution,0);
-                        cornerPos[3] = basePos + new Vector3(0,sdf.Resolution,0);
-                        cornerPos[4] = basePos + new Vector3(0,0,sdf.Resolution);
-                        cornerPos[5] = basePos + new Vector3(sdf.Resolution,0,sdf.Resolution);
-                        cornerPos[6] = basePos + new Vector3(sdf.Resolution,sdf.Resolution,sdf.Resolution);
-                        cornerPos[7] = basePos + new Vector3(0,sdf.Resolution,sdf.Resolution);
+                        cornerPos[0] = basePos + new Vector3(0, 0, 0);
+                        cornerPos[1] = basePos + new Vector3(sdf.Resolution, 0, 0);
+                        cornerPos[2] = basePos + new Vector3(sdf.Resolution, sdf.Resolution, 0);
+                        cornerPos[3] = basePos + new Vector3(0, sdf.Resolution, 0);
+                        cornerPos[4] = basePos + new Vector3(0, 0, sdf.Resolution);
+                        cornerPos[5] = basePos + new Vector3(sdf.Resolution, 0, sdf.Resolution);
+                        cornerPos[6] = basePos + new Vector3(sdf.Resolution, sdf.Resolution, sdf.Resolution);
+                        cornerPos[7] = basePos + new Vector3(0, sdf.Resolution, sdf.Resolution);
                         for (int i = 0; i < 8; i++) val[i] = sdf.GetDistance(cornerPos[i]);
                         int cubeIndex = 0;
                         for (int i = 0; i < 8; i++) if (val[i] < 0) cubeIndex |= (1 << i);

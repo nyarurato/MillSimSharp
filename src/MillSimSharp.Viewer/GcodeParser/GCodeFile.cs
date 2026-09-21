@@ -1,4 +1,4 @@
-﻿//Copyright (c) 2017 gradientspace
+//Copyright (c) 2017 gradientspace
 //https://opensource.org/licenses/mit-license.php
 //https://github.com/gradientspace/gsGCode
 using System;
@@ -28,8 +28,9 @@ namespace gs
             lines.Add(l);
         }
 
-        
-        public int LineCount {
+
+        public int LineCount
+        {
             get { return lines.Count; }
         }
 
@@ -37,7 +38,8 @@ namespace gs
         public IEnumerable<GCodeLine> AllLines()
         {
             int N = lines.Count;
-            for (int i = 0; i < N; ++i) {
+            for (int i = 0; i < N; ++i)
+            {
                 yield return lines[i];
             }
         }
@@ -46,8 +48,9 @@ namespace gs
         public IEnumerable<GCodeLine> AllLinesOfType(GCodeLine.LType eType)
         {
             int N = lines.Count;
-            for (int i = 0; i < N; ++i) {
-                if ( lines[i].type == eType )
+            for (int i = 0; i < N; ++i)
+            {
+                if (lines[i].type == eType)
                     yield return lines[i];
             }
         }

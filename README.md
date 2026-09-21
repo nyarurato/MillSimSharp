@@ -244,8 +244,11 @@ The `ToolOrientation` struct defines tool rotation using Euler angles:
 // Create orientation with 30° tilt on A-axis
 var orientation = new ToolOrientation(a_deg: 30, b_deg: 0, c_deg: 0);
 
-// Get tool direction vector
-Vector3 direction = orientation.GetToolDirection();
+// Get the cutting axis direction (spindle -> tip)
+Vector3 cuttingAxis = orientation.GetCuttingAxisDirection();
+
+// Or the direction from the tip toward the spindle
+Vector3 towardSpindle = orientation.GetAxisTowardSpindle();
 ```
 
 ### Tool Reference Point and Ball Compensation

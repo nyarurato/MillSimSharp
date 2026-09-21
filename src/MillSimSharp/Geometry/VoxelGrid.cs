@@ -330,19 +330,19 @@ namespace MillSimSharp.Geometry
             int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                if (!shouldRemove(x, y, z) || !GetVoxel(x, y, z)) continue;
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (!shouldRemove(x, y, z) || !GetVoxel(x, y, z)) continue;
 
-                SetVoxel(x, y, z, false);
-                if (x < changedMinX) changedMinX = x;
-                if (y < changedMinY) changedMinY = y;
-                if (z < changedMinZ) changedMinZ = z;
-                if (x > changedMaxX) changedMaxX = x;
-                if (y > changedMaxY) changedMaxY = y;
-                if (z > changedMaxZ) changedMaxZ = z;
-            }
+                        SetVoxel(x, y, z, false);
+                        if (x < changedMinX) changedMinX = x;
+                        if (y < changedMinY) changedMinY = y;
+                        if (z < changedMinZ) changedMinZ = z;
+                        if (x > changedMaxX) changedMaxX = x;
+                        if (y > changedMaxY) changedMaxY = y;
+                        if (z > changedMaxZ) changedMaxZ = z;
+                    }
 
             if (changedMinX <= changedMaxX)
             {
@@ -364,13 +364,13 @@ namespace MillSimSharp.Geometry
                 (z, _, local) =>
                 {
                     for (int y = minY; y <= maxY; y++)
-                    for (int x = minX; x <= maxX; x++)
-                    {
-                        if (shouldRemove(x, y, z) && GetVoxel(x, y, z))
+                        for (int x = minX; x <= maxX; x++)
                         {
-                            local.Add((x, y, z));
+                            if (shouldRemove(x, y, z) && GetVoxel(x, y, z))
+                            {
+                                local.Add((x, y, z));
+                            }
                         }
-                    }
                     return local;
                 },
                 local =>
@@ -462,12 +462,12 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return false;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                if (!GetVoxel(x, y, z)) continue;
-                if (signedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (!GetVoxel(x, y, z)) continue;
+                        if (signedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
+                    }
 
             return false;
         }
@@ -636,11 +636,11 @@ namespace MillSimSharp.Geometry
             {
                 // All voxels are occupied
                 for (int z = 0; z < _sizeZ; z++)
-                for (int y = 0; y < _sizeY; y++)
-                for (int x = 0; x < _sizeX; x++)
-                {
-                    list.Add((x, y, z));
-                }
+                    for (int y = 0; y < _sizeY; y++)
+                        for (int x = 0; x < _sizeX; x++)
+                        {
+                            list.Add((x, y, z));
+                        }
             }
             else
             {

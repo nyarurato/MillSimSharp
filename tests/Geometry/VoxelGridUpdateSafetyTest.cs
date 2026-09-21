@@ -23,17 +23,17 @@ namespace MillSimSharp.Tests.Geometry
             int maxX = int.MinValue, maxY = int.MinValue, maxZ = int.MinValue;
 
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                if (dense[x][y][z]) continue;
-                if (x < minX) minX = x;
-                if (y < minY) minY = y;
-                if (z < minZ) minZ = z;
-                if (x > maxX) maxX = x;
-                if (y > maxY) maxY = y;
-                if (z > maxZ) maxZ = z;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        if (dense[x][y][z]) continue;
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (z < minZ) minZ = z;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                        if (z > maxZ) maxZ = z;
+                    }
 
             return (minX, minY, minZ, maxX, maxY, maxZ);
         }
@@ -57,11 +57,11 @@ namespace MillSimSharp.Tests.Geometry
 
             int differences = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                if (denseP[x][y][z] != denseS[x][y][z]) differences++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        if (denseP[x][y][z] != denseS[x][y][z]) differences++;
+                    }
 
             Assert.That(differences, Is.EqualTo(0),
                 "Parallel and serial removal must produce identical voxel states");

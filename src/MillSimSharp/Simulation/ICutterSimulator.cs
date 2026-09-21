@@ -42,7 +42,7 @@ namespace MillSimSharp.Simulation
         /// <param name="tool">Cutting tool to use.</param>
         /// <param name="startOrientation">Tool orientation at start.</param>
         /// <param name="endOrientation">Tool orientation at end.</param>
-        void CutLinearWithOrientation(Vector3 start, Vector3 end, Tool tool, 
+        void CutLinearWithOrientation(Vector3 start, Vector3 end, Tool tool,
             Toolpath.ToolOrientation startOrientation, Toolpath.ToolOrientation endOrientation);
     }
 }

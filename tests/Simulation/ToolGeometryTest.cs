@@ -89,14 +89,14 @@ namespace MillSimSharp.Tests.Simulation
 
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
-                bool expectedMaterial = distance >= 0f;
-                if (grid.GetVoxel(x, y, z) != expectedMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                        bool expectedMaterial = distance >= 0f;
+                        if (grid.GetVoxel(x, y, z) != expectedMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "Voxel occupancy must match the tool geometry exactly");
         }
@@ -117,15 +117,15 @@ namespace MillSimSharp.Tests.Simulation
 
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
-                bool expectedMaterial = distance >= 0f;
-                bool actualMaterial = sdf.GetDistance(x, y, z) < 0f;
-                if (actualMaterial != expectedMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                        bool expectedMaterial = distance >= 0f;
+                        bool actualMaterial = sdf.GetDistance(x, y, z) < 0f;
+                        if (actualMaterial != expectedMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "SDF sign must match the tool geometry exactly");
         }
@@ -149,13 +149,13 @@ namespace MillSimSharp.Tests.Simulation
             var (sx, sy, sz) = grid.Dimensions;
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                bool voxelMaterial = grid.GetVoxel(x, y, z);
-                bool sdfMaterial = sdf.GetDistance(x, y, z) < 0f;
-                if (voxelMaterial != sdfMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        bool voxelMaterial = grid.GetVoxel(x, y, z);
+                        bool sdfMaterial = sdf.GetDistance(x, y, z) < 0f;
+                        if (voxelMaterial != sdfMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "Voxel and SDF backends must match for the same tool sweep");
         }
@@ -179,13 +179,13 @@ namespace MillSimSharp.Tests.Simulation
             var (sx, sy, sz) = grid.Dimensions;
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                bool voxelMaterial = grid.GetVoxel(x, y, z);
-                bool sdfMaterial = sdf.GetDistance(x, y, z) < 0f;
-                if (voxelMaterial != sdfMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        bool voxelMaterial = grid.GetVoxel(x, y, z);
+                        bool sdfMaterial = sdf.GetDistance(x, y, z) < 0f;
+                        if (voxelMaterial != sdfMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "Voxel and SDF backends must match for the same 5-axis pose sweep");
         }
@@ -253,14 +253,14 @@ namespace MillSimSharp.Tests.Simulation
 
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
-                bool expectedMaterial = distance >= 0f;
-                if (grid.GetVoxel(x, y, z) != expectedMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                        bool expectedMaterial = distance >= 0f;
+                        if (grid.GetVoxel(x, y, z) != expectedMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "Voxel occupancy must match the tool geometry exactly");
         }
@@ -280,15 +280,15 @@ namespace MillSimSharp.Tests.Simulation
 
             int mismatches = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
-                bool expectedMaterial = distance >= 0f;
-                bool actualMaterial = sdf.GetDistance(x, y, z) < 0f;
-                if (actualMaterial != expectedMaterial) mismatches++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                        bool expectedMaterial = distance >= 0f;
+                        bool actualMaterial = sdf.GetDistance(x, y, z) < 0f;
+                        if (actualMaterial != expectedMaterial) mismatches++;
+                    }
 
             Assert.That(mismatches, Is.EqualTo(0), "SDF sign must match the tool geometry exactly");
         }

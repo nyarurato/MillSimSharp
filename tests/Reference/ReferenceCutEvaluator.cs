@@ -152,17 +152,17 @@ namespace MillSimSharp.Tests.Reference
             var dense = grid.ToDenseArray();
 
             for (int z = 0; z < sz; z++)
-            for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-            {
-                if (!dense[x][y][z])
-                {
-                    result.Add(bbox.Min + new Vector3(
-                        (x + 0.5f) * res,
-                        (y + 0.5f) * res,
-                        (z + 0.5f) * res));
-                }
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                    {
+                        if (!dense[x][y][z])
+                        {
+                            result.Add(bbox.Min + new Vector3(
+                                (x + 0.5f) * res,
+                                (y + 0.5f) * res,
+                                (z + 0.5f) * res));
+                        }
+                    }
             return result;
         }
     }

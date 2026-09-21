@@ -84,7 +84,7 @@ namespace MillSimSharp.Viewer.Rendering
             // Create VBO for cube vertices
             _vbo = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ArrayBuffer, _vbo);
-            GL.BufferData(BufferTarget.ArrayBuffer, CubeVertices.Length * sizeof(float), 
+            GL.BufferData(BufferTarget.ArrayBuffer, CubeVertices.Length * sizeof(float),
                 CubeVertices, BufferUsageHint.StaticDraw);
 
             // Position attribute (location 0)
@@ -98,7 +98,7 @@ namespace MillSimSharp.Viewer.Rendering
             // Create EBO for indices
             _ebo = GL.GenBuffer();
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, _ebo);
-            GL.BufferData(BufferTarget.ElementArrayBuffer, CubeIndices.Length * sizeof(uint), 
+            GL.BufferData(BufferTarget.ElementArrayBuffer, CubeIndices.Length * sizeof(uint),
                 CubeIndices, BufferUsageHint.StaticDraw);
 
             // Create instance VBO (will be filled later)
@@ -157,7 +157,7 @@ namespace MillSimSharp.Viewer.Rendering
             {
                 // Upload instance data to GPU
                 GL.BindBuffer(BufferTarget.ArrayBuffer, _instanceVbo);
-                GL.BufferData(BufferTarget.ArrayBuffer, instanceData.Count * sizeof(float), 
+                GL.BufferData(BufferTarget.ArrayBuffer, instanceData.Count * sizeof(float),
                     instanceData.ToArray(), BufferUsageHint.StaticDraw);
 
                 GL.BindVertexArray(_vao);
@@ -182,7 +182,7 @@ namespace MillSimSharp.Viewer.Rendering
                 return;
 
             GL.BindVertexArray(_vao);
-            GL.DrawElementsInstanced(PrimitiveType.Triangles, CubeIndices.Length, 
+            GL.DrawElementsInstanced(PrimitiveType.Triangles, CubeIndices.Length,
                 DrawElementsType.UnsignedInt, IntPtr.Zero, _instanceCount);
             GL.BindVertexArray(0);
         }

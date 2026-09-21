@@ -172,10 +172,10 @@ namespace MillSimSharp.Tests.Integration
             sim.ChangeTool(newTool);
 
             Assert.That(sim.Tool.Diameter, Is.EqualTo(5.0f));
-            
+
             // Execute with new tool
             sim.ExecuteToolpath(new List<IToolpathCommand> { new G1Move(new Vector3(5, 0, 0)) });
-            
+
             // Should succeed without error
             Assert.That(sim.Tool.Diameter, Is.EqualTo(5.0f));
         }

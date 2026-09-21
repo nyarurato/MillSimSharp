@@ -32,5 +32,14 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
+      - name: Verify formatting
+        run: dotnet format MillSimSharp.sln --verify-no-changes --no-restore
+
+      - name: Build netstandard2.1
+        run: dotnet build src/MillSimSharp/MillSimSharp.csproj --configuration Release --no-restore --framework netstandard2.1
+
+      - name: Build samples
+        run: dotnet build samples/samples.sln --configuration Release
+
       - name: Run tests
         run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"

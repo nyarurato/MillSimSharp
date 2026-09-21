@@ -193,7 +193,7 @@ namespace MillSimSharp.Geometry
         public static Mesh ConvertToMeshFromSDF(SDFGrid sdf)
         {
             if (sdf == null) throw new ArgumentNullException(nameof(sdf));
-            
+
             // Use Dual Contouring algorithm
             return DualContouring.Generate(sdf);
         }

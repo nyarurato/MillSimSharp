@@ -118,11 +118,11 @@ namespace MillSimSharp.Geometry
         private void FillMaterial()
         {
             for (int z = 0; z < _sizeZ; z++)
-            for (int y = 0; y < _sizeY; y++)
-            for (int x = 0; x < _sizeX; x++)
-            {
-                _distances[x, y, z] = -_narrowBandWidth;
-            }
+                for (int y = 0; y < _sizeY; y++)
+                    for (int x = 0; x < _sizeX; x++)
+                    {
+                        _distances[x, y, z] = -_narrowBandWidth;
+                    }
         }
 
         /// <summary>
@@ -373,12 +373,12 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return false;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                if (_distances[x, y, z] >= 0f) continue;
-                if (toolSignedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (_distances[x, y, z] >= 0f) continue;
+                        if (toolSignedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
+                    }
 
             return false;
         }
@@ -398,12 +398,12 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                float distance = toolSignedDistance(VoxelToWorld(x, y, z));
-                Carve(x, y, z, -distance);
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        float distance = toolSignedDistance(VoxelToWorld(x, y, z));
+                        Carve(x, y, z, -distance);
+                    }
         }
 
         /// <summary>
@@ -422,12 +422,12 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                float distToCenter = Vector3.Distance(VoxelToWorld(x, y, z), center);
-                Carve(x, y, z, radius - distToCenter);
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        float distToCenter = Vector3.Distance(VoxelToWorld(x, y, z), center);
+                        Carve(x, y, z, radius - distToCenter);
+                    }
         }
 
         /// <summary>
@@ -458,14 +458,14 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                Vector3 toVoxel = VoxelToWorld(x, y, z) - start;
-                float projection = Math.Clamp(Vector3.Dot(toVoxel, axisDir), 0f, length);
-                float distToSegment = (toVoxel - axisDir * projection).Length();
-                Carve(x, y, z, radius - distToSegment);
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        Vector3 toVoxel = VoxelToWorld(x, y, z) - start;
+                        float projection = Math.Clamp(Vector3.Dot(toVoxel, axisDir), 0f, length);
+                        float distToSegment = (toVoxel - axisDir * projection).Length();
+                        Carve(x, y, z, radius - distToSegment);
+                    }
         }
 
         /// <summary>
@@ -494,15 +494,15 @@ namespace MillSimSharp.Geometry
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                Vector3 toVoxel = VoxelToWorld(x, y, z) - center;
-                float axial = Vector3.Dot(toVoxel, axisDir);
-                float radial = (toVoxel - axisDir * axial).Length();
-                float toolDistance = Math.Max(radial - radius, Math.Abs(axial) - halfLength);
-                Carve(x, y, z, -toolDistance);
-            }
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        Vector3 toVoxel = VoxelToWorld(x, y, z) - center;
+                        float axial = Vector3.Dot(toVoxel, axisDir);
+                        float radial = (toVoxel - axisDir * axial).Length();
+                        float toolDistance = Math.Max(radial - radius, Math.Abs(axial) - halfLength);
+                        Carve(x, y, z, -toolDistance);
+                    }
         }
     }
 }

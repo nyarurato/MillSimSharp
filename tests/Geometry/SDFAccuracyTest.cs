@@ -22,10 +22,10 @@ namespace MillSimSharp.Tests.Geometry
                 float centerX = bbox.Min.X + (ix + 0.5f) * resolution;
                 if (centerX < 0) continue;
                 for (int iy = 0; iy < sy; iy++)
-                for (int iz = 0; iz < sz; iz++)
-                {
-                    grid.SetVoxel(ix, iy, iz, false);
-                }
+                    for (int iz = 0; iz < sz; iz++)
+                    {
+                        grid.SetVoxel(ix, iy, iz, false);
+                    }
             }
             return SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
         }
@@ -43,12 +43,12 @@ namespace MillSimSharp.Tests.Geometry
             var (sx, sy, sz) = a.Dimensions;
             float maxDiff = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                float diff = Math.Abs(a.GetDistance(x, y, z) - b.GetDistance(x, y, z));
-                if (diff > maxDiff) maxDiff = diff;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        float diff = Math.Abs(a.GetDistance(x, y, z) - b.GetDistance(x, y, z));
+                        if (diff > maxDiff) maxDiff = diff;
+                    }
             return maxDiff;
         }
 
@@ -141,13 +141,13 @@ namespace MillSimSharp.Tests.Geometry
 
             var (sx, sy, sz) = sdf.Dimensions;
             for (int x = 1; x < sx - 1; x++)
-            for (int y = 1; y < sy - 1; y++)
-            for (int z = 1; z < sz - 1; z++)
-            {
-                Vector3 center = bbox.Min + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
-                Assert.That(sdf.GetDistance(center), Is.EqualTo(sdf.GetDistance(x, y, z)).Within(1e-4f),
-                    $"voxel center ({x},{y},{z})");
-            }
+                for (int y = 1; y < sy - 1; y++)
+                    for (int z = 1; z < sz - 1; z++)
+                    {
+                        Vector3 center = bbox.Min + new Vector3(x + 0.5f, y + 0.5f, z + 0.5f);
+                        Assert.That(sdf.GetDistance(center), Is.EqualTo(sdf.GetDistance(x, y, z)).Within(1e-4f),
+                            $"voxel center ({x},{y},{z})");
+                    }
         }
 
         [Test]
@@ -240,21 +240,21 @@ namespace MillSimSharp.Tests.Geometry
             var (sx, sy, sz) = grid.Dimensions;
 
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Vector3 center = bbox.Min + new Vector3(
-                    (x + 0.5f) * resolution,
-                    (y + 0.5f) * resolution,
-                    (z + 0.5f) * resolution);
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Vector3 center = bbox.Min + new Vector3(
+                            (x + 0.5f) * resolution,
+                            (y + 0.5f) * resolution,
+                            (z + 0.5f) * resolution);
 
-                if (Math.Abs(center.X) <= halfSize &&
-                    Math.Abs(center.Y) <= halfSize &&
-                    Math.Abs(center.Z) <= halfSize)
-                {
-                    grid.SetVoxel(x, y, z, false);
-                }
-            }
+                        if (Math.Abs(center.X) <= halfSize &&
+                            Math.Abs(center.Y) <= halfSize &&
+                            Math.Abs(center.Z) <= halfSize)
+                        {
+                            grid.SetVoxel(x, y, z, false);
+                        }
+                    }
 
             return SDFGrid.FromVoxelGrid(grid, narrowBandWidth: (int)MathF.Round(narrowBand / resolution));
         }
@@ -310,13 +310,13 @@ namespace MillSimSharp.Tests.Geometry
 
             var (sx, sy, sz) = sdf.Dimensions;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                float value = sdf.GetDistance(x, y, z);
-                Assert.That(float.IsNaN(value) || float.IsInfinity(value), Is.False,
-                    $"SDF value at ({x},{y},{z}) must be finite (was {value})");
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        float value = sdf.GetDistance(x, y, z);
+                        Assert.That(float.IsNaN(value) || float.IsInfinity(value), Is.False,
+                            $"SDF value at ({x},{y},{z}) must be finite (was {value})");
+                    }
 
             // Interpolated queries around the surface must also be finite.
             for (float d = -8f; d <= 8f; d += 0.5f)
@@ -334,12 +334,12 @@ namespace MillSimSharp.Tests.Geometry
 
             var (sx, sy, sz) = first.Dimensions;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Assert.That(second.GetDistance(x, y, z), Is.EqualTo(first.GetDistance(x, y, z)),
-                    $"Deterministic build mismatch at ({x},{y},{z})");
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Assert.That(second.GetDistance(x, y, z), Is.EqualTo(first.GetDistance(x, y, z)),
+                            $"Deterministic build mismatch at ({x},{y},{z})");
+                    }
         }
     }
 }

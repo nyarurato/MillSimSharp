@@ -87,7 +87,7 @@ namespace MillSimSharp.Util
         {
             // Get the axis direction from the physical tool tip toward the spindle
             Vector3 axisTowardSpindle = orientation.GetAxisTowardSpindle();
-            
+
             // Move from the tip toward the spindle by the tool length
             return toolTipPosition + axisTowardSpindle * toolLength;
         }
@@ -102,7 +102,7 @@ namespace MillSimSharp.Util
         public static ToolOrientation InterpolateOrientation(ToolOrientation start, ToolOrientation end, float t)
         {
             t = Math.Clamp(t, 0f, 1f);
-            
+
             return new ToolOrientation(
                 Lerp(start.A, end.A, t),
                 Lerp(start.B, end.B, t),

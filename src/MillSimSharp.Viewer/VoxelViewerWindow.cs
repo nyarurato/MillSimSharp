@@ -35,7 +35,7 @@ namespace MillSimSharp.Viewer
         private ToolpathRenderer? _toolpathRenderer;
         private List<IToolpathCommand>? _pendingToolpathCommands;
         private SysVector3 _pendingToolpathStartPos;
-        
+
         // Step-by-step execution fields
         private bool _stepByStepMode = false;
         private ToolpathExecutor? _stepExecutor;
@@ -46,11 +46,11 @@ namespace MillSimSharp.Viewer
         private bool _homeKeyPrev = false;
         private bool _pageUpKeyPrev = false;
         private bool _pageDownKeyPrev = false;
-        private int[] _stepSizeOptions = new int[] { 1, 5, 10, 50, 100,1000 };
+        private int[] _stepSizeOptions = new int[] { 1, 5, 10, 50, 100, 1000 };
 
         private Vector2 _lastMousePos;
         private bool _isMouseDragging;
-        
+
         // Processing state tracking
         private string _processingStatus = "";
         private bool _meshGenerationInProgress = false;
@@ -145,17 +145,17 @@ namespace MillSimSharp.Viewer
                 var simulator = new SDFCutterSimulator(_sdfGrid);
                 var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                 Console.WriteLine($"Tool: Diameter={tool.Diameter}mm, Length={tool.Length}mm, Type={tool.Type}");
-                
+
                 var executor = new ToolpathExecutor(simulator, tool, startPos);
                 var execStopwatch = new Stopwatch();
                 execStopwatch.Start();
-                
+
                 if (commands != null)
                 {
                     executor.ExecuteCommands(commands);
                 }
                 execStopwatch.Stop();
-                
+
                 Console.WriteLine($"Toolpath execution time: {execStopwatch.ElapsedMilliseconds} ms");
 
                 // Store commands for step-by-step execution later
@@ -176,21 +176,21 @@ namespace MillSimSharp.Viewer
             _axisRenderer = new AxisRenderer();
             _toolpathRenderer = new ToolpathRenderer();
             _meshRenderer = new MeshRenderer();
-            
+
             // Update toolpath renderer if we have pending commands
             if (_toolpathRenderer != null && _pendingToolpathCommands != null)
             {
                 _toolpathRenderer.UpdateFromCommands(_pendingToolpathCommands, _pendingToolpathStartPos);
                 Console.WriteLine($"Toolpath segments loaded: {_pendingToolpathCommands.Count}");
             }
-            
+
             if (_sdfGrid != null)
             {
                 // SDF grid is already initialized, just generate mesh
                 Console.WriteLine("Starting mesh generation...");
                 StartMeshGenerationAsync();
             }
-            
+
             Console.WriteLine($"Voxel Viewer initialized");
             Console.WriteLine($"Controls:");
             Console.WriteLine($"  - Mouse drag: Rotate camera");
@@ -323,12 +323,12 @@ namespace MillSimSharp.Viewer
             {
                 double fps = _frameCount / _timeSinceLastUpdate;
                 long memory = GC.GetTotalMemory(false) / (1024 * 1024); // MB
-                
+
                 string statusSuffix = string.IsNullOrEmpty(_processingStatus) ? "" : $" - {_processingStatus}";
                 int triangles = _currentMesh?.Indices.Length / 3 ?? 0;
-                
+
                 string meshInfo = triangles > 0 ? $" - Triangles: {triangles}" : "";
-                
+
                 // Add step execution info
                 string stepInfo = "";
                 if (_stepByStepMode && _stepExecutor != null)
@@ -395,14 +395,16 @@ namespace MillSimSharp.Viewer
                     if (_currentMesh != null)
                     {
                         // Run export in background so we don't block the render loop
-                        System.Threading.Tasks.Task.Run(() => {
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
                             MillSimSharp.IO.StlExporter.Export(_currentMesh, filePath);
                             Console.WriteLine($"Exported current mesh to: {filePath}");
                         });
                     }
                     else if (_sdfGrid != null)
                     {
-                        System.Threading.Tasks.Task.Run(() => {
+                        System.Threading.Tasks.Task.Run(() =>
+                        {
                             var mesh = MeshConverter.ConvertToMeshFromSDF(_sdfGrid);
                             MillSimSharp.IO.StlExporter.Export(mesh, filePath);
                             Console.WriteLine($"Exported SDF mesh to: {filePath}");
@@ -426,7 +428,7 @@ namespace MillSimSharp.Viewer
             {
                 _stepByStepMode = !_stepByStepMode;
                 Console.WriteLine($"Step-by-step mode: {(_stepByStepMode ? "ON" : "OFF")}");
-                
+
                 if (_stepByStepMode && _pendingToolpathCommands != null && _sdfGrid != null)
                 {
                     // Initialize step execution
@@ -436,9 +438,9 @@ namespace MillSimSharp.Viewer
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands);
-                    
 
-                    
+
+
                     Console.WriteLine($"Step executor initialized. Total commands: {_stepExecutor.TotalCommands}, Step size: {_stepExecutor.StepSize}");
                 }
                 else if (!_stepByStepMode)
@@ -451,13 +453,13 @@ namespace MillSimSharp.Viewer
                 }
             }
             _tKeyPrev = tDown;
-            
+
             // Space key -> execute next step(s) in step-by-step mode
             bool spaceDown = KeyboardState.IsKeyDown(Keys.Space);
             if (spaceDown && !_spaceKeyPrev && _stepByStepMode && _stepExecutor != null)
             {
                 int executed = _stepExecutor.ExecuteNextSteps();
-                
+
                 if (executed > 0)
                 {
                     Console.WriteLine($"Executed {executed} step(s). Progress: {_stepExecutor.CurrentCommandIndex + 1}/{_stepExecutor.TotalCommands}");
@@ -470,7 +472,7 @@ namespace MillSimSharp.Viewer
                 }
             }
             _spaceKeyPrev = spaceDown;
-            
+
             // Home key -> reset to beginning
             bool homeDown = KeyboardState.IsKeyDown(Keys.Home);
             if (homeDown && !_homeKeyPrev && _stepByStepMode && _stepExecutor != null)
@@ -485,13 +487,13 @@ namespace MillSimSharp.Viewer
                     var tool = new EndMill(diameter: 10.0f, length: 50.0f, isBallEnd: true);
                     _stepExecutor = new ToolpathExecutor(_stepSimulator, tool, _pendingToolpathStartPos);
                     _stepExecutor.LoadCommands(_pendingToolpathCommands!);
-                                       
+
                     StartMeshGenerationAsync();
                 }
                 Console.WriteLine("Reset to beginning.");
             }
             _homeKeyPrev = homeDown;
-            
+
             // PageUp/PageDown -> change step size
             bool pageUpDown = KeyboardState.IsKeyDown(Keys.PageUp);
             bool pageDownDown = KeyboardState.IsKeyDown(Keys.PageDown);
@@ -501,12 +503,12 @@ namespace MillSimSharp.Viewer
                 {
                     int currentIndex = Array.IndexOf(_stepSizeOptions, _stepExecutor.StepSize);
                     if (currentIndex < 0) currentIndex = 0;
-                    
+
                     if (pageUpDown)
                         currentIndex = (currentIndex + 1) % _stepSizeOptions.Length;
                     else
                         currentIndex = (currentIndex - 1 + _stepSizeOptions.Length) % _stepSizeOptions.Length;
-                    
+
                     _stepExecutor.StepSize = _stepSizeOptions[currentIndex];
                     Console.WriteLine($"Step size changed to: {_stepExecutor.StepSize}");
                 }
@@ -601,10 +603,10 @@ namespace MillSimSharp.Viewer
             _meshGenerationInProgress = true;
             _processingStatus = "Generating mesh...";
             Console.WriteLine("Starting mesh generation...");
-            
+
             var meshGenStopwatch = new Stopwatch();
             meshGenStopwatch.Start();
-            
+
             // Progress reporting for mesh generation
             var meshProgressTask = System.Threading.Tasks.Task.Run(async () =>
             {
@@ -628,7 +630,7 @@ namespace MillSimSharp.Viewer
             {
                 meshGenStopwatch.Stop();
                 _meshGenerationInProgress = false;
-                
+
                 if (t.IsCompletedSuccessfully)
                 {
                     _pendingMesh = t.Result;

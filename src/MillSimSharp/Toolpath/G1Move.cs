@@ -44,7 +44,7 @@ namespace MillSimSharp.Toolpath
 
             // G1 is a cutting move - remove material along the path
             simulator.CutLinear(currentPosition, Target, tool);
-            
+
             // Update position
             currentPosition = Target;
         }

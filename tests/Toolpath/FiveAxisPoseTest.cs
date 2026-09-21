@@ -130,12 +130,12 @@ namespace MillSimSharp.Tests.Toolpath
 
             var (sx, sy, sz) = grid3.Dimensions;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                Assert.That(grid5.GetVoxel(x, y, z), Is.EqualTo(grid3.GetVoxel(x, y, z)),
-                    $"voxel ({x},{y},{z}) differs between 3-axis and default-orientation sweep");
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        Assert.That(grid5.GetVoxel(x, y, z), Is.EqualTo(grid3.GetVoxel(x, y, z)),
+                            $"voxel ({x},{y},{z}) differs between 3-axis and default-orientation sweep");
+                    }
         }
 
         [Test]
@@ -176,11 +176,11 @@ namespace MillSimSharp.Tests.Toolpath
             var (sx, sy, sz) = gridBatch.Dimensions;
             int differences = 0;
             for (int x = 0; x < sx; x++)
-            for (int y = 0; y < sy; y++)
-            for (int z = 0; z < sz; z++)
-            {
-                if (gridBatch.GetVoxel(x, y, z) != gridStep.GetVoxel(x, y, z)) differences++;
-            }
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        if (gridBatch.GetVoxel(x, y, z) != gridStep.GetVoxel(x, y, z)) differences++;
+                    }
             Assert.That(differences, Is.EqualTo(0), "Batch and step execution must produce identical voxel states");
         }
 

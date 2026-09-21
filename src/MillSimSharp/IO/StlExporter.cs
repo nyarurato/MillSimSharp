@@ -175,7 +175,7 @@ namespace MillSimSharp.IO
             }
             return triangles;
         }
-        
+
 
         private struct Triangle
         {

@@ -49,24 +49,24 @@ namespace MillSimSharp.Tests.Simulation
             var (sx, sy, sz) = grid.Dimensions;
 
             for (int z = 0; z < sz; z++)
-            for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                if (center.X < regionMin.X || center.X > regionMax.X ||
-                    center.Y < regionMin.Y || center.Y > regionMax.Y ||
-                    center.Z < regionMin.Z || center.Z > regionMax.Z)
-                {
-                    continue;
-                }
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        if (center.X < regionMin.X || center.X > regionMax.X ||
+                            center.Y < regionMin.Y || center.Y > regionMax.Y ||
+                            center.Z < regionMin.Z || center.Z > regionMax.Z)
+                        {
+                            continue;
+                        }
 
-                bool expected = expectedRemoved(center);
-                bool actual = !dense[x][y][z];
-                if (expected != actual && mismatches.Count < 10)
-                {
-                    mismatches.Add($"center=({center.X:F3},{center.Y:F3},{center.Z:F3}) expectedRemoved={expected} actualRemoved={actual}");
-                }
-            }
+                        bool expected = expectedRemoved(center);
+                        bool actual = !dense[x][y][z];
+                        if (expected != actual && mismatches.Count < 10)
+                        {
+                            mismatches.Add($"center=({center.X:F3},{center.Y:F3},{center.Z:F3}) expectedRemoved={expected} actualRemoved={actual}");
+                        }
+                    }
 
             return mismatches;
         }
@@ -186,30 +186,30 @@ namespace MillSimSharp.Tests.Simulation
             int removedInside = 0;
 
             for (int z = 0; z < sz; z++)
-            for (int y = 0; y < sy; y++)
-            for (int x = 0; x < sx; x++)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                if (center.X < -1f || center.X > 11f || center.Y < -6f || center.Y > 6f ||
-                    center.Z < -1f || center.Z > 11f)
-                {
-                    continue;
-                }
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        if (center.X < -1f || center.X > 11f || center.Y < -6f || center.Y > 6f ||
+                            center.Z < -1f || center.Z > 11f)
+                        {
+                            continue;
+                        }
 
-                bool actualRemoved = !dense[x][y][z];
-                bool insideBallSweep = ReferenceCutEvaluator.IsInsideCapsule(center, centerStart, centerEnd, Radius);
+                        bool actualRemoved = !dense[x][y][z];
+                        bool insideBallSweep = ReferenceCutEvaluator.IsInsideCapsule(center, centerStart, centerEnd, Radius);
 
-                if (insideBallSweep)
-                {
-                    if (!actualRemoved && mismatches.Count < 10)
-                        mismatches.Add($"expectedRemoved center=({center.X:F3},{center.Y:F3},{center.Z:F3})");
-                    if (actualRemoved) removedInside++;
-                }
-                else if (center.Z < -0.5f * resolution && actualRemoved && mismatches.Count < 10)
-                {
-                    mismatches.Add($"expectedPreserved center=({center.X:F3},{center.Y:F3},{center.Z:F3})");
-                }
-            }
+                        if (insideBallSweep)
+                        {
+                            if (!actualRemoved && mismatches.Count < 10)
+                                mismatches.Add($"expectedRemoved center=({center.X:F3},{center.Y:F3},{center.Z:F3})");
+                            if (actualRemoved) removedInside++;
+                        }
+                        else if (center.Z < -0.5f * resolution && actualRemoved && mismatches.Count < 10)
+                        {
+                            mismatches.Add($"expectedPreserved center=({center.X:F3},{center.Y:F3},{center.Z:F3})");
+                        }
+                    }
 
             Assert.That(removedInside, Is.GreaterThan(50), "The ball sweep should remove a substantial region");
             Assert.That(mismatches, Is.Empty, string.Join(Environment.NewLine, mismatches));
@@ -313,33 +313,33 @@ namespace MillSimSharp.Tests.Simulation
             int stride = resolution >= 1f ? 1 : resolution >= 0.5f ? 2 : 4;
 
             for (int z = 0; z < sz; z += stride)
-            for (int y = 0; y < sy; y += stride)
-            for (int x = 0; x < sx; x += stride)
-            {
-                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
-                if (center.X < -6f || center.X > 6f || center.Y < -6f || center.Y > 6f ||
-                    center.Z < -3f || center.Z > 11f)
-                {
-                    continue;
-                }
+                for (int y = 0; y < sy; y += stride)
+                    for (int x = 0; x < sx; x += stride)
+                    {
+                        Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                        if (center.X < -6f || center.X > 6f || center.Y < -6f || center.Y > 6f ||
+                            center.Z < -3f || center.Z > 11f)
+                        {
+                            continue;
+                        }
 
-                float distanceToBallCenter = Vector3.Distance(center, ballCenter);
+                        float distanceToBallCenter = Vector3.Distance(center, ballCenter);
 
-                if (distanceToBallCenter < Radius - 0.5f * resolution)
-                {
-                    Assert.That(sdf.GetDistance(center), Is.GreaterThan(0f),
-                        $"inside ball center={center} must be empty (positive)");
-                    checkedInside++;
-                }
-                else if (center.Z < -0.5f * resolution && !ReferenceCutEvaluator.IsInsideCylinder(center, ballCenter, top, Radius))
-                {
-                    // Below the physical tip: must remain material even though the old bug removed it.
-                    Assert.That(Vector3.Distance(center, ballCenter), Is.GreaterThan(Radius));
-                    Assert.That(sdf.GetDistance(center), Is.LessThan(0f),
-                        $"below physical tip center={center} must remain material (negative)");
-                    checkedBelowTip++;
-                }
-            }
+                        if (distanceToBallCenter < Radius - 0.5f * resolution)
+                        {
+                            Assert.That(sdf.GetDistance(center), Is.GreaterThan(0f),
+                                $"inside ball center={center} must be empty (positive)");
+                            checkedInside++;
+                        }
+                        else if (center.Z < -0.5f * resolution && !ReferenceCutEvaluator.IsInsideCylinder(center, ballCenter, top, Radius))
+                        {
+                            // Below the physical tip: must remain material even though the old bug removed it.
+                            Assert.That(Vector3.Distance(center, ballCenter), Is.GreaterThan(Radius));
+                            Assert.That(sdf.GetDistance(center), Is.LessThan(0f),
+                                $"below physical tip center={center} must remain material (negative)");
+                            checkedBelowTip++;
+                        }
+                    }
 
             Assert.That(checkedInside, Is.GreaterThan(20), "Not enough inside-ball samples were checked");
             Assert.That(checkedBelowTip, Is.GreaterThan(5), "Not enough below-tip samples were checked");

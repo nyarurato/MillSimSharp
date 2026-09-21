@@ -52,17 +52,17 @@ namespace MillSimSharp.Toolpath
         /// Number of commands to execute per step (default: 1).
         /// </summary>
         public int StepSize { get; set; } = 1;
-        
+
         /// <summary>
         /// Current command index in the loaded command list.
         /// </summary>
         public int CurrentCommandIndex => _currentCommandIndex;
-        
+
         /// <summary>
         /// Total number of commands loaded.
         /// </summary>
         public int TotalCommands => _commands?.Count ?? 0;
-        
+
         /// <summary>
         /// Whether all commands have been executed.
         /// </summary>
@@ -85,7 +85,7 @@ namespace MillSimSharp.Toolpath
             CurrentPosition = initialPosition;
             CurrentOrientation = _initialOrientation;
         }
-        
+
         /// <summary>
         /// Load commands for step-by-step execution.
         /// </summary>
@@ -99,7 +99,7 @@ namespace MillSimSharp.Toolpath
             CurrentOrientation = _initialOrientation;
             EstimatedTimeSeconds = 0;
         }
-        
+
         /// <summary>
         /// Execute the next step(s) based on StepSize.
         /// </summary>
@@ -108,10 +108,10 @@ namespace MillSimSharp.Toolpath
         public int ExecuteNextSteps(int count = -1)
         {
             if (_commands == null) return 0;
-            
+
             int stepsToExecute = count > 0 ? count : StepSize;
             int executed = 0;
-            
+
             while (executed < stepsToExecute && _currentCommandIndex < _commands.Count - 1)
             {
                 _currentCommandIndex++;
@@ -119,10 +119,10 @@ namespace MillSimSharp.Toolpath
                 ProgressChanged?.Invoke(_currentCommandIndex + 1, TotalCommands);
                 executed++;
             }
-            
+
             return executed;
         }
-        
+
         /// <summary>
         /// Reset to initial state.
         /// </summary>

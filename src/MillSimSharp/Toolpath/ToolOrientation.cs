@@ -78,7 +78,7 @@ namespace MillSimSharp.Toolpath
 
             // Default tool direction: along negative Z-axis (0, 0, -1) - tool pointing downward
             // Rotation order: C (Z-axis), B (Y-axis), A (X-axis) = ZYX Euler angles
-            
+
             // Rotation matrices
             var rotX = Matrix4x4.CreateRotationX(aRad);
             var rotY = Matrix4x4.CreateRotationY(bRad);

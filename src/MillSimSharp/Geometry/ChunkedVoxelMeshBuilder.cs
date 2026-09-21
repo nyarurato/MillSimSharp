@@ -48,11 +48,11 @@ namespace MillSimSharp.Geometry
 
             var (sx, sy, sz) = _grid.Dimensions;
             for (int cz = 0; cz * _chunkSize < sz; cz++)
-            for (int cy = 0; cy * _chunkSize < sy; cy++)
-            for (int cx = 0; cx * _chunkSize < sx; cx++)
-            {
-                _chunks[(cx, cy, cz)] = BuildChunk(cx, cy, cz);
-            }
+                for (int cy = 0; cy * _chunkSize < sy; cy++)
+                    for (int cx = 0; cx * _chunkSize < sx; cx++)
+                    {
+                        _chunks[(cx, cy, cz)] = BuildChunk(cx, cy, cz);
+                    }
 
             return Combine();
         }
@@ -86,11 +86,11 @@ namespace MillSimSharp.Geometry
             int minCz = minZ / _chunkSize, maxCz = maxZ / _chunkSize;
 
             for (int cz = minCz; cz <= maxCz; cz++)
-            for (int cy = minCy; cy <= maxCy; cy++)
-            for (int cx = minCx; cx <= maxCx; cx++)
-            {
-                _chunks[(cx, cy, cz)] = BuildChunk(cx, cy, cz);
-            }
+                for (int cy = minCy; cy <= maxCy; cy++)
+                    for (int cx = minCx; cx <= maxCx; cx++)
+                    {
+                        _chunks[(cx, cy, cz)] = BuildChunk(cx, cy, cz);
+                    }
 
             return Combine();
         }
@@ -133,29 +133,29 @@ namespace MillSimSharp.Geometry
             Func<Vector3, Vector3, int> addVertex = AddVertex;
 
             for (int z = minZ; z <= maxZ; z++)
-            for (int y = minY; y <= maxY; y++)
-            for (int x = minX; x <= maxX; x++)
-            {
-                if (!_grid.GetVoxel(x, y, z)) continue;
+                for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (!_grid.GetVoxel(x, y, z)) continue;
 
-                Vector3 center = _grid.Bounds.Min + new Vector3(
-                    (x + 0.5f) * res,
-                    (y + 0.5f) * res,
-                    (z + 0.5f) * res);
+                        Vector3 center = _grid.Bounds.Min + new Vector3(
+                            (x + 0.5f) * res,
+                            (y + 0.5f) * res,
+                            (z + 0.5f) * res);
 
-                if (x == 0 || !_grid.GetVoxel(x - 1, y, z))
-                    VoxelMeshUtil.EmitFace(0, center, half, addVertex, indices);
-                if (x == sx - 1 || !_grid.GetVoxel(x + 1, y, z))
-                    VoxelMeshUtil.EmitFace(1, center, half, addVertex, indices);
-                if (y == 0 || !_grid.GetVoxel(x, y - 1, z))
-                    VoxelMeshUtil.EmitFace(2, center, half, addVertex, indices);
-                if (y == sy - 1 || !_grid.GetVoxel(x, y + 1, z))
-                    VoxelMeshUtil.EmitFace(3, center, half, addVertex, indices);
-                if (z == 0 || !_grid.GetVoxel(x, y, z - 1))
-                    VoxelMeshUtil.EmitFace(4, center, half, addVertex, indices);
-                if (z == sz - 1 || !_grid.GetVoxel(x, y, z + 1))
-                    VoxelMeshUtil.EmitFace(5, center, half, addVertex, indices);
-            }
+                        if (x == 0 || !_grid.GetVoxel(x - 1, y, z))
+                            VoxelMeshUtil.EmitFace(0, center, half, addVertex, indices);
+                        if (x == sx - 1 || !_grid.GetVoxel(x + 1, y, z))
+                            VoxelMeshUtil.EmitFace(1, center, half, addVertex, indices);
+                        if (y == 0 || !_grid.GetVoxel(x, y - 1, z))
+                            VoxelMeshUtil.EmitFace(2, center, half, addVertex, indices);
+                        if (y == sy - 1 || !_grid.GetVoxel(x, y + 1, z))
+                            VoxelMeshUtil.EmitFace(3, center, half, addVertex, indices);
+                        if (z == 0 || !_grid.GetVoxel(x, y, z - 1))
+                            VoxelMeshUtil.EmitFace(4, center, half, addVertex, indices);
+                        if (z == sz - 1 || !_grid.GetVoxel(x, y, z + 1))
+                            VoxelMeshUtil.EmitFace(5, center, half, addVertex, indices);
+                    }
 
             return new ChunkData
             {
