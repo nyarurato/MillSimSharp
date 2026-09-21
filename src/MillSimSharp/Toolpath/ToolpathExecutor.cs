@@ -12,6 +12,7 @@ namespace MillSimSharp.Toolpath
     public class ToolpathExecutor
     {
         private readonly ICutterSimulator _simulator;
+        private readonly Tool _initialTool;
         private Tool _tool;
         private List<IToolpathCommand>? _commands;
         private int _currentCommandIndex = -1;
@@ -80,6 +81,7 @@ namespace MillSimSharp.Toolpath
         {
             _simulator = simulator ?? throw new ArgumentNullException(nameof(simulator));
             _tool = tool ?? throw new ArgumentNullException(nameof(tool));
+            _initialTool = _tool;
             _initialPosition = initialPosition;
             _initialOrientation = initialOrientation ?? ToolOrientation.Default;
             CurrentPosition = initialPosition;
@@ -95,6 +97,7 @@ namespace MillSimSharp.Toolpath
             if (commands == null) throw new ArgumentNullException(nameof(commands));
             _commands = new List<IToolpathCommand>(commands);
             _currentCommandIndex = -1;
+            _tool = _initialTool;
             CurrentPosition = _initialPosition;
             CurrentOrientation = _initialOrientation;
             EstimatedTimeSeconds = 0;
@@ -129,6 +132,7 @@ namespace MillSimSharp.Toolpath
         public void Reset()
         {
             _currentCommandIndex = -1;
+            _tool = _initialTool;
             CurrentPosition = _initialPosition;
             CurrentOrientation = _initialOrientation;
             EstimatedTimeSeconds = 0;
@@ -161,6 +165,14 @@ namespace MillSimSharp.Toolpath
             {
                 position = g0Move5Axis.Target;
                 orientation = g0Move5Axis.Orientation;
+            }
+            else if (command is G1Move g1Move)
+            {
+                // A normal G1 keeps the current orientation: after a 5-axis move it must not
+                // silently fall back to the default 3-axis pose. For the default orientation this
+                // is identical to CutLinear.
+                _simulator.CutLinearWithOrientation(position, g1Move.Target, _tool, orientation, orientation);
+                position = g1Move.Target;
             }
             else
             {

@@ -186,6 +186,55 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void SDF_SetVoxel_BoundIncrementalUpdate_MatchesFullRebuild()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var incremental = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            incremental.BindToVoxelGrid(grid);
+
+            // Direct voxel edit (not a removal API): must still notify the bound SDF.
+            grid.SetVoxel(25, 20, 20, false);
+
+            var full = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            Assert.That(MaxDistanceDifference(incremental, full), Is.LessThanOrEqualTo(1e-3f),
+                "A direct SetVoxel must update a bound SDF incrementally");
+        }
+
+        [Test]
+        public void SDF_SetVoxelAtWorld_BoundIncrementalUpdate_MatchesFullRebuild()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var incremental = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            incremental.BindToVoxelGrid(grid);
+
+            grid.SetVoxelAtWorld(new Vector3(5.5f, 0.5f, 0.5f), false);
+
+            var full = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            Assert.That(MaxDistanceDifference(incremental, full), Is.LessThanOrEqualTo(1e-3f),
+                "A direct SetVoxelAtWorld must update a bound SDF incrementally");
+        }
+
+        [Test]
+        public void SDF_Clear_BoundIncrementalUpdate_MatchesFullRebuild()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(new Vector3(-8, 0, 0), 3f);
+            grid.RemoveVoxelsInSphere(new Vector3(8, 0, 0), 3f);
+
+            var incremental = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            incremental.BindToVoxelGrid(grid);
+
+            grid.Clear();
+
+            var full = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 10);
+            Assert.That(MaxDistanceDifference(incremental, full), Is.LessThanOrEqualTo(1e-3f),
+                "Clear must restore the bound SDF to the full-material state");
+        }
+
+        [Test]
         public void FiniteCylinder_DiffersFromCapsuleAtEndFace()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));

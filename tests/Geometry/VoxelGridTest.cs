@@ -126,5 +126,40 @@ namespace MillSimSharp.Tests.Geometry
             grid.Clear();
             Assert.That(grid.CountMaterialVoxels(), Is.EqualTo(1000));
         }
+
+        [Test]
+        public void GetOccupiedVoxels_NonPowerOfTwoDimensions_StaysWithinGrid()
+        {
+            // The SVO is padded to the next power of two (10x7x5 -> 16x16x16), so the padding
+            // region must never be listed as occupied voxels.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 7, 5));
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            // Force the SVO root to exist so the traversal path (not the empty-grid shortcut) is used.
+            grid.SetVoxel(0, 0, 0, false);
+            grid.SetVoxel(9, 6, 4, false);
+
+            var occupied = grid.GetOccupiedVoxels();
+
+            foreach (var (x, y, z) in occupied)
+            {
+                Assert.That(x, Is.InRange(0, 9), $"occupied voxel X out of range: ({x},{y},{z})");
+                Assert.That(y, Is.InRange(0, 6), $"occupied voxel Y out of range: ({x},{y},{z})");
+                Assert.That(z, Is.InRange(0, 4), $"occupied voxel Z out of range: ({x},{y},{z})");
+            }
+
+            Assert.That(occupied.Count, Is.EqualTo(grid.CountMaterialVoxels()),
+                "GetOccupiedVoxels must count exactly the material voxels inside the real grid");
+        }
+
+        [Test]
+        public void GetOccupiedVoxels_MatchesMaterialCount_ForPowerOfTwoDimensions()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(8, 8, 8));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 2f);
+
+            Assert.That(grid.GetOccupiedVoxels().Count, Is.EqualTo(grid.CountMaterialVoxels()));
+        }
     }
 }

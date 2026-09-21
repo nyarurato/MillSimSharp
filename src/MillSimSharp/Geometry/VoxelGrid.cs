@@ -227,6 +227,11 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Sets the material state of a voxel at the specified indices.
+        /// <para>
+        /// Raises <see cref="VoxelsChanged"/> when the material state actually changes; setting the
+        /// same value again is a no-op. Bulk removals mutate through <see cref="SetVoxelRaw"/> and
+        /// report the aggregated dirty region once, so no per-voxel event storm occurs.
+        /// </para>
         /// </summary>
         /// <param name="x"></param>
         /// <param name="y"></param>
@@ -237,6 +242,23 @@ namespace MillSimSharp.Geometry
             if (!IsValidIndex(x, y, z))
                 return;
 
+            if (GetVoxel(x, y, z) == isMaterial)
+                return; // same value: no material change, no notification
+
+            SetVoxelRaw(x, y, z, isMaterial);
+            ReportChange(x, y, z, x, y, z);
+        }
+
+        /// <summary>
+        /// Mutates a voxel without raising <see cref="VoxelsChanged"/>. Bulk operations use this
+        /// and report the aggregated dirty region exactly once.
+        /// </summary>
+        /// <param name="x">Voxel index X (must be valid).</param>
+        /// <param name="y">Voxel index Y (must be valid).</param>
+        /// <param name="z">Voxel index Z (must be valid).</param>
+        /// <param name="isMaterial">True for material, false for empty.</param>
+        private void SetVoxelRaw(int x, int y, int z, bool isMaterial)
+        {
             if (_root == null)
                 _root = new SVONode();
             _root.Set(x, y, z, !isMaterial, 0, _maxLevel); // !isMaterial: true for empty, false for material
@@ -335,7 +357,7 @@ namespace MillSimSharp.Geometry
                     {
                         if (!shouldRemove(x, y, z) || !GetVoxel(x, y, z)) continue;
 
-                        SetVoxel(x, y, z, false);
+                        SetVoxelRaw(x, y, z, false);
                         if (x < changedMinX) changedMinX = x;
                         if (y < changedMinY) changedMinY = y;
                         if (z < changedMinZ) changedMinZ = z;
@@ -383,7 +405,7 @@ namespace MillSimSharp.Geometry
 
             foreach (var (x, y, z) in removals)
             {
-                SetVoxel(x, y, z, false);
+                SetVoxelRaw(x, y, z, false);
                 if (x < changedMinX) changedMinX = x;
                 if (y < changedMinY) changedMinY = y;
                 if (z < changedMinZ) changedMinZ = z;
@@ -591,10 +613,20 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Clears all voxels (resets to all material).
+        /// Raises <see cref="VoxelsChanged"/> once when the reset actually changes the grid.
         /// </summary>
         public void Clear()
         {
+            if (_root == null)
+                return; // already all material
+
+            int emptyVoxels = _root.CountEmpty(0, _maxLevel);
             _root = null;
+
+            if (emptyVoxels > 0)
+            {
+                ReportChange(0, 0, 0, _sizeX - 1, _sizeY - 1, _sizeZ - 1);
+            }
         }
 
         /// <summary>
@@ -651,15 +683,27 @@ namespace MillSimSharp.Geometry
 
         private void TraverseOccupied(SVONode? node, int x, int y, int z, int level, int maxLevel, List<(int, int, int)> list)
         {
+            // The octree is a padded cube (2^maxLevel per axis), so regions that start outside the
+            // real grid dimensions are padding and must not be reported as occupied voxels.
+            if (x >= _sizeX || y >= _sizeY || z >= _sizeZ) return;
+
+            if (node != null && node.isLeaf)
+            {
+                if (node.value) return; // empty leaf
+                AddOccupiedRegion(x, y, z, 1 << (maxLevel - level), list);
+                return;
+            }
+
             if (level >= maxLevel)
             {
-                // Leaf level, add the voxel if occupied
+                // Voxel-level cell: a missing node is material (the default fill).
                 if (node == null || !node.value)
                 {
                     list.Add((x, y, z));
                 }
                 return;
             }
+
             int childSize = 1 << (maxLevel - level - 1);
             for (int i = 0; i < 8; i++)
             {
@@ -669,6 +713,21 @@ namespace MillSimSharp.Geometry
                 SVONode? child = node?.children[i];
                 TraverseOccupied(child, cx, cy, cz, level + 1, maxLevel, list);
             }
+        }
+
+        /// <summary>
+        /// Adds every voxel of a material region that lies inside the real grid dimensions.
+        /// </summary>
+        private void AddOccupiedRegion(int x0, int y0, int z0, int size, List<(int, int, int)> list)
+        {
+            int xMax = Math.Min(x0 + size - 1, _sizeX - 1);
+            int yMax = Math.Min(y0 + size - 1, _sizeY - 1);
+            int zMax = Math.Min(z0 + size - 1, _sizeZ - 1);
+
+            for (int z = z0; z <= zMax; z++)
+                for (int y = y0; y <= yMax; y++)
+                    for (int x = x0; x <= xMax; x++)
+                        list.Add((x, y, z));
         }
 
         /// <summary>

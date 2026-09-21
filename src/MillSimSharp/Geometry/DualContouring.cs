@@ -16,12 +16,17 @@ namespace MillSimSharp.Geometry
         // Each bit position represents an edge (0-11)
         private static readonly int[] EdgeTable = new int[256];
 
-        // Edge connections (same as Marching Cubes)
+        // Cube edge connections using the corner numbering of ComputeCellVertex:
+        // corner i has offsets (bit0 = x, bit1 = y, bit2 = z):
+        //   0 = (0,0,0), 1 = (1,0,0), 2 = (0,1,0), 3 = (1,1,0),
+        //   4 = (0,0,1), 5 = (1,0,1), 6 = (0,1,1), 7 = (1,1,1)
+        // Every entry must connect two corners that differ in exactly one component (a real cube
+        // edge); face diagonals would put the QEF sample points off the cell edges.
         private static readonly int[][] EdgeConnections = new int[12][]
         {
-            new int[] {0, 1}, new int[] {1, 2}, new int[] {2, 3}, new int[] {3, 0},
-            new int[] {4, 5}, new int[] {5, 6}, new int[] {6, 7}, new int[] {7, 4},
-            new int[] {0, 4}, new int[] {1, 5}, new int[] {2, 6}, new int[] {3, 7}
+            new int[] {0, 1}, new int[] {2, 3}, new int[] {4, 5}, new int[] {6, 7}, // X-aligned
+            new int[] {0, 2}, new int[] {1, 3}, new int[] {4, 6}, new int[] {5, 7}, // Y-aligned
+            new int[] {0, 4}, new int[] {1, 5}, new int[] {2, 6}, new int[] {3, 7}  // Z-aligned
         };
 
         static DualContouring()

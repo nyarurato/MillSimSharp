@@ -174,5 +174,106 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(eventCount, Is.EqualTo(1),
                 "A point cut must report a single aggregated dirty region");
         }
+
+        // ---------------------------------------------------------------------
+        // V2 audit / P5: public SetVoxel / SetVoxelAtWorld / Clear notifications
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void PublicSetVoxel_ChangedValue_FiresOnce()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.SetVoxel(3, 4, 5, false);
+
+            Assert.That(eventCount, Is.EqualTo(1), "A changed SetVoxel must notify exactly once");
+        }
+
+        [Test]
+        public void PublicSetVoxel_SameValue_DoesNotFire()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            grid.SetVoxel(3, 4, 5, false); // first change
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.SetVoxel(3, 4, 5, false); // same value: no change
+            grid.SetVoxel(0, 0, 0, true);  // already material: no change
+
+            Assert.That(eventCount, Is.EqualTo(0), "Setting the same value must not notify");
+        }
+
+        [Test]
+        public void PublicSetVoxelAtWorld_ChangedValue_FiresOnce()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.SetVoxelAtWorld(new Vector3(0.5f, 1.5f, 2.5f), false);
+
+            Assert.That(eventCount, Is.EqualTo(1), "A changed SetVoxelAtWorld must notify exactly once");
+        }
+
+        [Test]
+        public void BulkSphereRemoval_FiresExactlyOnce()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var grid = new VoxelGrid(bbox, 0.5f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.RemoveVoxelsInSphere(new Vector3(3, 0, 0), 4f);
+
+            Assert.That(eventCount, Is.EqualTo(1),
+                "Bulk sphere removal must report exactly one aggregated region");
+        }
+
+        [Test]
+        public void BulkCylinderRemoval_FiresExactlyOnce()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var grid = new VoxelGrid(bbox, 0.5f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.RemoveVoxelsInCylinder(new Vector3(-5, 0, 0), new Vector3(5, 0, 0), 3f);
+
+            Assert.That(eventCount, Is.EqualTo(1),
+                "Bulk cylinder removal must report exactly one aggregated region");
+        }
+
+        [Test]
+        public void Clear_WhenAlreadyMaterial_DoesNotFire()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.Clear();
+
+            Assert.That(eventCount, Is.EqualTo(0), "Clearing an all-material grid must not notify");
+        }
+
+        [Test]
+        public void Clear_AfterRemoval_FiresExactlyOnce()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 2f);
+            int eventCount = 0;
+            grid.VoxelsChanged += (a, b, c, d, e, f) => eventCount++;
+
+            grid.Clear();
+
+            Assert.That(eventCount, Is.EqualTo(1), "Clearing a modified grid must notify exactly once");
+        }
     }
 }

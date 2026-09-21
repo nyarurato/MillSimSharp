@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Reflection;
 using MillSimSharp.Geometry;
 using NUnit.Framework;
 
@@ -18,6 +19,16 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 5f);
             var sdf = SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 12);
+            return MeshConverter.ConvertToMeshFromSDF(sdf);
+        }
+
+        private static Mesh BuildAnalyticSphereMesh(float resolution, float radius)
+        {
+            // The field around the sphere cavity is exact (CSG with the analytic sphere distance),
+            // so mesh vertices can be compared against the analytic sphere surface.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(24, 24, 24));
+            var sdf = new SDFGrid(bbox, resolution, narrowBandWidth: 6);
+            sdf.RemoveSphere(Vector3.Zero, radius);
             return MeshConverter.ConvertToMeshFromSDF(sdf);
         }
 
@@ -133,6 +144,89 @@ namespace MillSimSharp.Tests.Geometry
             }
 
             Assert.That(duplicates, Is.EqualTo(0), "Vertices must be merged after generation");
+        }
+
+        [Test]
+        public void DualContouring_AllEdgeConnections_AreCubeEdges()
+        {
+            // Guard for the corner-numbering contract: ComputeCellVertex numbers corners by the
+            // bit pattern (bit0 = x, bit1 = y, bit2 = z), so every EdgeConnections entry must
+            // connect two corners that differ in exactly one axis component. A face diagonal
+            // would put QEF sample points off the cube edges.
+            var type = typeof(SDFGrid).Assembly.GetType("MillSimSharp.Geometry.DualContouring");
+            Assert.That(type, Is.Not.Null, "DualContouring type must exist");
+            var field = type!.GetField("EdgeConnections", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null, "EdgeConnections table must exist");
+            var connections = (int[][])field!.GetValue(null)!;
+
+            Assert.That(connections.Length, Is.EqualTo(12), "A cube has exactly 12 edges");
+
+            var unique = new HashSet<(int, int)>();
+            for (int e = 0; e < connections.Length; e++)
+            {
+                int[] edge = connections[e];
+                Assert.That(edge.Length, Is.EqualTo(2), $"Edge {e} must have two corners");
+
+                int a = edge[0];
+                int b = edge[1];
+                Assert.That(a, Is.InRange(0, 7), $"Edge {e} corner A out of range");
+                Assert.That(b, Is.InRange(0, 7), $"Edge {e} corner B out of range");
+
+                int changedComponents =
+                    ((a & 1) ^ (b & 1)) +
+                    (((a >> 1) & 1) ^ ((b >> 1) & 1)) +
+                    (((a >> 2) & 1) ^ ((b >> 2) & 1));
+
+                Assert.That(changedComponents, Is.EqualTo(1),
+                    $"Edge {e} connects corners {a} and {b}, which differ in {changedComponents} components " +
+                    "(a cube edge must change exactly one component)");
+
+                var key = a < b ? (a, b) : (b, a);
+                Assert.That(unique.Add(key), Is.True, $"Edge {e} ({a}-{b}) is a duplicate");
+            }
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void DualContouring_SphereVertexDeviation_IsWithinResolution(float resolution)
+        {
+            const float radius = 5f;
+            Mesh mesh = BuildAnalyticSphereMesh(resolution, radius);
+
+            // The mesh also contains the outer shell of the solid block; only vertices near the
+            // spherical cavity are compared against the analytic sphere.
+            double sumSquares = 0;
+            double sum = 0;
+            float maxError = 0;
+            int count = 0;
+            foreach (Vector3 vertex in mesh.Vertices)
+            {
+                float distanceFromCenter = Vector3.Distance(vertex, Vector3.Zero);
+                if (distanceFromCenter > 10f) continue;
+
+                float error = MathF.Abs(distanceFromCenter - radius);
+                sumSquares += (double)error * error;
+                sum += error;
+                if (error > maxError) maxError = error;
+                count++;
+            }
+
+            Assert.That(count, Is.GreaterThan(100), "The sphere mesh should have vertices");
+            double mean = sum / count;
+            double rms = Math.Sqrt(sumSquares / count);
+
+            TestContext.Out.WriteLine(
+                $"res={resolution} vertices={count} max={maxError:F4} mean={mean:F4} rms={rms:F4}");
+
+            // Recorded measurements (2026-09-21, EdgeConnections = true cube edges):
+            //   res=1.0: max=0.0505 mean=0.0205 rms=0.0251
+            //   res=0.5: max=0.0125 mean=0.0056 rms=0.0069
+            // Thresholds keep a wide margin over the measurements while still failing on gross
+            // placement regressions (collapsed/clamped vertices, wrong QEF inputs).
+            Assert.That(maxError, Is.LessThanOrEqualTo(0.5f * resolution),
+                $"max deviation from the analytic sphere {maxError:F4} exceeds {0.5f * resolution:F4}");
+            Assert.That(rms, Is.LessThanOrEqualTo(0.25f * resolution),
+                $"RMS deviation from the analytic sphere {rms:F4} exceeds {0.25f * resolution:F4}");
         }
     }
 }

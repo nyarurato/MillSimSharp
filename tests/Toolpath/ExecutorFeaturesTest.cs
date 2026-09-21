@@ -21,6 +21,21 @@ namespace MillSimSharp.Tests.Toolpath
             return new VoxelGrid(bbox, 1.0f);
         }
 
+        private static void AssertVoxelGridsEqual(VoxelGrid expected, VoxelGrid actual)
+        {
+            var (sx, sy, sz) = expected.Dimensions;
+            int differences = 0;
+            for (int x = 0; x < sx; x++)
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        if (expected.GetVoxel(x, y, z) != actual.GetVoxel(x, y, z)) differences++;
+                    }
+
+            Assert.That(differences, Is.EqualTo(0),
+                "The executor cut must match a cut performed with the current orientation held fixed");
+        }
+
         [Test]
         public void EstimatedTime_AccumulatesFeedAndRapidMoves()
         {
@@ -50,6 +65,33 @@ namespace MillSimSharp.Tests.Toolpath
 
             executor.LoadCommands(new List<IToolpathCommand> { new G1Move(new Vector3(10, 0, 0), 60f) });
             Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(0.0));
+        }
+
+        [Test]
+        public void Reset_RestoresInitialTool()
+        {
+            var initialTool = new EndMill(2f, 10f, isBallEnd: false);
+            var executor = new ToolpathExecutor(new CutterSimulator(CreateGrid()), initialTool, Vector3.Zero);
+
+            executor.ExecuteCommand(new ToolChange(new EndMill(10f, 20f, isBallEnd: false)));
+            Assert.That(executor.CurrentTool.Diameter, Is.EqualTo(10f), "ToolChange must switch the tool");
+
+            executor.Reset();
+            Assert.That(executor.CurrentTool, Is.SameAs(initialTool),
+                "Reset must restore the initial (constructor) tool");
+        }
+
+        [Test]
+        public void LoadCommands_RestoresInitialTool()
+        {
+            var initialTool = new EndMill(2f, 10f, isBallEnd: false);
+            var executor = new ToolpathExecutor(new CutterSimulator(CreateGrid()), initialTool, Vector3.Zero);
+
+            executor.ExecuteCommand(new ToolChange(new EndMill(10f, 20f, isBallEnd: false)));
+
+            executor.LoadCommands(new List<IToolpathCommand> { new G0Move(Vector3.Zero) });
+            Assert.That(executor.CurrentTool, Is.SameAs(initialTool),
+                "LoadCommands must restore the initial (constructor) tool");
         }
 
         [Test]
@@ -87,6 +129,84 @@ namespace MillSimSharp.Tests.Toolpath
 
             Assert.That(events.Count, Is.EqualTo(3));
             Assert.That(events[^1], Is.EqualTo((3, 3)));
+        }
+
+        [Test]
+        public void Executor_G1MoveAfterFiveAxisPose_UsesCurrentOrientation()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var tool = new EndMill(10f, 30f, isBallEnd: false);
+            var start = new Vector3(0, 0, 0);
+            var target = new Vector3(8, 0, 0);
+            var tilted = new ToolOrientation(30, 0, 0);
+
+            // Reference cut: the current pose is held fixed (start = end = tilted).
+            var referenceGrid = new VoxelGrid(bbox, 1.0f);
+            new CutterSimulator(referenceGrid).CutLinearWithOrientation(start, target, tool, tilted, tilted);
+
+            // Executor: a normal G1 after a 5-axis pose must keep the current orientation,
+            // not silently fall back to the default 3-axis pose.
+            var executorGrid = new VoxelGrid(bbox, 1.0f);
+            var executor = new ToolpathExecutor(new CutterSimulator(executorGrid), tool, start);
+            executor.ExecuteCommands(new List<IToolpathCommand>
+            {
+                new G0Move5Axis(start, tilted),
+                new G1Move(target),
+            });
+
+            AssertVoxelGridsEqual(referenceGrid, executorGrid);
+        }
+
+        [Test]
+        public void Executor_G1MoveAfterFiveAxisPose_UsesCurrentOrientation_Sdf()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));
+            var tool = new EndMill(10f, 30f, isBallEnd: false);
+            var start = new Vector3(0, 0, 0);
+            var target = new Vector3(8, 0, 0);
+            var tilted = new ToolOrientation(30, 0, 0);
+
+            var reference = new SDFGrid(bbox, 1.0f, narrowBandWidth: 6);
+            new SDFCutterSimulator(reference).CutLinearWithOrientation(start, target, tool, tilted, tilted);
+
+            var actual = new SDFGrid(bbox, 1.0f, narrowBandWidth: 6);
+            var executor = new ToolpathExecutor(new SDFCutterSimulator(actual), tool, start);
+            executor.ExecuteCommands(new List<IToolpathCommand>
+            {
+                new G0Move5Axis(start, tilted),
+                new G1Move(target),
+            });
+
+            var (sx, sy, sz) = reference.Dimensions;
+            int signDifferences = 0;
+            for (int x = 0; x < sx; x++)
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        float expected = reference.GetDistance(x, y, z);
+                        float value = actual.GetDistance(x, y, z);
+                        if ((expected < 0f) != (value < 0f)) signDifferences++;
+                    }
+
+            Assert.That(signDifferences, Is.EqualTo(0),
+                "The executor SDF cut must match the fixed-orientation cut (sign differences found)");
+        }
+
+        [Test]
+        public void Executor_G0MoveAfterFiveAxisPose_KeepsOrientation()
+        {
+            var executor = new ToolpathExecutor(new CutterSimulator(CreateGrid()), new EndMill(2f, 10f, false), new Vector3(0, 0, 5));
+            var tilted = new ToolOrientation(30, 10, -5);
+
+            executor.ExecuteCommands(new List<IToolpathCommand>
+            {
+                new G0Move5Axis(new Vector3(0, 0, 5), tilted),
+                new G0Move(new Vector3(5, 0, 5)),
+            });
+
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(30f).Within(1e-5f));
+            Assert.That(executor.CurrentOrientation.B, Is.EqualTo(10f).Within(1e-5f));
+            Assert.That(executor.CurrentOrientation.C, Is.EqualTo(-5f).Within(1e-5f));
         }
 
         [Test]
