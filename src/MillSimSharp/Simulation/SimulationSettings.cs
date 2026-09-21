@@ -26,6 +26,17 @@ namespace MillSimSharp.Simulation
         public int MinimumSteps { get; set; } = 1;
 
         /// <summary>
+        /// Maximum chord deviation of the curved cutting-center path in millimeters (default: 0.25).
+        /// </summary>
+        public float MaxChordError { get; set; } = 0.25f;
+
+        /// <summary>
+        /// Enables feature-aware refinement so that the cutting-center chord error stays below
+        /// <see cref="MaxChordError"/> (default: true).
+        /// </summary>
+        public bool EnableAdaptiveSampling { get; set; } = true;
+
+        /// <summary>
         /// Computes the number of interpolation steps for a move based on linear and angular motion.
         /// </summary>
         /// <param name="linearDistance">Linear distance in millimeters.</param>
@@ -38,6 +49,40 @@ namespace MillSimSharp.Simulation
 
             int steps = Math.Max(MinimumSteps, Math.Max(linearSteps, angularSteps));
             return Math.Max(1, steps);
+        }
+
+        /// <summary>
+        /// Computes the number of interpolation steps including an adaptive term for the curved
+        /// cutting-center path of rotating tools (for example the ball center of a ball end mill).
+        /// </summary>
+        /// <param name="linearDistance">Linear distance in millimeters.</param>
+        /// <param name="angularDistanceDegrees">Shortest angular distance in degrees.</param>
+        /// <param name="cuttingCenterOffset">Distance from the physical tip to the cutting center in millimeters.</param>
+        /// <returns>Number of steps.</returns>
+        public int ComputeSteps(float linearDistance, float angularDistanceDegrees, float cuttingCenterOffset)
+        {
+            int steps = ComputeSteps(linearDistance, angularDistanceDegrees);
+
+            if (!EnableAdaptiveSampling || cuttingCenterOffset <= 0f || angularDistanceDegrees <= 0f)
+                return steps;
+
+            float angleRad = angularDistanceDegrees * MathF.PI / 180f;
+            float chordError = MathF.Max(MaxChordError, 1e-4f);
+
+            // The cutting center travels on an arc of radius = offset. For n steps the sagitta is
+            // r * (1 - cos(angle / (2n))) <= chordError, so n >= angle / (2 * acos(1 - chordError / r)).
+            float ratio = 1f - chordError / cuttingCenterOffset;
+            if (ratio < 1f)
+            {
+                float denominator = 2f * MathF.Acos(Math.Clamp(ratio, -1f, 1f));
+                if (denominator > 1e-6f)
+                {
+                    int adaptiveSteps = (int)MathF.Ceiling(angleRad / denominator);
+                    steps = Math.Max(steps, adaptiveSteps);
+                }
+            }
+
+            return steps;
         }
     }
 }

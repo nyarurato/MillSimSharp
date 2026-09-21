@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace MillSimSharp.Geometry
 {
@@ -129,43 +130,64 @@ namespace MillSimSharp.Geometry
             }
         }
 
+        private sealed class TransformBuffers
+        {
+            public readonly float[] F;
+            public readonly float[] D;
+            public readonly int[] V;
+            public readonly float[] Z;
+
+            public TransformBuffers(int size)
+            {
+                F = new float[size];
+                D = new float[size];
+                V = new int[size];
+                Z = new float[size + 1];
+            }
+        }
+
         private static void DistanceTransform3D(float[,,] work, int nx, int ny, int nz)
         {
             int maxDim = Math.Max(nx, Math.Max(ny, nz));
-            var f = new float[maxDim];
-            var d = new float[maxDim];
-            var v = new int[maxDim];
-            var z = new float[maxDim + 1];
 
-            for (int k = 0; k < nz; k++)
+            // X pass: each (j, k) line is independent, so lines can run in parallel.
+            Parallel.For(0, nz, () => new TransformBuffers(maxDim), (k, _, buffers) =>
             {
+                float[] f = buffers.F, d = buffers.D;
                 for (int j = 0; j < ny; j++)
                 {
                     for (int i = 0; i < nx; i++) f[i] = work[i, j, k];
-                    DistanceTransform1D(f, d, nx, v, z);
+                    DistanceTransform1D(f, d, nx, buffers.V, buffers.Z);
                     for (int i = 0; i < nx; i++) work[i, j, k] = d[i];
                 }
-            }
+                return buffers;
+            }, _ => { });
 
-            for (int k = 0; k < nz; k++)
+            // Y pass: each (i, k) line is independent.
+            Parallel.For(0, nz, () => new TransformBuffers(maxDim), (k, _, buffers) =>
             {
+                float[] f = buffers.F, d = buffers.D;
                 for (int i = 0; i < nx; i++)
                 {
                     for (int j = 0; j < ny; j++) f[j] = work[i, j, k];
-                    DistanceTransform1D(f, d, ny, v, z);
+                    DistanceTransform1D(f, d, ny, buffers.V, buffers.Z);
                     for (int j = 0; j < ny; j++) work[i, j, k] = d[j];
                 }
-            }
+                return buffers;
+            }, _ => { });
 
-            for (int j = 0; j < ny; j++)
+            // Z pass: each (i, j) line is independent.
+            Parallel.For(0, ny, () => new TransformBuffers(maxDim), (j, _, buffers) =>
             {
+                float[] f = buffers.F, d = buffers.D;
                 for (int i = 0; i < nx; i++)
                 {
                     for (int k = 0; k < nz; k++) f[k] = work[i, j, k];
-                    DistanceTransform1D(f, d, nz, v, z);
+                    DistanceTransform1D(f, d, nz, buffers.V, buffers.Z);
                     for (int k = 0; k < nz; k++) work[i, j, k] = d[k];
                 }
-            }
+                return buffers;
+            }, _ => { });
         }
 
         private static void DistanceTransform1D(float[] f, float[] d, int n, int[] v, float[] z)

@@ -41,7 +41,7 @@ namespace MillSimSharp.Geometry
             globalVerts = new List<Vector3>();
             globalNormals = new List<Vector3>();
             globalInds = new List<int>();
-            var comparer = new Vector3Comparer();
+            var comparer = new VoxelVertexComparer();
             var globalVertexMap = new Dictionary<Vector3, int>(comparer);
             var globalNormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(comparer);
 
@@ -80,49 +80,6 @@ namespace MillSimSharp.Geometry
                 globalNormals.Add(Vector3.Normalize(sum / count));
             }
         }
-        private static void AddQuad(Vector3[] vertices, Vector3 normal, 
-            Func<Vector3, Vector3, int> addVertex, List<int> indices)
-        {
-            // Add two triangles for the quad (v0, v1, v2, v3)
-            int i0 = addVertex(vertices[0], normal);
-            int i1 = addVertex(vertices[1], normal);
-            int i2 = addVertex(vertices[2], normal);
-            int i3 = addVertex(vertices[3], normal);
-
-            // First triangle (0, 1, 2)
-            indices.Add(i0);
-            indices.Add(i1);
-            indices.Add(i2);
-
-            // Second triangle (0, 2, 3)
-            indices.Add(i0);
-            indices.Add(i2);
-            indices.Add(i3);
-        }
-
-        private class Vector3Comparer : IEqualityComparer<Vector3>
-        {
-            // Increase epsilon so very close positions are considered equal and merged.
-            // This reduces per-vertex duplication from float rounding of edge interpolation.
-            private const float Epsilon = 1e-3f;
-
-            public bool Equals(Vector3 a, Vector3 b)
-            {
-                return Math.Abs(a.X - b.X) < Epsilon &&
-                       Math.Abs(a.Y - b.Y) < Epsilon &&
-                       Math.Abs(a.Z - b.Z) < Epsilon;
-            }
-
-            public int GetHashCode(Vector3 v)
-            {
-                return HashCode.Combine(
-                    (int)(v.X / Epsilon),
-                    (int)(v.Y / Epsilon),
-                    (int)(v.Z / Epsilon)
-                );
-            }
-        }
-
         // Thread-local data structure for parallel processing
         private struct ThreadLocalData
         {
@@ -131,7 +88,6 @@ namespace MillSimSharp.Geometry
             public List<int> Indices;
             public Dictionary<Vector3, int> VertexMap;
             public Dictionary<Vector3, (Vector3 sum, int count)> NormalSums;
-            public Dictionary<int, float> SdfCache; // per-thread cache for SDF queries (by voxel index)
         }
 
         /// <summary>
@@ -158,9 +114,8 @@ namespace MillSimSharp.Geometry
                     Vertices = new List<Vector3>(),
                     Normals = new List<Vector3>(),
                     Indices = new List<int>(),
-                    VertexMap = new Dictionary<Vector3, int>(new Vector3Comparer()),
-                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new Vector3Comparer()),
-                    SdfCache = new Dictionary<int, float>()
+                    VertexMap = new Dictionary<Vector3, int>(new VoxelVertexComparer()),
+                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new VoxelVertexComparer())
                 };
             },
             (z, loopState, data) =>
@@ -199,89 +154,20 @@ namespace MillSimSharp.Geometry
                             (z + 0.5f) * res
                         );
 
-                        // -X face
+                        Func<Vector3, Vector3, int> addVertex = AddVertex;
+
                         if (x == 0 || !grid.GetVoxel(x - 1, y, z))
-                        {
-                            Vector3 n = new Vector3(-1, 0, 0);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(-half, -half, -half),
-                                center + new Vector3(-half, -half, +half),
-                                center + new Vector3(-half, +half, +half),
-                                center + new Vector3(-half, +half, -half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
-
-                        // +X face
+                            VoxelMeshUtil.EmitFace(0, center, half, addVertex, data.Indices);
                         if (x == sizeX - 1 || !grid.GetVoxel(x + 1, y, z))
-                        {
-                            Vector3 n = new Vector3(1, 0, 0);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(+half, -half, -half),
-                                center + new Vector3(+half, +half, -half),
-                                center + new Vector3(+half, +half, +half),
-                                center + new Vector3(+half, -half, +half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
-
-                        // -Y face
+                            VoxelMeshUtil.EmitFace(1, center, half, addVertex, data.Indices);
                         if (y == 0 || !grid.GetVoxel(x, y - 1, z))
-                        {
-                            Vector3 n = new Vector3(0, -1, 0);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(-half, -half, -half),
-                                center + new Vector3(+half, -half, -half),
-                                center + new Vector3(+half, -half, +half),
-                                center + new Vector3(-half, -half, +half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
-
-                        // +Y face
+                            VoxelMeshUtil.EmitFace(2, center, half, addVertex, data.Indices);
                         if (y == sizeY - 1 || !grid.GetVoxel(x, y + 1, z))
-                        {
-                            Vector3 n = new Vector3(0, 1, 0);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(-half, +half, -half),
-                                center + new Vector3(-half, +half, +half),
-                                center + new Vector3(+half, +half, +half),
-                                center + new Vector3(+half, +half, -half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
-
-                        // -Z face
+                            VoxelMeshUtil.EmitFace(3, center, half, addVertex, data.Indices);
                         if (z == 0 || !grid.GetVoxel(x, y, z - 1))
-                        {
-                            Vector3 n = new Vector3(0, 0, -1);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(-half, -half, -half),
-                                center + new Vector3(-half, +half, -half),
-                                center + new Vector3(+half, +half, -half),
-                                center + new Vector3(+half, -half, -half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
-
-                        // +Z face
+                            VoxelMeshUtil.EmitFace(4, center, half, addVertex, data.Indices);
                         if (z == sizeZ - 1 || !grid.GetVoxel(x, y, z + 1))
-                        {
-                            Vector3 n = new Vector3(0, 0, 1);
-                            Vector3[] face = new Vector3[4]
-                            {
-                                center + new Vector3(-half, -half, +half),
-                                center + new Vector3(+half, -half, +half),
-                                center + new Vector3(+half, +half, +half),
-                                center + new Vector3(-half, +half, +half)
-                            };
-                            AddQuad(face, n, AddVertex, data.Indices);
-                        }
+                            VoxelMeshUtil.EmitFace(5, center, half, addVertex, data.Indices);
                     }
                 }
                 return data;
