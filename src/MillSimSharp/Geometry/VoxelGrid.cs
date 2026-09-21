@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace MillSimSharp.Geometry
 {
@@ -131,6 +132,13 @@ namespace MillSimSharp.Geometry
         public (int X, int Y, int Z) Dimensions => (_sizeX, _sizeY, _sizeZ);
 
         /// <summary>
+        /// Gets or sets whether large removals may collect candidate voxels in parallel.
+        /// The sparse voxel octree is always committed on a single thread, so the resulting voxel
+        /// state is deterministic regardless of this setting.
+        /// </summary>
+        public bool UseParallelRemoval { get; set; } = true;
+
+        /// <summary>
         /// Creates a new voxel grid with the specified work area and resolution.
         /// </summary>
         /// <param name="workArea">The bounding box defining the work area.</param>
@@ -252,11 +260,149 @@ namespace MillSimSharp.Geometry
             SetVoxel(x, y, z, isMaterial);
         }
 
+        // Batch edit state: while editing, changes are accumulated and reported once on EndEdit.
+        private int _editDepth;
+        private bool _editHasChanges;
+        private int _editMinX = int.MaxValue, _editMinY = int.MaxValue, _editMinZ = int.MaxValue;
+        private int _editMaxX = int.MinValue, _editMaxY = int.MinValue, _editMaxZ = int.MinValue;
+
+        /// <summary>
+        /// Begins a batch edit. While active, <see cref="VoxelsChanged"/> is not raised for each
+        /// operation; the aggregated changed bounds are reported once by <see cref="EndEdit"/>.
+        /// </summary>
+        public void BeginEdit()
+        {
+            _editDepth++;
+        }
+
+        /// <summary>
+        /// Ends a batch edit and raises <see cref="VoxelsChanged"/> once with the aggregated
+        /// changed bounds (if anything actually changed).
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown when called without a matching BeginEdit.</exception>
+        public void EndEdit()
+        {
+            if (_editDepth == 0)
+                throw new InvalidOperationException("EndEdit called without a matching BeginEdit.");
+
+            _editDepth--;
+            if (_editDepth > 0 || !_editHasChanges) return;
+
+            int minX = _editMinX, minY = _editMinY, minZ = _editMinZ;
+            int maxX = _editMaxX, maxY = _editMaxY, maxZ = _editMaxZ;
+
+            _editHasChanges = false;
+            _editMinX = int.MaxValue; _editMinY = int.MaxValue; _editMinZ = int.MaxValue;
+            _editMaxX = int.MinValue; _editMaxY = int.MinValue; _editMaxZ = int.MinValue;
+
+            VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
+        }
+
+        /// <summary>
+        /// Reports a changed region, either immediately or accumulated into the current batch edit.
+        /// </summary>
+        private void ReportChange(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+        {
+            if (_editDepth > 0)
+            {
+                _editHasChanges = true;
+                if (minX < _editMinX) _editMinX = minX;
+                if (minY < _editMinY) _editMinY = minY;
+                if (minZ < _editMinZ) _editMinZ = minZ;
+                if (maxX > _editMaxX) _editMaxX = maxX;
+                if (maxY > _editMaxY) _editMaxY = maxY;
+                if (maxZ > _editMaxZ) _editMaxZ = maxZ;
+                return;
+            }
+
+            VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
+        }
+
+        private const int ParallelRemovalThreshold = 1000;
+        private const int MaxParallelRemovalVolume = 4_000_000;
+
+        /// <summary>
+        /// Removes voxels in the region sequentially and reports the exact changed bounds.
+        /// </summary>
+        private void RemoveSequentially(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, Func<int, int, int, bool> shouldRemove)
+        {
+            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
+
+            for (int z = minZ; z <= maxZ; z++)
+            for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                if (!shouldRemove(x, y, z) || !GetVoxel(x, y, z)) continue;
+
+                SetVoxel(x, y, z, false);
+                if (x < changedMinX) changedMinX = x;
+                if (y < changedMinY) changedMinY = y;
+                if (z < changedMinZ) changedMinZ = z;
+                if (x > changedMaxX) changedMaxX = x;
+                if (y > changedMaxY) changedMaxY = y;
+                if (z > changedMaxZ) changedMaxZ = z;
+            }
+
+            if (changedMinX <= changedMaxX)
+            {
+                ReportChange(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
+            }
+        }
+
+        /// <summary>
+        /// Collects candidate voxels in parallel (read-only queries) and commits them to the
+        /// sparse voxel octree on a single thread. This keeps results deterministic.
+        /// </summary>
+        private void RemoveInParallel(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, Func<int, int, int, bool> shouldRemove)
+        {
+            var removals = new List<(int x, int y, int z)>();
+            var sync = new object();
+
+            Parallel.For(minZ, maxZ + 1,
+                () => new List<(int x, int y, int z)>(),
+                (z, _, local) =>
+                {
+                    for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        if (shouldRemove(x, y, z) && GetVoxel(x, y, z))
+                        {
+                            local.Add((x, y, z));
+                        }
+                    }
+                    return local;
+                },
+                local =>
+                {
+                    lock (sync) removals.AddRange(local);
+                });
+
+            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
+
+            foreach (var (x, y, z) in removals)
+            {
+                SetVoxel(x, y, z, false);
+                if (x < changedMinX) changedMinX = x;
+                if (y < changedMinY) changedMinY = y;
+                if (z < changedMinZ) changedMinZ = z;
+                if (x > changedMaxX) changedMaxX = x;
+                if (y > changedMaxY) changedMaxY = y;
+                if (z > changedMaxZ) changedMaxZ = z;
+            }
+
+            if (changedMinX <= changedMaxX)
+            {
+                ReportChange(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
+            }
+        }
+
         /// <summary>
         /// Removes all voxels within a sphere (sets them to empty).
         /// <para>
-        /// Removal is performed sequentially because the sparse voxel octree is not thread-safe.
-        /// This guarantees deterministic results independent of scheduling.
+        /// Large removals collect candidate voxels in parallel but commit to the sparse voxel
+        /// octree on a single thread, so results are deterministic.
         /// </para>
         /// </summary>
         /// <param name="center">Center of the sphere in world coordinates.</param>
@@ -274,50 +420,34 @@ namespace MillSimSharp.Geometry
             maxX = Math.Min(_sizeX - 1, maxX);
             maxY = Math.Min(_sizeY - 1, maxY);
             maxZ = Math.Min(_sizeZ - 1, maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             float radiusSquared = radius * radius;
 
-            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
-            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
-
-            for (int z = minZ; z <= maxZ; z++)
+            bool ShouldRemove(int x, int y, int z)
             {
-                for (int y = minY; y <= maxY; y++)
-                {
-                    // Early rejection: skip Y slice if too far from center
-                    float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
-                    if (yDist > radius) continue;
-
-                    for (int x = minX; x <= maxX; x++)
-                    {
-                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                        if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
-                        {
-                            if (!GetVoxel(x, y, z)) continue;
-
-                            SetVoxel(x, y, z, false);
-                            if (x < changedMinX) changedMinX = x;
-                            if (y < changedMinY) changedMinY = y;
-                            if (z < changedMinZ) changedMinZ = z;
-                            if (x > changedMaxX) changedMaxX = x;
-                            if (y > changedMaxY) changedMaxY = y;
-                            if (z > changedMaxZ) changedMaxZ = z;
-                        }
-                    }
-                }
+                // Early rejection: skip Y slice if too far from center
+                float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
+                if (yDist > radius) return false;
+                return Vector3.DistanceSquared(VoxelToWorld(x, y, z), center) <= radiusSquared;
             }
 
-            if (changedMinX <= changedMaxX)
+            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+            if (UseParallelRemoval && volumeSize > ParallelRemovalThreshold && volumeSize <= MaxParallelRemovalVolume)
             {
-                VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
+                RemoveInParallel(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
+            }
+            else
+            {
+                RemoveSequentially(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
             }
         }
 
         /// <summary>
         /// Removes all voxels within a cylinder (sets them to empty).
         /// <para>
-        /// Removal is performed sequentially because the sparse voxel octree is not thread-safe.
-        /// This guarantees deterministic results independent of scheduling.
+        /// Large removals collect candidate voxels in parallel but commit to the sparse voxel
+        /// octree on a single thread, so results are deterministic.
         /// </para>
         /// </summary>
         /// <param name="start">Start point of the cylinder axis in world coordinates.</param>
@@ -360,65 +490,44 @@ namespace MillSimSharp.Geometry
             maxX = Math.Min(_sizeX - 1, maxX);
             maxY = Math.Min(_sizeY - 1, maxY);
             maxZ = Math.Min(_sizeZ - 1, maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
             float radiusSquared = radius * radius;
 
-            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
-            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
-
-            for (int z = minZ; z <= maxZ; z++)
+            bool ShouldRemove(int x, int y, int z)
             {
-                for (int y = minY; y <= maxY; y++)
+                Vector3 voxelCenter = VoxelToWorld(x, y, z);
+
+                // Calculate distance from voxel to cylinder axis
+                Vector3 toVoxel = voxelCenter - start;
+                float projectionLength = Vector3.Dot(toVoxel, axisDir);
+
+                // Check if projection is within cylinder length with tolerance
+                if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
                 {
-                    for (int x = minX; x <= maxX; x++)
-                    {
-                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
-
-                        // Calculate distance from voxel to cylinder axis
-                        Vector3 toVoxel = voxelCenter - start;
-                        float projectionLength = Vector3.Dot(toVoxel, axisDir);
-
-                        bool remove = false;
-
-                        // Check if projection is within cylinder length with tolerance
-                        if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
-                        {
-                            Vector3 closestPoint = start + axisDir * projectionLength;
-                            float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
-
-                            if (distanceSquared <= radiusSquared)
-                            {
-                                remove = true;
-                            }
-                        }
-                        else if (!flatEnds)
-                        {
-                            // Check distance to end caps (spheres)
-                            float distToStart = Vector3.DistanceSquared(voxelCenter, start);
-                            float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
-
-                            if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
-                            {
-                                remove = true;
-                            }
-                        }
-
-                        if (!remove || !GetVoxel(x, y, z)) continue;
-
-                        SetVoxel(x, y, z, false);
-                        if (x < changedMinX) changedMinX = x;
-                        if (y < changedMinY) changedMinY = y;
-                        if (z < changedMinZ) changedMinZ = z;
-                        if (x > changedMaxX) changedMaxX = x;
-                        if (y > changedMaxY) changedMaxY = y;
-                        if (z > changedMaxZ) changedMaxZ = z;
-                    }
+                    Vector3 closestPoint = start + axisDir * projectionLength;
+                    return Vector3.DistanceSquared(voxelCenter, closestPoint) <= radiusSquared;
                 }
+
+                if (!flatEnds)
+                {
+                    // Check distance to end caps (spheres)
+                    float distToStart = Vector3.DistanceSquared(voxelCenter, start);
+                    float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
+                    return distToStart <= radiusSquared || distToEnd <= radiusSquared;
+                }
+
+                return false;
             }
 
-            if (changedMinX <= changedMaxX)
+            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+            if (UseParallelRemoval && volumeSize > ParallelRemovalThreshold && volumeSize <= MaxParallelRemovalVolume)
             {
-                VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
+                RemoveInParallel(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
+            }
+            else
+            {
+                RemoveSequentially(minX, minY, minZ, maxX, maxY, maxZ, ShouldRemove);
             }
         }
 

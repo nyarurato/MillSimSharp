@@ -65,15 +65,24 @@ namespace MillSimSharp.Simulation
             Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
             Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
 
-            if (tool.Type == ToolType.Ball)
+            // Batch the edit so listeners (e.g. an incremental SDF) update once per cut.
+            _grid.BeginEdit();
+            try
             {
-                // Ball: full sphere at the cutting center (the tip is the sphere bottom).
-                _grid.RemoveVoxelsInSphere(cuttingCenter, radius);
-            }
+                if (tool.Type == ToolType.Ball)
+                {
+                    // Ball: full sphere at the cutting center (the tip is the sphere bottom).
+                    _grid.RemoveVoxelsInSphere(cuttingCenter, radius);
+                }
 
-            // Tool body from the cutting center to the tool top.
-            // For flat tools the cutting center equals the physical tip (flat bottom).
-            _grid.RemoveVoxelsInCylinder(cuttingCenter, top, radius, flatEnds: true);
+                // Tool body from the cutting center to the tool top.
+                // For flat tools the cutting center equals the physical tip (flat bottom).
+                _grid.RemoveVoxelsInCylinder(cuttingCenter, top, radius, flatEnds: true);
+            }
+            finally
+            {
+                _grid.EndEdit();
+            }
         }
 
         /// <summary>
@@ -106,25 +115,34 @@ namespace MillSimSharp.Simulation
             Quaternion qStart = startOrientation.GetQuaternion();
             Quaternion qEnd = endOrientation.GetQuaternion();
 
-            for (int i = 0; i <= steps; i++)
+            // Batch the edit so listeners (e.g. an incremental SDF) update once per cut.
+            _grid.BeginEdit();
+            try
             {
-                float t = i / (float)steps;
-                Vector3 position = Vector3.Lerp(start, end, t);
-                Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
-                Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
-
-                Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
-                Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
-
-                if (tool.Type == ToolType.Ball)
+                for (int i = 0; i <= steps; i++)
                 {
-                    // Ball: sphere at the cutting center
-                    _grid.RemoveVoxelsInSphere(cuttingCenter, radius);
-                }
+                    float t = i / (float)steps;
+                    Vector3 position = Vector3.Lerp(start, end, t);
+                    Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
+                    Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
 
-                // Tool body: flat-ended cylinder from the cutting center to the tool top.
-                // For flat tools this is the full tool (flat bottom at the tip plane).
-                _grid.RemoveVoxelsInCylinder(cuttingCenter, top, radius, flatEnds: true);
+                    Vector3 cuttingCenter = position + axisTowardSpindle * ballOffset;
+                    Vector3 top = position + axisTowardSpindle * Math.Max(length, ballOffset);
+
+                    if (tool.Type == ToolType.Ball)
+                    {
+                        // Ball: sphere at the cutting center
+                        _grid.RemoveVoxelsInSphere(cuttingCenter, radius);
+                    }
+
+                    // Tool body: flat-ended cylinder from the cutting center to the tool top.
+                    // For flat tools this is the full tool (flat bottom at the tip plane).
+                    _grid.RemoveVoxelsInCylinder(cuttingCenter, top, radius, flatEnds: true);
+                }
+            }
+            finally
+            {
+                _grid.EndEdit();
             }
         }
     }
