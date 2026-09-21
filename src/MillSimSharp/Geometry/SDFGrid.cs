@@ -409,8 +409,12 @@ namespace MillSimSharp.Geometry
             if (worldBounds == null) throw new ArgumentNullException(nameof(worldBounds));
             if (toolSignedDistance == null) throw new ArgumentNullException(nameof(toolSignedDistance));
 
-            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min);
-            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max);
+            // Expand by the narrow band: material samples within the band around the tool must also
+            // receive exact distances. Otherwise their values stay at the initial -narrowBand and
+            // the zero crossing between the tool and the untouched material is shifted.
+            var band = new Vector3(_narrowBandWidth, _narrowBandWidth, _narrowBandWidth);
+            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min - band);
+            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max + band);
             ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
@@ -433,8 +437,10 @@ namespace MillSimSharp.Geometry
         {
             if (radius <= 0) return;
 
-            var (minX, minY, minZ) = WorldToVoxel(center - new Vector3(radius, radius, radius));
-            var (maxX, maxY, maxZ) = WorldToVoxel(center + new Vector3(radius, radius, radius));
+            // Expand by the narrow band so the material side receives exact distances as well.
+            float reach = radius + _narrowBandWidth;
+            var (minX, minY, minZ) = WorldToVoxel(center - new Vector3(reach, reach, reach));
+            var (maxX, maxY, maxZ) = WorldToVoxel(center + new Vector3(reach, reach, reach));
             ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
             if (minX > maxX || minY > maxY || minZ > maxZ) return;
 
@@ -467,8 +473,10 @@ namespace MillSimSharp.Geometry
             }
             Vector3 axisDir = axis / length;
 
-            Vector3 regionMin = Vector3.Min(start, end) - new Vector3(radius);
-            Vector3 regionMax = Vector3.Max(start, end) + new Vector3(radius);
+            // Expand by the narrow band so the material side receives exact distances as well.
+            float reach = radius + _narrowBandWidth;
+            Vector3 regionMin = Vector3.Min(start, end) - new Vector3(reach);
+            Vector3 regionMax = Vector3.Max(start, end) + new Vector3(reach);
             var (minX, minY, minZ) = WorldToVoxel(regionMin);
             var (maxX, maxY, maxZ) = WorldToVoxel(regionMax);
             ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
@@ -503,8 +511,10 @@ namespace MillSimSharp.Geometry
             Vector3 center = (start + end) * 0.5f;
             float halfLength = length * 0.5f;
 
-            Vector3 regionMin = Vector3.Min(start, end) - new Vector3(radius);
-            Vector3 regionMax = Vector3.Max(start, end) + new Vector3(radius);
+            // Expand by the narrow band so the material side receives exact distances as well.
+            float reach = radius + _narrowBandWidth;
+            Vector3 regionMin = Vector3.Min(start, end) - new Vector3(reach);
+            Vector3 regionMax = Vector3.Max(start, end) + new Vector3(reach);
             var (minX, minY, minZ) = WorldToVoxel(regionMin);
             var (maxX, maxY, maxZ) = WorldToVoxel(regionMax);
             ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);

@@ -48,7 +48,7 @@ for (int layer = 0; layer < 3; layer++)
     commands.Add(new G0Move(new Vector3(radius, 0, z)));
     
     // Cut circle (approximate with line segments)
-    int segments = 36;
+    int segments = 72;
     for (int i = 0; i <= segments; i++)
     {
         float angle = (float)(i * 2 * Math.PI / segments);

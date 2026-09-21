@@ -99,6 +99,18 @@ namespace MillSimSharp.Geometry
                 b0 += n.X * nd; b1 += n.Y * nd; b2 += n.Z * nd;
             }
 
+            // Solve the regularized QEF around the mass point:
+            //   (A + lambda I) * delta = b - A * massPoint,  x = massPoint + delta
+            // This keeps the unconstrained (tangential) directions at the mass point when A is
+            // rank-deficient, instead of collapsing them toward the coordinate origin.
+            Vector3 aMass = new Vector3(
+                a00 * massPoint.X + a01 * massPoint.Y + a02 * massPoint.Z,
+                a01 * massPoint.X + a11 * massPoint.Y + a12 * massPoint.Z,
+                a02 * massPoint.X + a12 * massPoint.Y + a22 * massPoint.Z);
+            float r0 = b0 - aMass.X;
+            float r1 = b1 - aMass.Y;
+            float r2 = b2 - aMass.Z;
+
             // Regularization keeps the system solvable for planar configurations.
             float trace = a00 + a11 + a22;
             float lambda = MathF.Max(trace * 1e-4f, 1e-6f);
@@ -117,20 +129,24 @@ namespace MillSimSharp.Geometry
             }
             else
             {
-                float detX = b0 * (a11 * a22 - a12 * a12)
-                           - a01 * (b1 * a22 - a12 * b2)
-                           + a02 * (b1 * a12 - a11 * b2);
-                float detY = a00 * (b1 * a22 - a12 * b2)
-                           - b0 * (a01 * a22 - a12 * a02)
-                           + a02 * (a01 * b2 - b1 * a02);
-                float detZ = a00 * (a11 * b2 - b1 * a12)
-                           - a01 * (a01 * b2 - b1 * a02)
-                           + b0 * (a01 * a12 - a11 * a02);
-                solution = new Vector3(detX / det, detY / det, detZ / det);
+                float detX = r0 * (a11 * a22 - a12 * a12)
+                           - a01 * (r1 * a22 - a12 * r2)
+                           + a02 * (r1 * a12 - a11 * r2);
+                float detY = a00 * (r1 * a22 - a12 * r2)
+                           - r0 * (a01 * a22 - a12 * a02)
+                           + a02 * (a01 * r2 - r1 * a02);
+                float detZ = a00 * (a11 * r2 - r1 * a12)
+                           - a01 * (a01 * r2 - r1 * a02)
+                           + r0 * (a01 * a12 - a11 * a02);
+                var delta = new Vector3(detX / det, detY / det, detZ / det);
 
-                if (float.IsNaN(solution.X) || float.IsNaN(solution.Y) || float.IsNaN(solution.Z))
+                if (float.IsNaN(delta.X) || float.IsNaN(delta.Y) || float.IsNaN(delta.Z))
                 {
                     solution = massPoint;
+                }
+                else
+                {
+                    solution = massPoint + delta;
                 }
             }
 

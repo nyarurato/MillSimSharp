@@ -44,7 +44,7 @@ for (int layer = 0; layer < 3; layer++)
     roughingCommands.Add(new G0Move(new Vector3(radius, 0, z)));
     
     // Cut circle (approximate with line segments)
-    int segments = 36;
+    int segments = 72;
     for (int i = 0; i <= segments; i++)
     {
         float angle = (float)(i * 2 * Math.PI / segments);
@@ -71,7 +71,7 @@ sw.Restart();
 float sphereRadius = 30; // Approach radius (matches the roughing radius at top)
 float zStart = 60; // Start height (top of hemisphere)
 int spiralTurns = 10;
-int pointsPerTurn = 36;
+int pointsPerTurn = 72;
 
 // Move to start
 finishingCommands.Add(new G0Move(new Vector3(sphereRadius + 5, 0, zStart))); // Safe approach
