@@ -10,6 +10,22 @@ namespace MillSimSharp.Simulation
     internal static class ToolPoseMath
     {
         /// <summary>
+        /// Computes a conservative rotation sweep radius for a cutting solid: the largest distance
+        /// from the physical tip (local origin) to the corners of <see cref="IToolGeometry.LocalBounds"/>.
+        /// The bounds normally overestimate the solid, so the value is conservative. This is used to
+        /// bound the path of any tool point during an orientation change (adaptive sampling).
+        /// </summary>
+        public static float GetRotationSweepRadius(IToolGeometry geometry)
+        {
+            BoundingBox local = geometry.LocalBounds;
+
+            float x = MathF.Max(MathF.Abs(local.Min.X), local.Max.X);
+            float y = MathF.Max(MathF.Abs(local.Min.Y), local.Max.Y);
+            float z = MathF.Max(MathF.Abs(local.Min.Z), local.Max.Z);
+            return MathF.Sqrt(x * x + y * y + z * z);
+        }
+
+        /// <summary>
         /// Converts a world point to tool-local coordinates. Cutting solids are restricted to solids
         /// of revolution around the local +Z axis, so only (radial distance, 0, axial distance) is
         /// produced. <paramref name="axisTowardSpindle"/> must be a unit vector.

@@ -98,16 +98,16 @@ namespace MillSimSharp.Simulation
         /// <summary>
         /// Computes the number of interpolation steps including an adaptive term for the curved
         /// path traced by tool points during rotation. Pass a conservative radius from the rotation
-        /// pivot (physical tip) to the farthest cutting point; <see cref="IToolGeometry.RotationSweepRadius"/>
-        /// provides this bound (for a ball end mill this is at least the ball radius, for flat tools
-        /// it is the distance to the tool corner).
+        /// pivot (physical tip) to the farthest cutting point; the simulators derive this from
+        /// <see cref="IToolGeometry.LocalBounds"/> (for a ball end mill this covers the ball and
+        /// flute, for flat tools the tool corner).
         /// </summary>
         /// <param name="linearDistance">Linear distance in millimeters.</param>
         /// <param name="angularDistanceDegrees">Shortest angular distance in degrees.</param>
         /// <param name="cuttingCenterOffset">
         /// Distance from the rotation pivot (physical tip) to the tracked cutting point in
-        /// millimeters. The name is kept for API compatibility; callers should pass the
-        /// conservative <see cref="IToolGeometry.RotationSweepRadius"/>.
+        /// millimeters. The name is kept for API compatibility; callers should pass a conservative
+        /// rotation sweep radius.
         /// </param>
         /// <returns>Number of steps.</returns>
         public int ComputeSteps(float linearDistance, float angularDistanceDegrees, float cuttingCenterOffset)

@@ -77,5 +77,30 @@ namespace MillSimSharp.Tests.Simulation
             Assert.Throws<ArgumentOutOfRangeException>(() => settings.MinimumSteps = 0);
             Assert.Throws<ArgumentOutOfRangeException>(() => settings.MinimumSteps = -5);
         }
+
+        [Test]
+        public void SimulationSettings_DefaultsAndValidBoundaryValues_AreAccepted()
+        {
+            var defaults = new SimulationSettings();
+            Assert.That(defaults.MaxLinearStep, Is.EqualTo(0.5f));
+            Assert.That(defaults.MaxAngularStep, Is.EqualTo(2f));
+            Assert.That(defaults.MinimumSteps, Is.EqualTo(1));
+            Assert.That(defaults.MaxChordError, Is.EqualTo(0.25f));
+            Assert.That(defaults.EnableAdaptiveSampling, Is.True);
+
+            // The smallest sensible positive finite values must be accepted without clamping.
+            var settings = new SimulationSettings
+            {
+                MaxLinearStep = 1e-6f,
+                MaxAngularStep = 1e-6f,
+                MaxChordError = 1e-6f,
+                MinimumSteps = 1,
+            };
+
+            Assert.That(settings.MaxLinearStep, Is.EqualTo(1e-6f));
+            Assert.That(settings.MaxAngularStep, Is.EqualTo(1e-6f));
+            Assert.That(settings.MaxChordError, Is.EqualTo(1e-6f));
+            Assert.That(settings.MinimumSteps, Is.EqualTo(1));
+        }
     }
 }

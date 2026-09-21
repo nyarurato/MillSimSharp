@@ -4,16 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- `IToolGeometry.RotationSweepRadius`: conservative distance from the physical tip to the farthest cutting point, used to bound tool point motion during orientation changes
+## [0.2.1] - 2026-09-22
 
 ### Changed
 
 - Grid dimensions are rounded up to whole voxels. `VoxelGrid.Bounds` and `SDFGrid.Bounds` now report the effective voxelized extent (`Min + Dimensions * Resolution`), so non-divisible requested sizes may expand by less than one voxel per axis.
-- Adaptive pose sampling now uses `RotationSweepRadius`, so rotation-only moves of flat, bull-nose and tapered tools are subdivided by the chord-error criterion (previously only ball tools were refined).
+- Adaptive pose sampling now derives a conservative rotation radius from `IToolGeometry.LocalBounds`, so rotation-only moves of flat, bull-nose and tapered tools are subdivided by the chord-error criterion (previously only ball tools were refined).
 - `SDFGrid.BindToVoxelGrid()` / `UpdateRegionFromVoxelGrid()` now throw `ArgumentException` when the supplied voxel grid has mismatched dimensions, resolution or bounds.
 - Public numeric inputs are validated: `SimulationSettings` step/chord values must be finite and positive and `MinimumSteps` must be at least 1, `ToolpathExecutor.StepSize` must be at least 1, tool and geometry dimensions must be finite, `BoundingBox` coordinates must be finite and grid resolutions must be finite.
 - `ToolCollisionDetector.IntersectsMaterial(...)` normalizes the tool axis and throws `ArgumentException` for zero or non-finite axes.
@@ -75,5 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release: voxel-based 3-axis simulation, SDF mesh conversion, STL export, viewer and samples.
 
 [0.2.0]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0-beta...0.2.0
+[0.2.1]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0...0.2.1
 [0.2.0-beta]: https://github.com/nyarurato/MillSimSharp/compare/0.1.0...0.2.0-beta
 [0.1.0]: https://github.com/nyarurato/MillSimSharp/releases/tag/0.1.0

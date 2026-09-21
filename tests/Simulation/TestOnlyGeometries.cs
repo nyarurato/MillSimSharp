@@ -37,9 +37,6 @@ namespace MillSimSharp.Tests.Simulation
             new Vector3(XRadius, YRadius, Length));
 
         public float CuttingCenterOffset => 0f;
-
-        public float RotationSweepRadius =>
-            MathF.Sqrt(MathF.Max(XRadius, YRadius) * MathF.Max(XRadius, YRadius) + Length * Length);
     }
 
     /// <summary>
@@ -68,8 +65,6 @@ namespace MillSimSharp.Tests.Simulation
             new Vector3(Radius, Radius, HalfLength));
 
         public float CuttingCenterOffset => 0f;
-
-        public float RotationSweepRadius => HalfLength + Radius;
     }
 
     /// <summary>

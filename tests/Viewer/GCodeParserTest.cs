@@ -204,5 +204,56 @@ namespace MillSimSharp.Tests.Viewer
             Assert.That(HasPointNear(points, -0.7071f, 0.7071f), Is.True,
                 "The second arc (modal G3 from (0,1) to (-1,0)) must pass through (-0.707, 0.707)");
         }
+
+        [Test]
+        public void Parse_RArc_InterpolatesHelicalZ()
+        {
+            var points = ParseArcTargets("G3 X0 Y1 Z5 R1\n", new Vector3(1, 0, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].Z, Is.EqualTo(5f).Within(1e-3f));
+            Assert.That(points.Any(p => p.Z > 0.1f && p.Z < 4.9f), Is.True,
+                "Z must be interpolated along the helical arc");
+        }
+
+        [Test]
+        public void Parse_G3_NegativeR_MajorArc_OtherQuadrant()
+        {
+            // CCW major arc from (0,1) to (-1,0), centered at (-1,1).
+            var points = ParseArcTargets("G3 X-1 Y0 R-1\n", new Vector3(0, 1, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(-1f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(HasPointNear(points, -0.2929f, 1.7071f), Is.True,
+                "The major arc must pass through (-0.293, 1.707)");
+        }
+
+        [Test]
+        public void Parse_InchAbsoluteRArc_ScalesCoordinatesAndRadius()
+        {
+            // Start is at 1 inch in mm; G20 scales the arc words to inches (1in = 25.4mm).
+            var points = ParseArcTargets("G20 G3 X0 Y1 R1\n", new Vector3(25.4f, 0, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(0f).Within(1e-2f));
+            Assert.That(points[^1].Y, Is.EqualTo(25.4f).Within(1e-2f));
+            Assert.That(HasPointNear(points, 17.96f, 17.96f, 0.1f), Is.True,
+                "The 90 degree arc centered at the origin must pass through (25.4/sqrt(2), 25.4/sqrt(2))");
+        }
+
+        [Test]
+        public void Parse_RelativeRArc_ProducesSameGeometryAsAbsolute()
+        {
+            var absolute = ParseArcTargets("G3 X0 Y1 R1\n", new Vector3(1, 0, 0));
+            var relative = ParseArcTargets("G91 G3 X-1 Y1 R1\n", new Vector3(1, 0, 0));
+
+            Assert.That(relative.Count, Is.EqualTo(absolute.Count));
+            for (int i = 0; i < absolute.Count; i++)
+            {
+                Assert.That(relative[i].X, Is.EqualTo(absolute[i].X).Within(1e-3f), $"point {i} X");
+                Assert.That(relative[i].Y, Is.EqualTo(absolute[i].Y).Within(1e-3f), $"point {i} Y");
+            }
+        }
     }
 }

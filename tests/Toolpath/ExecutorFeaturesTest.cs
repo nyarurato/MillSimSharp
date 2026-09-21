@@ -240,6 +240,9 @@ namespace MillSimSharp.Tests.Toolpath
 
             Assert.Throws<ArgumentOutOfRangeException>(() => executor.StepSize = 0);
             Assert.Throws<ArgumentOutOfRangeException>(() => executor.StepSize = -3);
+
+            executor.StepSize = 1;
+            Assert.That(executor.StepSize, Is.EqualTo(1), "the smallest valid step size must be accepted");
         }
     }
 }

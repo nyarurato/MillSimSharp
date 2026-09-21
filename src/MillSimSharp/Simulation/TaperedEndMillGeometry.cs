@@ -67,9 +67,6 @@ namespace MillSimSharp.Simulation
         public float CuttingCenterOffset => 0f;
 
         /// <inheritdoc />
-        public float RotationSweepRadius => MathF.Sqrt(TopRadius * TopRadius + Length * Length);
-
-        /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
             // Exact signed distance of the solid of revolution: the 3D distance equals the signed

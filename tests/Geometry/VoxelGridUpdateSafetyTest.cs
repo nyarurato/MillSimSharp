@@ -68,6 +68,39 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void VoxelGrid_ParallelAndSerialRemoval_MixedSequenceProducesSameState()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(60, 60, 60));
+            var parallel = new VoxelGrid(bbox, 0.5f) { UseParallelRemoval = true };
+            var serial = new VoxelGrid(bbox, 0.5f) { UseParallelRemoval = false };
+
+            foreach (VoxelGrid grid in new[] { parallel, serial })
+            {
+                grid.RemoveVoxelsInSphere(new Vector3(-10, -5, 0), 8f);
+                grid.RemoveVoxelsInCylinder(new Vector3(10, -20, -5), new Vector3(10, 20, 5), 5f, flatEnds: true);
+                grid.RemoveVoxelsInCylinder(new Vector3(-15, 0, 0), new Vector3(15, 0, 0), 4f, flatEnds: false);
+                grid.SetVoxel(5, 5, 5, false);
+                grid.SetVoxelAtWorld(new Vector3(20.5f, -20.5f, 10.5f), false);
+                grid.RemoveVoxelsInSphere(new Vector3(5, 5, 5), 6f);
+            }
+
+            var denseP = parallel.ToDenseArray();
+            var denseS = serial.ToDenseArray();
+            var (sx, sy, sz) = parallel.Dimensions;
+
+            int differences = 0;
+            for (int x = 0; x < sx; x++)
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                    {
+                        if (denseP[x][y][z] != denseS[x][y][z]) differences++;
+                    }
+
+            Assert.That(differences, Is.EqualTo(0),
+                "A mixed removal sequence must produce identical voxel states for both modes");
+        }
+
+        [Test]
         public void VoxelsChanged_FiresOncePerEdit_WithAggregatedBounds()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(40, 40, 40));

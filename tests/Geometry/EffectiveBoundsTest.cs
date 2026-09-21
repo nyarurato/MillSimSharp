@@ -160,6 +160,62 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void NonDivisibleBounds_BoundaryProbes_HaveWellDefinedSemantics()
+        {
+            var grid = new VoxelGrid(RequestedBounds, Resolution);
+            var (sx, sy, sz) = grid.Dimensions;
+            const float epsilon = 1e-3f;
+
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float minValue = axis == 0 ? grid.Bounds.Min.X : axis == 1 ? grid.Bounds.Min.Y : grid.Bounds.Min.Z;
+                float maxValue = axis == 0 ? grid.Bounds.Max.X : axis == 1 ? grid.Bounds.Max.Y : grid.Bounds.Max.Z;
+                float lastCenter = maxValue - 0.5f * Resolution;
+
+                Vector3 Probe(float value) => axis switch
+                {
+                    0 => new Vector3(value, 0.5f, 0.5f),
+                    1 => new Vector3(0.5f, value, 0.5f),
+                    _ => new Vector3(0.5f, 0.5f, value),
+                };
+
+                // First voxel: Min maps to index 0, Min - epsilon is outside the domain.
+                grid.SetVoxel(0, 0, 0, true);
+                grid.SetVoxelAtWorld(Probe(minValue), false);
+                Assert.That(grid.GetVoxel(0, 0, 0), Is.False, $"axis {axis}: Min must map to the first voxel");
+
+                grid.SetVoxel(0, 0, 0, true);
+                grid.SetVoxelAtWorld(Probe(minValue - epsilon), false);
+                Assert.That(grid.GetVoxel(0, 0, 0), Is.True,
+                    $"axis {axis}: Min - epsilon must be ignored (outside the voxel domain)");
+
+                // Last voxel: Max - epsilon maps to the last voxel, Max itself is outside.
+                int lastX = axis == 0 ? sx - 1 : 0;
+                int lastY = axis == 1 ? sy - 1 : 0;
+                int lastZ = axis == 2 ? sz - 1 : 0;
+
+                grid.SetVoxel(lastX, lastY, lastZ, true);
+                grid.SetVoxelAtWorld(Probe(maxValue), false);
+                Assert.That(grid.GetVoxel(lastX, lastY, lastZ), Is.True,
+                    $"axis {axis}: a write exactly at Max must be ignored (half-open voxel domain)");
+
+                grid.SetVoxelAtWorld(Probe(maxValue - epsilon), false);
+                Assert.That(grid.GetVoxel(lastX, lastY, lastZ), Is.False,
+                    $"axis {axis}: Max - epsilon must map to the last voxel");
+
+                grid.SetVoxel(lastX, lastY, lastZ, true);
+                Assert.That(grid.GetVoxelAtWorld(Probe(lastCenter)), Is.True,
+                    $"axis {axis}: the last voxel center is inside the grid");
+
+                // Bounds.Contains is inclusive at Max even though the voxel domain is half-open.
+                Assert.That(grid.Bounds.Contains(Probe(maxValue)), Is.True,
+                    $"axis {axis}: Bounds.Contains is inclusive at Max");
+                Assert.That(grid.Bounds.Contains(Probe(minValue)), Is.True);
+                Assert.That(grid.Bounds.Contains(Probe(minValue - epsilon)), Is.False);
+            }
+        }
+
+        [Test]
         public void NonDivisibleBounds_NonZeroMinWorks()
         {
             var min = new Vector3(-2.3f, 5.2f, -1.7f);

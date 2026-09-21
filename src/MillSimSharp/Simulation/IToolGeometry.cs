@@ -19,7 +19,9 @@ namespace MillSimSharp.Simulation
     /// </para>
     /// <para>
     /// <b>Bounds contract:</b> <see cref="LocalBounds"/> must contain the whole solid. It may
-    /// extend to negative local Z (below the physical tip) for special parts.
+    /// extend to negative local Z (below the physical tip) for special parts. Adaptive pose
+    /// sampling derives a conservative rotation radius from these bounds, so an underestimated
+    /// box also weakens the chord-error refinement.
     /// </para>
     /// </summary>
     public interface IToolGeometry
@@ -42,12 +44,5 @@ namespace MillSimSharp.Simulation
         /// Zero for flat tools; equal to the radius for ball end mills.
         /// </summary>
         float CuttingCenterOffset { get; }
-
-        /// <summary>
-        /// Conservative distance from the physical tip (the rotation pivot) to the farthest point
-        /// of the cutting solid in millimeters. Used to bound the path of any tool point during an
-        /// orientation change (adaptive pose sampling), so it must not underestimate the solid.
-        /// </summary>
-        float RotationSweepRadius { get; }
     }
 }
