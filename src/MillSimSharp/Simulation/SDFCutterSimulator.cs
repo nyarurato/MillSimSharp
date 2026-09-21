@@ -39,16 +39,13 @@ namespace MillSimSharp.Simulation
             // Step 1: Remove material along the tool tip path
             if (tool.Type == ToolType.Ball)
             {
-                // Ball end mill: Remove capsule (cylinder with spherical ends)
-                // For ball end, we need to remove spheres at start and end, plus cylinder between
-                _sdfGrid.RemoveSphere(start, radius);
-                _sdfGrid.RemoveSphere(end, radius);
-                _sdfGrid.RemoveCylinder(start, end, radius);
+                // Ball end mill: sweep a capsule (line segment with spherical ends)
+                _sdfGrid.RemoveCapsule(start, end, radius);
             }
             else
             {
-                // Flat end mill: Remove cylinder
-                _sdfGrid.RemoveCylinder(start, end, radius);
+                // Flat end mill: sweep a finite flat-ended cylinder
+                _sdfGrid.RemoveFiniteCylinder(start, end, radius);
             }
 
             // Step 2: Remove material along the tool shaft
@@ -58,7 +55,7 @@ namespace MillSimSharp.Simulation
             Vector3 shaftEnd = end + shaftOffset;
 
             // Remove material in the shaft path
-            _sdfGrid.RemoveCylinder(shaftStart, shaftEnd, radius);
+            _sdfGrid.RemoveFiniteCylinder(shaftStart, shaftEnd, radius);
 
             // Step 3: Remove material in the swept volume connecting tip to shaft
             Vector3 motion = end - start;
@@ -77,13 +74,13 @@ namespace MillSimSharp.Simulation
                     Vector3 shaftTop = tipPos + shaftOffset;
 
                     // Create vertical cylinder from tip to shaft top at this position
-                    _sdfGrid.RemoveCylinder(tipPos, shaftTop, radius);
+                    _sdfGrid.RemoveFiniteCylinder(tipPos, shaftTop, radius);
                 }
             }
             else
             {
                 // Zero-length movement: just remove vertical shaft at this point
-                _sdfGrid.RemoveCylinder(start, shaftStart, radius);
+                _sdfGrid.RemoveFiniteCylinder(start, shaftStart, radius);
             }
         }
 
@@ -105,7 +102,7 @@ namespace MillSimSharp.Simulation
 
             // Remove material along the tool shaft (vertical cylinder above the tip)
             Vector3 shaftTop = position + new Vector3(0, 0, length);
-            _sdfGrid.RemoveCylinder(position, shaftTop, radius);
+            _sdfGrid.RemoveFiniteCylinder(position, shaftTop, radius);
         }
 
         /// <summary>
@@ -164,7 +161,7 @@ namespace MillSimSharp.Simulation
                 }
 
                 // Remove material along the tool shaft
-                _sdfGrid.RemoveCylinder(position, shaftEnd, radius);
+                _sdfGrid.RemoveFiniteCylinder(position, shaftEnd, radius);
             }
         }
     }

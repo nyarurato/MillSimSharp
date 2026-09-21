@@ -59,13 +59,10 @@ namespace MillSimSharp.Tests.Geometry
                         afterSamples.Add(sdf.GetDistance(x, y, z));
 
             // No debug output; we only assert that computations succeeded and values are finite
-
-            // Optionally we could verify that some samples changed, but depending on the chosen samples
-            // the local SDF may remain identical if the removal was outside the narrow band.
-            // At minimum verify we computed SDF successfully (no NaN entries) after update
             foreach (var v in afterSamples)
                 Assert.That(float.IsNaN(v), Is.False);
         }
+
         [Test]
         public void TestSDFFromSimpleSphere()
         {
@@ -82,19 +79,18 @@ namespace MillSimSharp.Tests.Geometry
 
             Assert.That(sdf, Is.Not.Null);
             Assert.That(sdf.Resolution, Is.EqualTo(0.5f));
-            
-            // Test distance at center
-            // NOTE: Our SDF convention: negative = empty (removed), positive = material
-            // Since we removed a sphere, the center should have negative distance
-            float distCenter = sdf.GetDistance(Vector3.Zero);
-            
-            Assert.That(distCenter, Is.LessThan(0), "Center should be in empty space (negative)");
-            Assert.That(distCenter, Is.GreaterThan(-radius - 1.0f), "Distance should be reasonable");
 
-            // Test distance outside the removed sphere (should be positive = material)
+            // Standard SDF convention: negative = material, positive = empty
+            // Since we removed a sphere, the center should have a positive distance
+            float distCenter = sdf.GetDistance(Vector3.Zero);
+
+            Assert.That(distCenter, Is.GreaterThan(0), "Center should be in empty space (positive)");
+            Assert.That(distCenter, Is.LessThan(radius + 1.0f), "Distance should be reasonable");
+
+            // Test distance outside the removed sphere (should be negative = material)
             Vector3 outsidePoint = new Vector3(radius + 2.0f, 0, 0);
             float distOutside = sdf.GetDistance(outsidePoint);
-            Assert.That(distOutside, Is.GreaterThan(0), "Outside point should be in material (positive)");
+            Assert.That(distOutside, Is.LessThan(0), "Outside point should be in material (negative)");
         }
 
         [Test]
@@ -121,14 +117,14 @@ namespace MillSimSharp.Tests.Geometry
 
             Assert.That(sdf, Is.Not.Null);
 
-            // Test center point (should be inside)
+            // Test center point (empty under standard SDF convention -> positive)
             float distCenter = sdf.GetDistance(Vector3.Zero);
-            Assert.That(distCenter, Is.LessThan(0), "Center of empty box should be inside (negative)");
+            Assert.That(distCenter, Is.GreaterThan(0), "Center of empty box should be empty (positive)");
 
-            // Test outside point
+            // Test outside point (material -> negative)
             Vector3 outsidePoint = new Vector3(5, 5, 5);
             float distOutside = sdf.GetDistance(outsidePoint);
-            Assert.That(distOutside, Is.GreaterThan(0), "Point in material should be outside empty region (positive)");
+            Assert.That(distOutside, Is.LessThan(0), "Point in material should be negative");
         }
 
         [Test]
@@ -143,14 +139,14 @@ namespace MillSimSharp.Tests.Geometry
 
             var sdf = SDFGrid.FromVoxelGrid(voxelGrid);
 
-            // Points inside empty region should have negative distance
+            // Standard SDF: points inside empty regions are positive
             float distInside = sdf.GetDistance(Vector3.Zero);
-            Assert.That(distInside, Is.LessThan(0), "Inside empty region should be negative");
+            Assert.That(distInside, Is.GreaterThan(0), "Inside empty region should be positive");
 
-            // Points in material should have positive distance from the empty region
+            // Points in material are negative
             Vector3 materialPoint = new Vector3(4, 4, 4);
             float distMaterial = sdf.GetDistance(materialPoint);
-            Assert.That(distMaterial, Is.GreaterThan(0), "Inside material (outside empty region) should be positive");
+            Assert.That(distMaterial, Is.LessThan(0), "Inside material should be negative");
         }
 
         [Test]
@@ -172,8 +168,9 @@ namespace MillSimSharp.Tests.Geometry
             // Gradient should be normalized
             Assert.That(gradient.Length(), Is.EqualTo(1.0f).Within(0.1f), "Gradient should be normalized");
 
-            // For a sphere, gradient at (x, 0, 0) should point in +X direction
-            Assert.That(gradient.X, Is.GreaterThan(0.5f), "Gradient X component should be significant");
+            // Standard SDF gradient points from material toward empty space.
+            // At (3,0,0) on the removed sphere wall, that direction is toward the sphere center (-X).
+            Assert.That(gradient.X, Is.LessThan(-0.5f), "Gradient X component should point into the removed sphere");
             Assert.That(Math.Abs(gradient.Y), Is.LessThan(0.5f), "Gradient Y component should be small");
             Assert.That(Math.Abs(gradient.Z), Is.LessThan(0.5f), "Gradient Z component should be small");
         }
@@ -197,12 +194,12 @@ namespace MillSimSharp.Tests.Geometry
             float distCenter = sdf.GetDistance(voxelCenter);
             float distBetween = sdf.GetDistance(betweenVoxels);
 
-            // Both should be negative (inside)
-            Assert.That(distCenter, Is.LessThan(0));
-            Assert.That(distBetween, Is.LessThan(0));
+            // Both should be positive (inside the removed sphere)
+            Assert.That(distCenter, Is.GreaterThan(0));
+            Assert.That(distBetween, Is.GreaterThan(0));
 
             // The interpolated value should be reasonable
-            Assert.That(Math.Abs(distBetween - distCenter), Is.LessThan(2.0f), 
+            Assert.That(Math.Abs(distBetween - distCenter), Is.LessThan(2.0f),
                        "Interpolated distance should be close to voxel center distance");
         }
 
@@ -225,9 +222,9 @@ namespace MillSimSharp.Tests.Geometry
             // Points far from surface should be clamped to narrow band width
             Vector3 farPoint = new Vector3(20, 20, 20);
             float distFar = sdf.GetDistance(farPoint);
-            
+
             // Should be clamped to narrow band width
-            Assert.That(Math.Abs(distFar), Is.LessThanOrEqualTo(sdf.NarrowBandWidth * 1.1f), 
+            Assert.That(Math.Abs(distFar), Is.LessThanOrEqualTo(sdf.NarrowBandWidth * 1.1f),
                        "Distance should be clamped to narrow band width");
         }
 
@@ -266,9 +263,9 @@ namespace MillSimSharp.Tests.Geometry
             Vector3 farOutside = new Vector3(100, 100, 100);
             float dist = sdf.GetDistance(farOutside);
 
-            // Should return negative narrow band width (outside is empty)
-            Assert.That(dist, Is.LessThan(0));
-            Assert.That(dist, Is.EqualTo(-sdf.NarrowBandWidth).Within(0.1f));
+            // Should return positive narrow band width (outside is empty)
+            Assert.That(dist, Is.GreaterThan(0));
+            Assert.That(dist, Is.EqualTo(sdf.NarrowBandWidth).Within(0.1f));
         }
 
         [Test]
@@ -277,7 +274,7 @@ namespace MillSimSharp.Tests.Geometry
             // Create a voxel grid
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
             var voxelGrid = new VoxelGrid(bbox, 1.0f);
-            
+
             voxelGrid.RemoveVoxelsInSphere(Vector3.Zero, 2.0f);
 
             var sdf = SDFGrid.FromVoxelGrid(voxelGrid);
@@ -289,15 +286,15 @@ namespace MillSimSharp.Tests.Geometry
             int centerZ = dims.Z / 2;
 
             float distByIndex = sdf.GetDistance(centerX, centerY, centerZ);
-            
-            // Should be negative (inside the empty sphere)
-            Assert.That(distByIndex, Is.LessThan(0));
 
-            // Out of bounds query should return a negative distance (outside). The magnitude
+            // Should be positive (inside the removed sphere)
+            Assert.That(distByIndex, Is.GreaterThan(0));
+
+            // Out of bounds query should return a positive distance (outside = empty). The magnitude
             // is the distance from the sample position to the nearest point inside bounds
-            // (clamped to the narrow band width) — so it may not equal the full narrow band value.
+            // (clamped to the narrow band width).
             float oobDist = sdf.GetDistance(-1, -1, -1);
-            Assert.That(oobDist, Is.LessThan(0));
+            Assert.That(oobDist, Is.GreaterThan(0));
             Assert.That(Math.Abs(oobDist), Is.LessThanOrEqualTo(sdf.NarrowBandWidth + 1e-6f));
         }
     }

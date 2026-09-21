@@ -83,7 +83,7 @@ namespace MillSimSharp.Viewer
             // Enable backface culling
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
-            GL.FrontFace(FrontFaceDirection.Cw);  // Set clockwise as front-facing
+            GL.FrontFace(FrontFaceDirection.Ccw);  // Standard SDF: CCW winding faces outward from material
 
             // Load shaders
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -234,19 +234,19 @@ namespace MillSimSharp.Viewer
             _sdfGrid.RemoveSphere(SysVector3.Zero, radius: 50.0f);
 
             // Remove some cylinders for visual interest
-            _sdfGrid.RemoveCylinder(
+            _sdfGrid.RemoveFiniteCylinder(
                 new SysVector3(-40, 0, 50),
                 new SysVector3(40, 0, 50),
                 radius: 10.0f
             );
 
-            _sdfGrid.RemoveCylinder(
+            _sdfGrid.RemoveFiniteCylinder(
                 new SysVector3(50, -40, 0),
                 new SysVector3(50, 40, 0),
                 radius: 10.0f
             );
 
-            _sdfGrid.RemoveCylinder(
+            _sdfGrid.RemoveFiniteCylinder(
                 new SysVector3(0, 50, -40),
                 new SysVector3(0, 50, 40),
                 radius: 10.0f

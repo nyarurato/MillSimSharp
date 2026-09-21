@@ -160,15 +160,15 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Converts world coordinates to voxel indices.
+        /// Converts world coordinates to voxel indices (floor semantics).
         /// </summary>
         private (int x, int y, int z) WorldToVoxel(Vector3 worldPos)
         {
             Vector3 localPos = worldPos - _bounds.Min;
             return (
-                (int)(localPos.X / _resolution),
-                (int)(localPos.Y / _resolution),
-                (int)(localPos.Z / _resolution)
+                (int)MathF.Floor(localPos.X / _resolution),
+                (int)MathF.Floor(localPos.Y / _resolution),
+                (int)MathF.Floor(localPos.Z / _resolution)
             );
         }
 
@@ -254,6 +254,10 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Removes all voxels within a sphere (sets them to empty).
+        /// <para>
+        /// Removal is performed sequentially because the sparse voxel octree is not thread-safe.
+        /// This guarantees deterministic results independent of scheduling.
+        /// </para>
         /// </summary>
         /// <param name="center">Center of the sphere in world coordinates.</param>
         /// <param name="radius">Radius of the sphere in millimeters.</param>
@@ -273,73 +277,48 @@ namespace MillSimSharp.Geometry
 
             float radiusSquared = radius * radius;
 
-            // Calculate volume to process
-            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
-            
-            // Use parallel processing for larger volumes (threshold: 1000 voxels)
-            if (volumeSize > 1000)
-            {
-                System.Threading.Tasks.Parallel.For(minZ, maxZ + 1, z =>
-                {
-                    for (int y = minY; y <= maxY; y++)
-                    {
-                        // Early rejection: skip Y slice if too far from center
-                        float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
-                        if (yDist > radius) continue;
+            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
 
-                        for (int x = minX; x <= maxX; x++)
+            for (int z = minZ; z <= maxZ; z++)
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    // Early rejection: skip Y slice if too far from center
+                    float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
+                    if (yDist > radius) continue;
+
+                    for (int x = minX; x <= maxX; x++)
+                    {
+                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
+                        if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
                         {
-                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                            if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
-                            {
-                                SetVoxel(x, y, z, false);
-                                // No event here; we'll report changed region after processing
-                            }
+                            if (!GetVoxel(x, y, z)) continue;
+
+                            SetVoxel(x, y, z, false);
+                            if (x < changedMinX) changedMinX = x;
+                            if (y < changedMinY) changedMinY = y;
+                            if (z < changedMinZ) changedMinZ = z;
+                            if (x > changedMaxX) changedMaxX = x;
+                            if (y > changedMaxY) changedMaxY = y;
+                            if (z > changedMaxZ) changedMaxZ = z;
                         }
                     }
-                });
-                // Report the entire bounding box as changed (conservative)
-                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
+                }
             }
-            else
-            {
-                // Sequential processing for small volumes
-                int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
-                int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
-                for (int z = minZ; z <= maxZ; z++)
-                {
-                    for (int y = minY; y <= maxY; y++)
-                    {
-                        // Early rejection: skip Y slice if too far from center
-                        float yDist = Math.Abs(VoxelToWorld(0, y, 0).Y - center.Y);
-                        if (yDist > radius) continue;
 
-                        for (int x = minX; x <= maxX; x++)
-                        {
-                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                            if (Vector3.DistanceSquared(voxelCenter, center) <= radiusSquared)
-                            {
-                                SetVoxel(x, y, z, false);
-                                // Track changed region
-                                if (x < changedMinX) changedMinX = x;
-                                if (y < changedMinY) changedMinY = y;
-                                if (z < changedMinZ) changedMinZ = z;
-                                if (x > changedMaxX) changedMaxX = x;
-                                if (y > changedMaxY) changedMaxY = y;
-                                if (z > changedMaxZ) changedMaxZ = z;
-                            }
-                        }
-                    }
-                }
-                if (changedMinX <= changedMaxX)
-                {
-                    VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
-                }
+            if (changedMinX <= changedMaxX)
+            {
+                VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
             }
         }
 
         /// <summary>
         /// Removes all voxels within a cylinder (sets them to empty).
+        /// <para>
+        /// Removal is performed sequentially because the sparse voxel octree is not thread-safe.
+        /// This guarantees deterministic results independent of scheduling.
+        /// </para>
         /// </summary>
         /// <param name="start">Start point of the cylinder axis in world coordinates.</param>
         /// <param name="end">End point of the cylinder axis in world coordinates.</param>
@@ -349,7 +328,7 @@ namespace MillSimSharp.Geometry
         {
             Vector3 axis = end - start;
             float length = axis.Length();
-            
+
             if (length < 1e-6f)
             {
                 // Degenerate case: cylinder is a sphere
@@ -384,117 +363,62 @@ namespace MillSimSharp.Geometry
 
             float radiusSquared = radius * radius;
 
-            // Calculate volume to process
-            int volumeSize = (maxZ - minZ + 1) * (maxY - minY + 1) * (maxX - minX + 1);
+            int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
+            int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
 
-            // Use parallel processing for larger volumes
-            if (volumeSize > 1000)
+            for (int z = minZ; z <= maxZ; z++)
             {
-                System.Threading.Tasks.Parallel.For(minZ, maxZ + 1, z =>
+                for (int y = minY; y <= maxY; y++)
                 {
-                    for (int y = minY; y <= maxY; y++)
+                    for (int x = minX; x <= maxX; x++)
                     {
-                        for (int x = minX; x <= maxX; x++)
+                        Vector3 voxelCenter = VoxelToWorld(x, y, z);
+
+                        // Calculate distance from voxel to cylinder axis
+                        Vector3 toVoxel = voxelCenter - start;
+                        float projectionLength = Vector3.Dot(toVoxel, axisDir);
+
+                        bool remove = false;
+
+                        // Check if projection is within cylinder length with tolerance
+                        if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
                         {
-                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                            
-                            // Calculate distance from voxel to cylinder axis
-                            Vector3 toVoxel = voxelCenter - start;
-                            float projectionLength = Vector3.Dot(toVoxel, axisDir);
-                            
-                            // Check if projection is within cylinder length with tolerance
-                            if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
+                            Vector3 closestPoint = start + axisDir * projectionLength;
+                            float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
+
+                            if (distanceSquared <= radiusSquared)
                             {
-                                Vector3 closestPoint = start + axisDir * projectionLength;
-                                float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
-                                
-                                if (distanceSquared <= radiusSquared)
-                                {
-                                    SetVoxel(x, y, z, false);
-                                }
-                            }
-                            else if (!flatEnds)
-                            {
-                                // Check distance to end caps (spheres)
-                                float distToStart = Vector3.DistanceSquared(voxelCenter, start);
-                                float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
-                                
-                                if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
-                                {
-                                    SetVoxel(x, y, z, false);
-                                }
+                                remove = true;
                             }
                         }
-                        // Conservative report will be invoked after loop completes
+                        else if (!flatEnds)
+                        {
+                            // Check distance to end caps (spheres)
+                            float distToStart = Vector3.DistanceSquared(voxelCenter, start);
+                            float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
+
+                            if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
+                            {
+                                remove = true;
+                            }
+                        }
+
+                        if (!remove || !GetVoxel(x, y, z)) continue;
+
+                        SetVoxel(x, y, z, false);
+                        if (x < changedMinX) changedMinX = x;
+                        if (y < changedMinY) changedMinY = y;
+                        if (z < changedMinZ) changedMinZ = z;
+                        if (x > changedMaxX) changedMaxX = x;
+                        if (y > changedMaxY) changedMaxY = y;
+                        if (z > changedMaxZ) changedMaxZ = z;
                     }
-                });
-                // Report the entire bounding box as changed (conservative)
-                VoxelsChanged?.Invoke(minX, minY, minZ, maxX, maxY, maxZ);
+                }
             }
-            else
+
+            if (changedMinX <= changedMaxX)
             {
-                // Sequential processing for small volumes
-                int changedMinX = int.MaxValue, changedMinY = int.MaxValue, changedMinZ = int.MaxValue;
-                int changedMaxX = int.MinValue, changedMaxY = int.MinValue, changedMaxZ = int.MinValue;
-                for (int z = minZ; z <= maxZ; z++)
-                {
-                    for (int y = minY; y <= maxY; y++)
-                    {
-                        for (int x = minX; x <= maxX; x++)
-                        {
-                            Vector3 voxelCenter = VoxelToWorld(x, y, z);
-                            
-                            // Calculate distance from voxel to cylinder axis
-                            Vector3 toVoxel = voxelCenter - start;
-                            float projectionLength = Vector3.Dot(toVoxel, axisDir);
-                            
-                            // Check if projection is within cylinder length with tolerance
-                            if (projectionLength >= -1e-5f && projectionLength <= length + 1e-5f)
-                            {
-                                Vector3 closestPoint = start + axisDir * projectionLength;
-                                float distanceSquared = Vector3.DistanceSquared(voxelCenter, closestPoint);
-                                
-                                if (distanceSquared <= radiusSquared)
-                                {
-                                    if (GetVoxel(x, y, z))
-                                    {
-                                        SetVoxel(x, y, z, false);
-                                        if (x < changedMinX) changedMinX = x;
-                                        if (y < changedMinY) changedMinY = y;
-                                        if (z < changedMinZ) changedMinZ = z;
-                                        if (x > changedMaxX) changedMaxX = x;
-                                        if (y > changedMaxY) changedMaxY = y;
-                                        if (z > changedMaxZ) changedMaxZ = z;
-                                    }
-                                }
-                            }
-                            else if (!flatEnds)
-                            {
-                                // Check distance to end caps (spheres)
-                                float distToStart = Vector3.DistanceSquared(voxelCenter, start);
-                                float distToEnd = Vector3.DistanceSquared(voxelCenter, end);
-                                
-                                if (distToStart <= radiusSquared || distToEnd <= radiusSquared)
-                                {
-                                    if (GetVoxel(x, y, z))
-                                    {
-                                        SetVoxel(x, y, z, false);
-                                        if (x < changedMinX) changedMinX = x;
-                                        if (y < changedMinY) changedMinY = y;
-                                        if (z < changedMinZ) changedMinZ = z;
-                                        if (x > changedMaxX) changedMaxX = x;
-                                        if (y > changedMaxY) changedMaxY = y;
-                                        if (z > changedMaxZ) changedMaxZ = z;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if (changedMinX <= changedMaxX)
-                {
-                    VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
-                }
+                VoxelsChanged?.Invoke(changedMinX, changedMinY, changedMinZ, changedMaxX, changedMaxY, changedMaxZ);
             }
         }
 

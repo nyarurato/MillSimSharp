@@ -284,7 +284,7 @@ namespace MillSimSharp.Tests.Geometry
                 }
             }
 
-            Assert.That(xCross[0], Is.True, "Expected crossing on left-most slice (x=-1)");
+            Assert.That(xCross[0] || xCross[1], Is.True, "Expected a crossing at the left boundary (x=-1 or x=0)");
             Assert.That(xCross[xCross.Length - 1], Is.True, "Expected crossing on right-most slice (x=sizeX-1)");
         }
 

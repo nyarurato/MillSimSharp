@@ -10,7 +10,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 
 - **3-axis and 5-axis machining support** with tool orientation control
 - **Voxel-based material representation** for accurate, conservative milling simulation (fast incremental operations)
-- **Signed Distance Field (SDF) generation** (Fast Sweeping algorithm) for high-quality mesh conversion and fast distance queries
+- **Signed Distance Field (SDF) generation** (exact Euclidean Distance Transform) for high-quality mesh conversion and fast distance queries
 - **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
 - **Flexible stock origin configuration** (center or corner-based)
 - **G-code parser independence** - bring your own parser (gsGCode is used for the viewer demo)
