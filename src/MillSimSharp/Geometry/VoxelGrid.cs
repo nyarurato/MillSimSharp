@@ -441,6 +441,38 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Checks whether any material voxel center inside <paramref name="worldBounds"/> also lies
+        /// inside the tool solid described by <paramref name="signedDistance"/> (negative = inside).
+        /// Read-only: does not modify the grid.
+        /// </summary>
+        internal bool IntersectsToolSolid(BoundingBox worldBounds, Func<Vector3, float> signedDistance)
+        {
+            if (worldBounds == null) throw new ArgumentNullException(nameof(worldBounds));
+            if (signedDistance == null) throw new ArgumentNullException(nameof(signedDistance));
+
+            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min);
+            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max);
+
+            minX = Math.Max(0, minX);
+            minY = Math.Max(0, minY);
+            minZ = Math.Max(0, minZ);
+            maxX = Math.Min(_sizeX - 1, maxX);
+            maxY = Math.Min(_sizeY - 1, maxY);
+            maxZ = Math.Min(_sizeZ - 1, maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return false;
+
+            for (int z = minZ; z <= maxZ; z++)
+            for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                if (!GetVoxel(x, y, z)) continue;
+                if (signedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Removes all voxels within a sphere (sets them to empty).
         /// <para>
         /// Large removals collect candidate voxels in parallel but commit to the sparse voxel

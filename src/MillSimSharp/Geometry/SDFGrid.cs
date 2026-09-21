@@ -358,6 +358,32 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Checks whether any material sample inside <paramref name="worldBounds"/> also lies inside
+        /// the tool solid described by <paramref name="toolSignedDistance"/> (negative = inside).
+        /// Read-only: does not modify the SDF.
+        /// </summary>
+        internal bool IntersectsToolSolid(BoundingBox worldBounds, Func<Vector3, float> toolSignedDistance)
+        {
+            if (worldBounds == null) throw new ArgumentNullException(nameof(worldBounds));
+            if (toolSignedDistance == null) throw new ArgumentNullException(nameof(toolSignedDistance));
+
+            var (minX, minY, minZ) = WorldToVoxel(worldBounds.Min);
+            var (maxX, maxY, maxZ) = WorldToVoxel(worldBounds.Max);
+            ClampRegion(ref minX, ref minY, ref minZ, ref maxX, ref maxY, ref maxZ);
+            if (minX > maxX || minY > maxY || minZ > maxZ) return false;
+
+            for (int z = minZ; z <= maxZ; z++)
+            for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
+            {
+                if (_distances[x, y, z] >= 0f) continue;
+                if (toolSignedDistance(VoxelToWorld(x, y, z)) < 0f) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Applies a CSG difference for the tool solid described by <paramref name="toolSignedDistance"/>
         /// (negative inside the tool) over the given world bounds.
         /// </summary>

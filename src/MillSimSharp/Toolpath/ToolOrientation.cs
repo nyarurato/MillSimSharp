@@ -142,6 +142,41 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
+        /// Creates an orientation from a quaternion (useful for interpolated results).
+        /// </summary>
+        /// <param name="q">Rotation quaternion.</param>
+        /// <returns>Equivalent orientation as Euler angles.</returns>
+        public static ToolOrientation FromQuaternion(Quaternion q)
+        {
+            if (q.LengthSquared() < 1e-12f) return Default;
+            q = Quaternion.Normalize(q);
+
+            // Row-vector matrix M = Rz(c) * Ry(b) * Rx(a); its transpose is Rx(a) Ry(b) Rz(c).
+            var m = Matrix4x4.CreateFromQuaternion(q);
+
+            float b = MathF.Asin(Math.Clamp(m.M31, -1f, 1f));
+            float a = MathF.Atan2(-m.M32, m.M33);
+            float c = MathF.Atan2(-m.M21, m.M11);
+
+            const float radiansToDegrees = 180f / MathF.PI;
+            return new ToolOrientation(a * radiansToDegrees, b * radiansToDegrees, c * radiansToDegrees);
+        }
+
+        /// <summary>
+        /// Interpolates between two orientations with quaternion spherical linear interpolation
+        /// (shortest rotation).
+        /// </summary>
+        /// <param name="start">Start orientation.</param>
+        /// <param name="end">End orientation.</param>
+        /// <param name="t">Interpolation parameter (0 to 1).</param>
+        /// <returns>Interpolated orientation.</returns>
+        public static ToolOrientation Slerp(ToolOrientation start, ToolOrientation end, float t)
+        {
+            Quaternion q = Quaternion.Slerp(start.GetQuaternion(), end.GetQuaternion(), Math.Clamp(t, 0f, 1f));
+            return FromQuaternion(q);
+        }
+
+        /// <summary>
         /// Gets the rotation matrix for this orientation.
         /// </summary>
         /// <returns>4x4 rotation matrix.</returns>

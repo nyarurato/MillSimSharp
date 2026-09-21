@@ -14,7 +14,15 @@ namespace MillSimSharp.Simulation
         /// <summary>
         /// Ball end mill.
         /// </summary>
-        Ball
+        Ball,
+        /// <summary>
+        /// Bull nose (toroidal) end mill.
+        /// </summary>
+        BullNose,
+        /// <summary>
+        /// Tapered end mill.
+        /// </summary>
+        Taper
     }
 
     /// <summary>
@@ -49,6 +57,16 @@ namespace MillSimSharp.Simulation
         /// </summary>
         /// <returns>Cutting geometry used by the simulators.</returns>
         public abstract IToolGeometry GetCuttingGeometry();
+
+        /// <summary>
+        /// Gets the shank geometry for collision checks in tool-local coordinates
+        /// (origin = physical tip), or null when the shank is not modelled.
+        /// </summary>
+        /// <returns>Shank geometry or null.</returns>
+        public virtual IToolGeometry? GetShankGeometry()
+        {
+            return null;
+        }
 
         /// <summary>
         /// Protected constructor for Tool.

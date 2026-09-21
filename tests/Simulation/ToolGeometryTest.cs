@@ -189,5 +189,108 @@ namespace MillSimSharp.Tests.Simulation
 
             Assert.That(mismatches, Is.EqualTo(0), "Voxel and SDF backends must match for the same 5-axis pose sweep");
         }
+
+        [Test]
+        public void BullNoseAndTaperTools_ExposeTheirGeometry()
+        {
+            var bullNose = new BullNoseEndMill(10f, 30f, cornerRadius: 2f);
+            Assert.That(bullNose.Type, Is.EqualTo(ToolType.BullNose));
+            Assert.That(bullNose.BallCenterOffsetFromTip, Is.EqualTo(0f));
+            var bullGeometry = bullNose.GetCuttingGeometry();
+            Assert.That(bullGeometry, Is.InstanceOf<BullNoseEndMillGeometry>());
+            Assert.That(bullGeometry.CuttingCenterOffset, Is.EqualTo(0f));
+
+            var taper = new TaperEndMill(tipDiameter: 4f, length: 20f, taperAngleDegrees: 10f);
+            Assert.That(taper.Type, Is.EqualTo(ToolType.Taper));
+            var taperGeometry = taper.GetCuttingGeometry();
+            Assert.That(taperGeometry, Is.InstanceOf<TaperedEndMillGeometry>());
+            Assert.That(taperGeometry.CuttingCenterOffset, Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void BullNoseGeometry_SignedDistance_MatchesShape()
+        {
+            var geometry = new BullNoseEndMillGeometry(5f, 2f, 30f);
+
+            Assert.That(geometry.SignedDistance(new Vector3(0, 0, 0f)), Is.EqualTo(0f).Within(1e-5f), "tip");
+            Assert.That(geometry.SignedDistance(new Vector3(0, 0, -1f)), Is.EqualTo(1f).Within(1e-5f), "below tip");
+            Assert.That(geometry.SignedDistance(new Vector3(6, 0, 15f)), Is.EqualTo(1f).Within(1e-5f), "side");
+            Assert.That(geometry.SignedDistance(new Vector3(5, 0, 2f)), Is.EqualTo(0f).Within(1e-5f), "corner surface");
+            Assert.That(geometry.SignedDistance(new Vector3(3, 0, 2f)), Is.EqualTo(-2f).Within(1e-5f), "torus center");
+            Assert.That(geometry.SignedDistance(new Vector3(4, 0, 1f)),
+                Is.EqualTo(MathF.Sqrt(2f) - 2f).Within(1e-5f), "corner interior");
+        }
+
+        [Test]
+        public void TaperGeometry_SignedDistance_MatchesShape()
+        {
+            var geometry = new TaperedEndMillGeometry(2f, 10f, 20f);
+
+            float topRadius = 2f + 20f * MathF.Tan(10f * MathF.PI / 180f);
+            Assert.That(geometry.TopRadius, Is.EqualTo(topRadius).Within(1e-4f));
+
+            float radiusAt10 = 2f + 10f * MathF.Tan(10f * MathF.PI / 180f);
+            float expectedLateral = MathF.Cos(10f * MathF.PI / 180f);
+            Assert.That(geometry.SignedDistance(new Vector3(radiusAt10 + 1f, 0, 10f)),
+                Is.EqualTo(expectedLateral).Within(1e-3f), "lateral surface");
+            Assert.That(geometry.SignedDistance(new Vector3(0, 0, 10f)), Is.LessThan(0f), "interior");
+            Assert.That(geometry.SignedDistance(new Vector3(0, 0, -1f)), Is.EqualTo(1f).Within(1e-5f), "below tip");
+            Assert.That(geometry.SignedDistance(new Vector3(0, 0, 20f)), Is.EqualTo(0f).Within(1e-4f), "top face");
+        }
+
+        [TestCase(1.0f, true)]
+        [TestCase(1.0f, false)]
+        [TestCase(0.5f, true)]
+        public void VoxelBackend_CutPoint_MatchesVariableRadiusGeometry(float resolution, bool useBullNose)
+        {
+            var bbox = StockBounds;
+            var grid = new VoxelGrid(bbox, resolution);
+            Tool tool = useBullNose ? new BullNoseEndMill(10f, 30f, 2f) : new TaperEndMill(6f, 30f, 15f);
+            new CutterSimulator(grid).CutPoint(Vector3.Zero, tool);
+
+            IToolGeometry geometry = tool.GetCuttingGeometry();
+            var (sx, sy, sz) = grid.Dimensions;
+
+            int mismatches = 0;
+            for (int x = 0; x < sx; x++)
+            for (int y = 0; y < sy; y++)
+            for (int z = 0; z < sz; z++)
+            {
+                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                bool expectedMaterial = distance >= 0f;
+                if (grid.GetVoxel(x, y, z) != expectedMaterial) mismatches++;
+            }
+
+            Assert.That(mismatches, Is.EqualTo(0), "Voxel occupancy must match the tool geometry exactly");
+        }
+
+        [TestCase(1.0f, true)]
+        [TestCase(1.0f, false)]
+        [TestCase(0.5f, true)]
+        public void SdfBackend_CutPoint_MatchesVariableRadiusGeometry(float resolution, bool useBullNose)
+        {
+            var bbox = StockBounds;
+            var sdf = new SDFGrid(bbox, resolution, narrowBandWidth: 10);
+            Tool tool = useBullNose ? new BullNoseEndMill(10f, 30f, 2f) : new TaperEndMill(6f, 30f, 15f);
+            new SDFCutterSimulator(sdf).CutPoint(Vector3.Zero, tool);
+
+            IToolGeometry geometry = tool.GetCuttingGeometry();
+            var (sx, sy, sz) = sdf.Dimensions;
+
+            int mismatches = 0;
+            for (int x = 0; x < sx; x++)
+            for (int y = 0; y < sy; y++)
+            for (int z = 0; z < sz; z++)
+            {
+                Vector3 center = VoxelCenter(bbox, resolution, x, y, z);
+                float distance = geometry.SignedDistance(ToLocal(center, Vector3.Zero, Vector3.UnitZ));
+                bool expectedMaterial = distance >= 0f;
+                bool actualMaterial = sdf.GetDistance(x, y, z) < 0f;
+                if (actualMaterial != expectedMaterial) mismatches++;
+            }
+
+            Assert.That(mismatches, Is.EqualTo(0), "SDF sign must match the tool geometry exactly");
+        }
     }
 }

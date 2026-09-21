@@ -84,6 +84,15 @@ namespace MillSimSharp.Simulation
             Quaternion qStart = startOrientation.GetQuaternion();
             Quaternion qEnd = endOrientation.GetQuaternion();
 
+            if (distance > 1e-6f &&
+                Quaternion.Dot(qStart, qEnd) >= 1f - 1e-6f &&
+                MathF.Abs(Vector3.Dot(Vector3.Transform(Vector3.UnitZ, qStart), delta)) <= 1e-5f * distance)
+            {
+                // Exact swept solid for a straight move that is perpendicular to the tool axis.
+                RemoveSweptToolSolid(geometry, start, end, Vector3.Transform(Vector3.UnitZ, qStart));
+                return;
+            }
+
             for (int i = 0; i <= steps; i++)
             {
                 float t = i / (float)steps;
@@ -101,6 +110,30 @@ namespace MillSimSharp.Simulation
             _sdfGrid.CarveRegion(
                 worldBounds,
                 point => geometry.SignedDistance(ToolPoseMath.ToLocalPoint(point, tip, axisTowardSpindle)));
+        }
+
+        private void RemoveSweptToolSolid(IToolGeometry geometry, Vector3 start, Vector3 end, Vector3 axisTowardSpindle)
+        {
+            Vector3 motion = end - start;
+            float pathLength = motion.Length();
+            Vector3 motionDirection = motion / pathLength;
+
+            BoundingBox startBounds = ToolPoseMath.GetWorldBounds(geometry, start, axisTowardSpindle);
+            BoundingBox endBounds = ToolPoseMath.GetWorldBounds(geometry, end, axisTowardSpindle);
+            var worldBounds = new BoundingBox(
+                Vector3.Min(startBounds.Min, endBounds.Min),
+                Vector3.Max(startBounds.Max, endBounds.Max));
+
+            _sdfGrid.CarveRegion(worldBounds, point =>
+            {
+                Vector3 relative = point - start;
+                float axial = Vector3.Dot(relative, axisTowardSpindle);
+                Vector3 perpendicular = relative - axisTowardSpindle * axial;
+                float along = Vector3.Dot(perpendicular, motionDirection);
+                float clamped = Math.Clamp(along, 0f, pathLength);
+                float radial = (perpendicular - motionDirection * clamped).Length();
+                return geometry.SignedDistance(new Vector3(radial, 0f, axial));
+            });
         }
     }
 }

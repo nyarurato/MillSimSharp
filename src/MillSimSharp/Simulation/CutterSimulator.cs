@@ -97,14 +97,24 @@ namespace MillSimSharp.Simulation
             _grid.BeginEdit();
             try
             {
-                for (int i = 0; i <= steps; i++)
+                if (distance > 1e-6f &&
+                    Quaternion.Dot(qStart, qEnd) >= 1f - 1e-6f &&
+                    MathF.Abs(Vector3.Dot(Vector3.Transform(Vector3.UnitZ, qStart), delta)) <= 1e-5f * distance)
                 {
-                    float t = i / (float)steps;
-                    Vector3 position = Vector3.Lerp(start, end, t);
-                    Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
-                    Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
+                    // Exact swept solid for a straight move that is perpendicular to the tool axis.
+                    RemoveSweptToolSolid(geometry, start, end, Vector3.Transform(Vector3.UnitZ, qStart));
+                }
+                else
+                {
+                    for (int i = 0; i <= steps; i++)
+                    {
+                        float t = i / (float)steps;
+                        Vector3 position = Vector3.Lerp(start, end, t);
+                        Quaternion q = Quaternion.Slerp(qStart, qEnd, t);
+                        Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, q);
 
-                    RemoveToolSolid(geometry, position, axisTowardSpindle);
+                        RemoveToolSolid(geometry, position, axisTowardSpindle);
+                    }
                 }
             }
             finally
@@ -119,6 +129,30 @@ namespace MillSimSharp.Simulation
             _grid.RemoveVoxelsInRegion(
                 worldBounds,
                 point => geometry.SignedDistance(ToolPoseMath.ToLocalPoint(point, tip, axisTowardSpindle)));
+        }
+
+        private void RemoveSweptToolSolid(IToolGeometry geometry, Vector3 start, Vector3 end, Vector3 axisTowardSpindle)
+        {
+            Vector3 motion = end - start;
+            float pathLength = motion.Length();
+            Vector3 motionDirection = motion / pathLength;
+
+            BoundingBox startBounds = ToolPoseMath.GetWorldBounds(geometry, start, axisTowardSpindle);
+            BoundingBox endBounds = ToolPoseMath.GetWorldBounds(geometry, end, axisTowardSpindle);
+            var worldBounds = new BoundingBox(
+                Vector3.Min(startBounds.Min, endBounds.Min),
+                Vector3.Max(startBounds.Max, endBounds.Max));
+
+            _grid.RemoveVoxelsInRegion(worldBounds, point =>
+            {
+                Vector3 relative = point - start;
+                float axial = Vector3.Dot(relative, axisTowardSpindle);
+                Vector3 perpendicular = relative - axisTowardSpindle * axial;
+                float along = Vector3.Dot(perpendicular, motionDirection);
+                float clamped = Math.Clamp(along, 0f, pathLength);
+                float radial = (perpendicular - motionDirection * clamped).Length();
+                return geometry.SignedDistance(new Vector3(radial, 0f, axial));
+            });
         }
     }
 }

@@ -183,5 +183,83 @@ namespace MillSimSharp.Tests.Toolpath
             }
             Assert.That(differences, Is.EqualTo(0), "Batch and step execution must produce identical voxel states");
         }
+
+        [Test]
+        public void ToolOrientation_QuaternionRoundTrip_PreservesOrientation()
+        {
+            var samples = new[]
+            {
+                (a: 30f, b: -20f, c: 20f),
+                (a: 15f, b: 25f, c: -35f),
+                (a: 0f, b: 45f, c: 0f),
+                (a: 0f, b: 0f, c: 60f),
+                (a: 90f, b: 0f, c: 0f),
+            };
+
+            foreach (var (a, b, c) in samples)
+            {
+                var orientation = new ToolOrientation(a, b, c);
+                var roundTrip = ToolOrientation.FromQuaternion(orientation.GetQuaternion());
+
+                Vector3 expected = orientation.GetAxisTowardSpindle();
+                Vector3 actual = roundTrip.GetAxisTowardSpindle();
+                Assert.That(actual.X, Is.EqualTo(expected.X).Within(1e-4f), $"A={a} B={b} C={c}");
+                Assert.That(actual.Y, Is.EqualTo(expected.Y).Within(1e-4f), $"A={a} B={b} C={c}");
+                Assert.That(actual.Z, Is.EqualTo(expected.Z).Within(1e-4f), $"A={a} B={b} C={c}");
+            }
+        }
+
+        [Test]
+        public void ToolOrientation_Slerp_UsesShortestArc()
+        {
+            var start = new ToolOrientation(350, 0, 0);
+            var end = new ToolOrientation(10, 0, 0);
+
+            var midpoint = ToolOrientation.Slerp(start, end, 0.5f);
+            Vector3 axis = midpoint.GetAxisTowardSpindle();
+
+            // The shortest arc goes through A = 0 (vertical tool)
+            Assert.That(axis.X, Is.EqualTo(0f).Within(1e-4f));
+            Assert.That(axis.Y, Is.EqualTo(0f).Within(1e-4f));
+            Assert.That(axis.Z, Is.EqualTo(1f).Within(1e-4f));
+        }
+
+        [Test]
+        public void StraightSweep_IsExact_EvenWithLargeLinearStep()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var simulator = new CutterSimulator(grid);
+            simulator.Settings.MaxLinearStep = 1000f; // discrete sampling would only use the endpoints
+
+            var flat = new EndMill(10f, 30f, isBallEnd: false);
+            simulator.CutLinear(new Vector3(-5, 0, 0), new Vector3(5, 0, 0), flat);
+
+            foreach (float x in new[] { -2.5f, 0f, 2.5f })
+            {
+                Assert.That(grid.GetVoxelAtWorld(new Vector3(x, 0, 0)), Is.False,
+                    $"x={x} must be removed by the exact swept solid");
+            }
+        }
+
+        [Test]
+        public void SdfStraightSweep_IsExact_EvenWithLargeLinearStep()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));
+            var sdf = new SDFGrid(bbox, 1.0f, narrowBandWidth: 10);
+            var simulator = new SDFCutterSimulator(sdf);
+            simulator.Settings.MaxLinearStep = 1000f;
+
+            var flat = new EndMill(10f, 30f, isBallEnd: false);
+            simulator.CutLinear(new Vector3(-5, 0, 0), new Vector3(5, 0, 0), flat);
+
+            foreach (float x in new[] { -2.5f, 0f, 2.5f })
+            {
+                Assert.That(sdf.GetDistance(new Vector3(x, 0, 0.5f)), Is.GreaterThan(0f),
+                    $"x={x} must be removed by the exact swept solid");
+                Assert.That(sdf.GetDistance(new Vector3(x, 0, -1f)), Is.LessThan(0f),
+                    $"x={x} below the tool must remain material");
+            }
+        }
     }
 }
