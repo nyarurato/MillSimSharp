@@ -12,6 +12,11 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **Voxel-based material representation** for accurate, conservative milling simulation (fast incremental operations)
 - **Signed Distance Field (SDF) generation** (exact Euclidean Distance Transform) for high-quality mesh conversion and fast distance queries
 - **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
+- **Tool library** - flat, ball, bull-nose and tapered end mills sharing a common cutting-geometry abstraction (`IToolGeometry`)
+- **Collision / gouge detection** against voxel or SDF stock (`ToolCollisionDetector`)
+- **Tool changes and cancellable execution** with progress reporting and estimated machining time
+- **Additional exporters** for OBJ and PLY (plus binary/ASCII STL)
+- **Incremental voxel remeshing** with `ChunkedVoxelMeshBuilder`
 - **Flexible stock origin configuration** (center or corner-based)
 - **G-code parser independence** - bring your own parser; the viewer includes a small example parser (G0/G1/G2/G3, inch/mm, absolute/incremental)
 - **Flexible resolution** - adjust voxel size based on your needs
@@ -19,7 +24,14 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 
 **Default Configuration:**
 - Voxel resolution: 0.5mm
-- Work area: 100×100×100mm  
+- Work area: 100×100×100mm
+
+## Documentation
+
+- [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md) - release notes (latest: **0.2.0**)
+- [docs/SDF.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/SDF.md) - SDF internals: algorithms, precision and CSG behaviour (Japanese)
+- [samples/README.md](https://github.com/nyarurato/MillSimSharp/blob/master/samples/README.md) - sample project walkthroughs
+- [LICENSE.txt](https://github.com/nyarurato/MillSimSharp/blob/master/LICENSE.txt) - MIT license  
 
 ## Features
 
@@ -40,12 +52,15 @@ Configure stock origin placement:
 
 ## Installation
 
-The library is published to NuGet via CI.   
-you can install it with:
+The library is published to NuGet via CI. You can install it with:
 
 ```bash
 dotnet add package MillSimSharp
 ```
+
+> **Upgrading from 0.1.x?** 0.2.0 reworks the SDF core to the standard convention (negative = material,
+> positive = air, values in mm) and makes the physical tool tip the reference point for all positions.
+> See [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md) for the full list of changes.
 
 ## Quick Start (Core library)
 
@@ -110,6 +125,11 @@ var stockConfig = new StockConfiguration
 var bbox = stockConfig.GetBoundingBox();
 var sdfGrid = new SDFGrid(bbox, resolution: 0.5f, narrowBandWidth: 5);
 var simulator = new SDFCutterSimulator(sdfGrid);
+
+// Optional: tune pose interpolation
+// (defaults: 0.5 × resolution mm linear, 2° angular, adaptive sampling enabled)
+simulator.Settings.MaxLinearStep = 0.5f;
+simulator.Settings.MaxAngularStep = 1.0f;
 
 // 3. Define tool and create executor
 var tool = new EndMill(diameter: 10.0f, length: 100.0f, isBallEnd: true);
@@ -213,6 +233,23 @@ dotnet run --project src\MillSimSharp.Viewer
 
 If you have a G-code file at `src/MillSimSharp.Viewer/gcodes/test.nc`, the viewer will load and simulate it; otherwise it will run the demo scene.
 
+**Controls:**
+
+| Input | Action |
+|---|---|
+| Left drag | Rotate camera |
+| Middle drag | Pan camera |
+| Mouse wheel | Zoom in/out |
+| `M` | Toggle the end mill display model |
+| `T` | Toggle step-by-step execution mode |
+| `Space` | Execute the next step(s) (step mode) |
+| `Home` | Reset to the beginning (step mode) |
+| `PageUp` / `PageDown` | Cycle step size (1, 5, 10, 50, 100, 1000) |
+| `R` | Recompute the mesh |
+| `C` | Toggle backface culling |
+| `E` | Export the current mesh to STL |
+| `ESC` | Exit |
+
 ## Build and Test (Repository)
 
 > **Note:** This section applies to the source repository, not the NuGet package.
@@ -222,7 +259,16 @@ To build and run tests locally:
 ```powershell
 dotnet build
 dotnet test
+dotnet format MillSimSharp.sln --verify-no-changes
 ```
+
+CI builds the `netstandard2.1` target and all samples, enforces `dotnet format` and runs the test suite.
+
+## Versioning and Releases
+
+Package versions are derived from Git tags with [MinVer](https://github.com/adamralph/minver). Pushing a
+tag such as `0.2.0` triggers the publish workflow, which builds, tests and pushes the package to
+nuget.org and GitHub Packages. Release notes live in [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md).
 
 ## Requirements
 
@@ -268,6 +314,18 @@ BallCenter = PhysicalTip + AxisTowardSpindle * (Diameter / 2)
 
 CAM output that uses the ball center as its CL point must be converted at the importer/post layer; the core simulator always expects the physical tip.
 
+### Tool Types
+
+All tools derive from `Tool` and expose their cutting solid through `GetCuttingGeometry()`:
+
+| Tool | Constructor | Notes |
+|---|---|---|
+| `EndMill` | `(diameter, length, isBallEnd)` | Flat or ball end mill |
+| `BullNoseEndMill` | `(diameter, length, cornerRadius)` | Flat tip with a corner radius |
+| `TaperEndMill` | `(tipDiameter, length, taperAngleDegrees)` | Conical side wall |
+
+Use `ToolCollisionDetector.IntersectsMaterial(...)` to check a tool pose against a `VoxelGrid` or `SDFGrid` before cutting.
+
 ### Stock Origin Configuration
 
 Configure where the work origin (0,0,0) is located on the stock:
@@ -292,10 +350,16 @@ Interpolation step counts for cutting moves are derived from both linear and ang
 - **`MaxLinearStep`**: maximum linear step in mm (default: `0.5 ×` voxel resolution)
 - **`MaxAngularStep`**: maximum angular step in degrees (default: `2°`)
 - **`MinimumSteps`**: minimum steps per cutting command (default: `1`)
+- **`MaxChordError`**: maximum chord error of the curved cutting-center path in mm (default: `0.25`)
+- **`EnableAdaptiveSampling`**: feature-aware refinement so the cutting-center chord error stays below `MaxChordError` (default: `true`)
 
 Orientation is interpolated with quaternion slerp (shortest rotation), and steps are computed as
 `max(linearSteps, angularSteps, MinimumSteps)`. This guarantees smooth 5-axis orientation changes
 and ensures that **rotation-only moves** (same position, different orientation) still sweep the tool.
+
+SDF carving is parallelised per cell and the CSG narrow band / repair pass is limited to the affected
+region. As a reference, sample 05 (five-axis, 0.5mm resolution) simulates in roughly 12 seconds,
+about 8× faster than the previous implementation, with unchanged mesh output.
 
 ## License
 

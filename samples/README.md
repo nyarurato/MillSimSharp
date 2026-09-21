@@ -2,6 +2,9 @@
 
 This directory contains sample projects demonstrating how to use the MillSimSharp library.
 
+> See the [main README](../README.md) for installation and the core API, and
+> [CHANGELOG.md](../CHANGELOG.md) for release notes (latest: 0.2.0).
+
 ## Available Samples
 
 ### 01-BasicToolpath

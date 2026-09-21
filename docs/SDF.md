@@ -33,6 +33,12 @@ var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 
 // VoxelGridとバインドして増分更新を有効化
 sdfGrid.BindToVoxelGrid(voxelGrid);
+
+// 距離クエリ（ワールド座標、半ボクセルオフセットを考慮）
+float d = sdfGrid.GetDistance(worldPos);
+
+// 勾配（マテリアル → 空気方向の法線）
+Vector3 g = sdfGrid.GetGradient(worldPos);
 ```
 
 SDF だけを直接操作するワークフロー（`VoxelGrid` なし）も可能です:
@@ -63,10 +69,11 @@ sdfGrid.RemoveFiniteCylinder(start, end, radius);
 - **符号**: `cornerVal < 0` をマテリアルとして扱う（標準SDF）
 - **処理**:
   1. 各セルのエッジで符号変化を検出し、エッジ交点と勾配法線を収集
-  2. **法線重み付き QEF**（二次誤差関数）を解いてセル頂点を決定し、セル境界内へクランプ（0.45×res のインセットで非多様体化を防止）
-  3. **符号変化のあるグリッドエッジごとに**、そのエッジを共有する4セルの頂点からクワッド（2三角形）を生成（冗長クワッドを排除）
-  4. 法線に基づいてワインディングを調整（法線はマテリアルから空気へ向く）
-  5. 生成後に頂点をマージし、watertight なメッシュを維持（`tests/Geometry/DualContouringTest.cs` で検証）
+  2. **マス点まわりの正則化 QEF**（二次誤差関数、λ = trace × 1e-3）を解いてセル頂点を決定し、セル境界内へクランプ（0.45×res のインセットで非多様体化を防止）
+  3. 頂点を**ゼロ等値面へ射影**（ニュートン法、最大 0.5×res）して表面へ引き戻す
+  4. **符号変化のあるグリッドエッジごとに**、そのエッジを共有する4セルの頂点からクワッド（2三角形）を生成（冗長クワッドを排除）
+  5. セル角の符号（マテリアル / 空気）から外向きワインディングを決定し、法線は生成後の三角形から再計算
+  6. 生成後に頂点をマージし、watertight なメッシュを維持（`tests/Geometry/DualContouringTest.cs` で検証）
 
 ---
 
@@ -100,7 +107,7 @@ voxelGrid.RemoveVoxelsInSphere(position, radius);
 
 増分更新の結果は、同じボクセル状態から全再構築した結果と一致します（`tests/Geometry/SDFAccuracyTest.cs` で検証）。
 
-### 4. マテリアル除去（CSG）
+### 3. マテリアル除去（CSG）
 
 `SDFGrid` の除去APIは標準SDFの CSG difference として実装されています:
 
@@ -113,6 +120,13 @@ dResult = max(dCurrent, -dTool)
 | `RemoveSphere(center, r)` | 球 | |
 | `RemoveCapsule(start, end, r)` | 線分＋球（カプセル） | 球エンドミルの掃引 |
 | `RemoveFiniteCylinder(start, end, r)` | 平底の有限円柱 | フラットエンドミルの掃引。カプセルとは端面形状が異なる |
+
+書き込みは表面バンド（`narrowBandWidth` 分）をマージンとして拡張した領域のみに行い、書き込み後は
+影響範囲の距離を再計算します。工具 AABB が広い（シャンクが長い）場合でも、セル単位の並列書き込みで高速化されています。
+
+CSG 直後は 2 つの表面が交差する領域で距離の整合性が崩れやすいため、表面バンド内のセルに対して
+空気側の距離を EDT で再計算し、マテリアル側はツール形状の解析距離を優先するハイブリッド補正
+（`RepairDistances`）を行います。これによりクロスカット（交差部）のメッシュ破綻を抑制しています。
 
 ---
 
@@ -150,17 +164,19 @@ dResult = max(dCurrent, -dTool)
 ## 参考コード箇所
 
 ### コア実装
-- **公開API**: [`SDFGrid.cs`](file:///d:/workspace/projects/MillSimSharp/src/MillSimSharp/Geometry/SDFGrid.cs)
-- **EDTビルダー**: [`SignedDistanceFieldBuilder.cs`](file:///d:/workspace/projects/MillSimSharp/src/MillSimSharp/Geometry/SignedDistanceFieldBuilder.cs) (internal)
-- **Dual Contouring**: [`DualContouring.cs`](file:///d:/workspace/projects/MillSimSharp/src/MillSimSharp/Geometry/DualContouring.cs) (internal)
+- **公開API**: [`SDFGrid.cs`](../src/MillSimSharp/Geometry/SDFGrid.cs)
+- **EDTビルダー**: [`SignedDistanceFieldBuilder.cs`](../src/MillSimSharp/Geometry/SignedDistanceFieldBuilder.cs) (internal)
+- **Dual Contouring**: [`DualContouring.cs`](../src/MillSimSharp/Geometry/DualContouring.cs) (internal)
 
 ### テスト
 - **SDF基本テスト**: `tests/Geometry/SDFGridTest.cs`
 - **解析解・精度テスト**: `tests/Geometry/SDFAccuracyTest.cs`
 - **メッシュ変換テスト**: `tests/Geometry/MeshConverterTest.cs`
+- **Watertight / ワインディング**: `tests/Geometry/DualContouringTest.cs`
 
 ### サンプル
-- **Viewer**: [`VoxelViewerWindow.cs`](file:///d:/workspace/projects/MillSimSharp/src/MillSimSharp.Viewer/VoxelViewerWindow.cs) (デモアプリ)
+- **Viewer**: [`VoxelViewerWindow.cs`](../src/MillSimSharp.Viewer/VoxelViewerWindow.cs) (デモアプリ)
+- **5軸加工**: [`samples/05-FiveAxisMachining`](../samples/05-FiveAxisMachining/Program.cs)
 
 ---
 
@@ -182,8 +198,8 @@ MillSimSharp は以下の用途へ拡張するため、一般的な「負 = ソ�
 
 ### 決定論性
 
-SDF計算は EDT によりシングルスレッドで決定的に実行されます。
-VoxelGrid の除去も、SVO のスレッド安全性のため直列実行に統一されています（結果はスケジューリングに依存しません）。
+EDT と CSG はセル単位で独立に計算できるため並列化されていますが、各セルの結果は入力のみで決まるため、
+実行結果はスレッドスケジューリングに依存しません。VoxelGrid の除去も dirty bounds を集約して直列に実行されます。
 
 ---
 

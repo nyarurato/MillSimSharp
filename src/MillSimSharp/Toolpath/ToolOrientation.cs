@@ -6,26 +6,26 @@ namespace MillSimSharp.Toolpath
     /// <summary>
     /// Represents the orientation of the tool in 5-axis machining.
     /// 
-    /// <para><b>座標系の基準：</b></para>
+    /// <para><b>Coordinate system:</b></para>
     /// <list type="bullet">
-    /// <item>XYZ座標：工具先端（Physical Tip）の位置を表します（工具種別に依存しません）</item>
-    /// <item>デフォルト姿勢：工具軸はZ軸負方向（0, 0, -1）に向いています</item>
-    /// <item>回転中心：工具先端を中心に回転します</item>
-    /// <item>軸方向：<see cref="GetCuttingAxisDirection"/>（spindle → tip）と <see cref="GetAxisTowardSpindle"/>（tip → spindle）</item>
+    /// <item>XYZ coordinates: position of the physical tool tip (independent of the tool type)</item>
+    /// <item>Default pose: the tool axis points along the negative Z-axis (0, 0, -1)</item>
+    /// <item>Rotation center: the tool rotates about its physical tip</item>
+    /// <item>Axis directions: <see cref="GetCuttingAxisDirection"/> (spindle → tip) and <see cref="GetAxisTowardSpindle"/> (tip → spindle)</item>
     /// </list>
     /// 
-    /// <para><b>回転角度の定義（右手座標系）：</b></para>
+    /// <para><b>Rotation angle definition (right-handed coordinate system):</b></para>
     /// <list type="bullet">
-    /// <item>A軸：X軸周りの回転（+方向はY→Zへの回転）</item>
-    /// <item>B軸：Y軸周りの回転（+方向はZ→Xへの回転）</item>
-    /// <item>C軸：Z軸周りの回転（+方向はX→Yへの回転）</item>
-    /// <item>回転順序：C → B → A（オイラー角ZYX順）</item>
+    /// <item>A-axis: rotation around the X-axis (+ direction rotates Y toward Z)</item>
+    /// <item>B-axis: rotation around the Y-axis (+ direction rotates Z toward X)</item>
+    /// <item>C-axis: rotation around the Z-axis (+ direction rotates X toward Y)</item>
+    /// <item>Rotation order: C → B → A (ZYX Euler angles)</item>
     /// </list>
     /// 
-    /// <para><b>機械構成との関係：</b></para>
+    /// <para><b>Relation to machine configuration:</b></para>
     /// <para>
-    /// このクラスは工作機械の具体的な構成（ヘッド回転型／テーブル回転型）とは
-    /// 独立した「工具方向」を表現します。実際の機械への変換は後処理で行います。
+    /// This struct expresses the "tool direction" independently of the concrete machine configuration
+    /// (head rotary / table rotary). Conversion to a specific machine is done in post-processing.
     /// </para>
     /// </summary>
     public struct ToolOrientation
@@ -64,8 +64,8 @@ namespace MillSimSharp.Toolpath
         /// <summary>
         /// Gets the cutting axis direction (spindle -> physical tool tip) for the current orientation.
         /// <para>
-        /// デフォルトの工具方向（A=B=C=0）は、Z軸負方向（0, 0, -1）です。
-        /// これは、工具が下向き（ワークに向かって）に配置された状態を表します。
+        /// The default tool direction (A=B=C=0) is the negative Z-axis (0, 0, -1), which represents
+        /// the tool pointing downward (toward the workpiece).
         /// </para>
         /// </summary>
         /// <returns>Normalized direction vector pointing from the spindle toward the tool tip.</returns>
