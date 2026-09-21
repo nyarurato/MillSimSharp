@@ -42,9 +42,12 @@ namespace MillSimSharp.Simulation
         /// <param name="length">Cutting length from the physical tip in millimeters.</param>
         public TaperedEndMillGeometry(float tipRadius, float taperAngleDegrees, float length)
         {
-            if (tipRadius < 0) throw new ArgumentException("Tip radius must be non-negative.", nameof(tipRadius));
-            if (length <= 0) throw new ArgumentException("Length must be positive.", nameof(length));
-            if (taperAngleDegrees < 0 || taperAngleDegrees >= 90) throw new ArgumentException("Taper angle must be in [0, 90) degrees.", nameof(taperAngleDegrees));
+            if (!float.IsFinite(tipRadius) || tipRadius < 0)
+                throw new ArgumentException("Tip radius must be a finite non-negative number.", nameof(tipRadius));
+            if (!float.IsFinite(length) || length <= 0)
+                throw new ArgumentException("Length must be a finite positive number.", nameof(length));
+            if (!float.IsFinite(taperAngleDegrees) || taperAngleDegrees < 0 || taperAngleDegrees >= 90)
+                throw new ArgumentException("Taper angle must be in [0, 90) degrees.", nameof(taperAngleDegrees));
 
             TipRadius = tipRadius;
             TaperAngleDegrees = taperAngleDegrees;
@@ -69,20 +72,36 @@ namespace MillSimSharp.Simulation
         /// <inheritdoc />
         public float SignedDistance(Vector3 localPoint)
         {
+            // Exact signed distance of the solid of revolution: the 3D distance equals the signed
+            // distance in the meridian half-plane to the convex cross-section quadrilateral
+            // (0,0), (TipRadius,0), (TopRadius,Length), (0,Length). The axis edge (0,0)-(0,Length)
+            // is not a real surface and is excluded from the boundary distance.
             float radial = MathF.Sqrt(localPoint.X * localPoint.X + localPoint.Y * localPoint.Y);
             float z = localPoint.Z;
 
-            float cosAngle = MathF.Cos(TaperAngleDegrees * MathF.PI / 180f);
+            float bottom = DistanceToSegment(radial, z, 0f, 0f, TipRadius, 0f);
+            float lateral = DistanceToSegment(radial, z, TipRadius, 0f, TopRadius, Length);
+            float top = DistanceToSegment(radial, z, 0f, Length, TopRadius, Length);
+            float boundary = MathF.Min(bottom, MathF.Min(lateral, top));
+
             float radiusAtZ = TipRadius + (TopRadius - TipRadius) * (z / Length);
+            bool inside = z >= 0f && z <= Length && radial <= radiusAtZ;
+            return inside ? -boundary : boundary;
+        }
 
-            // Perpendicular distance to the lateral surface
-            float lateral = (radial - radiusAtZ) * cosAngle;
-
-            // Flat caps
-            float bottom = -z;
-            float top = z - Length;
-
-            return MathF.Max(lateral, MathF.Max(bottom, top));
+        private static float DistanceToSegment(float px, float pz, float ax, float az, float bx, float bz)
+        {
+            float abx = bx - ax;
+            float abz = bz - az;
+            float apx = px - ax;
+            float apz = pz - az;
+            float denominator = abx * abx + abz * abz;
+            float t = denominator > 1e-12f
+                ? Math.Clamp((apx * abx + apz * abz) / denominator, 0f, 1f)
+                : 0f;
+            float dx = apx - abx * t;
+            float dz = apz - abz * t;
+            return MathF.Sqrt(dx * dx + dz * dz);
         }
     }
 }

@@ -22,8 +22,8 @@ namespace MillSimSharp.Simulation
         public BullNoseEndMill(float diameter, float length, float cornerRadius)
             : base(diameter, length, ToolType.BullNose)
         {
-            if (cornerRadius <= 0 || cornerRadius > Diameter / 2.0f)
-                throw new ArgumentException("Corner radius must be positive and not exceed the tool radius.", nameof(cornerRadius));
+            if (!float.IsFinite(cornerRadius) || cornerRadius <= 0 || cornerRadius > Diameter / 2.0f)
+                throw new ArgumentException("Corner radius must be a finite positive number and not exceed the tool radius.", nameof(cornerRadius));
 
             CornerRadius = cornerRadius;
         }

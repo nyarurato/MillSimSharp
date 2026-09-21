@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grid dimensions are rounded up to whole voxels. `VoxelGrid.Bounds` and `SDFGrid.Bounds` now report the effective voxelized extent (`Min + Dimensions * Resolution`), so non-divisible requested sizes may expand by less than one voxel per axis.
 - Adaptive pose sampling now uses `RotationSweepRadius`, so rotation-only moves of flat, bull-nose and tapered tools are subdivided by the chord-error criterion (previously only ball tools were refined).
 - `SDFGrid.BindToVoxelGrid()` / `UpdateRegionFromVoxelGrid()` now throw `ArgumentException` when the supplied voxel grid has mismatched dimensions, resolution or bounds.
+- Public numeric inputs are validated: `SimulationSettings` step/chord values must be finite and positive and `MinimumSteps` must be at least 1, `ToolpathExecutor.StepSize` must be at least 1, tool and geometry dimensions must be finite, `BoundingBox` coordinates must be finite and grid resolutions must be finite.
+- `ToolCollisionDetector.IntersectsMaterial(...)` normalizes the tool axis and throws `ArgumentException` for zero or non-finite axes.
 
 ### Fixed
 
@@ -27,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mesh vertex comparers now satisfy the equality/hash contract (near-equal vertices could previously fail to merge)
 - G-code R-format arcs: positive R selects the minor arc and negative R the major arc; an arc without I/J/R or with an impossible radius is ignored instead of being emitted as a linear move
 - `VoxelGrid.RemoveVoxelsInSphere` / `RemoveVoxelsInCylinder` now use the strict `signedDistance < 0` convention (a voxel center exactly on the surface is preserved)
+- `VoxelGrid.RemoveVoxelsInCylinder(start, start, radius, flatEnds: true)` no longer removes a sphere for a zero-length cylinder (matches the SDF backend: a flat cylinder with no length has no volume)
+- `ToolPoseMath.GetWorldBounds()` now covers geometries whose local bounds extend below the physical tip (`LocalBounds.Min.Z < 0`)
+- `SDFGrid.RemoveFiniteCylinder` now uses the exact capped-cylinder distance (the previous `max()` of half-space distances under-reported distances outside the end-face corners)
+- `TaperedEndMillGeometry` now returns the exact capped-frustum signed distance (the previous lateral approximation was off by up to ~1.1 mm near the corners)
 
 ## [0.2.0] - 2026-09-21
 

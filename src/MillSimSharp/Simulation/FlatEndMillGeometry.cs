@@ -26,8 +26,10 @@ namespace MillSimSharp.Simulation
         /// <param name="length">Cutting length from the physical tip in millimeters.</param>
         public FlatEndMillGeometry(float radius, float length)
         {
-            if (radius <= 0) throw new ArgumentException("Radius must be positive.", nameof(radius));
-            if (length <= 0) throw new ArgumentException("Length must be positive.", nameof(length));
+            if (!float.IsFinite(radius) || radius <= 0)
+                throw new ArgumentException("Radius must be a finite positive number.", nameof(radius));
+            if (!float.IsFinite(length) || length <= 0)
+                throw new ArgumentException("Length must be a finite positive number.", nameof(length));
 
             Radius = radius;
             Length = length;

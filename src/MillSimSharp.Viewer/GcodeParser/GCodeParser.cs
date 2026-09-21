@@ -60,6 +60,30 @@ namespace MillSimSharp.Viewer
                 }
                 if (words.Count == 0) continue;
 
+                // Apply modal words (units / distance mode) before interpreting coordinates, so the
+                // result does not depend on the word order inside the block: "G91 G1 X1" and
+                // "X1 G91 G1" must be equivalent.
+                foreach (var (letter, value) in words)
+                {
+                    if (letter != 'G') continue;
+
+                    switch ((int)Math.Round(value))
+                    {
+                        case 20:
+                            unitScale = 25.4;
+                            break;
+                        case 21:
+                            unitScale = 1.0;
+                            break;
+                        case 90:
+                            absolute = true;
+                            break;
+                        case 91:
+                            absolute = false;
+                            break;
+                    }
+                }
+
                 bool hasAxis = false;
                 double nx = x, ny = y, nz = z;
                 double i = 0, j = 0, r = 0;

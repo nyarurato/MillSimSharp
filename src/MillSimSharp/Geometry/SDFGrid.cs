@@ -64,7 +64,7 @@ namespace MillSimSharp.Geometry
         public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10)
         {
             if (bounds == null) throw new ArgumentNullException(nameof(bounds));
-            if (resolution <= 0) throw new ArgumentException("Resolution must be positive.", nameof(resolution));
+            if (!float.IsFinite(resolution) || resolution <= 0) throw new ArgumentException("Resolution must be a finite positive number.", nameof(resolution));
             if (narrowBandWidth <= 0) throw new ArgumentException("Narrow band width must be positive.", nameof(narrowBandWidth));
 
             var size = bounds.Max - bounds.Min;
@@ -708,7 +708,16 @@ namespace MillSimSharp.Geometry
                         Vector3 toVoxel = VoxelToWorld(x, y, z) - center;
                         float axial = Vector3.Dot(toVoxel, axisDir);
                         float radial = (toVoxel - axisDir * axial).Length();
-                        float toolDistance = Math.Max(radial - radius, Math.Abs(axial) - halfLength);
+
+                        // Exact capped-cylinder distance (the max() of the two half-space distances
+                        // underestimates the distance outside the end-face corners).
+                        float radialDistance = radial - radius;
+                        float axialDistance = MathF.Abs(axial) - halfLength;
+                        float outside = MathF.Sqrt(
+                            MathF.Max(radialDistance, 0f) * MathF.Max(radialDistance, 0f) +
+                            MathF.Max(axialDistance, 0f) * MathF.Max(axialDistance, 0f));
+                        float toolDistance = MathF.Min(MathF.Max(radialDistance, axialDistance), 0f) + outside;
+
                         Carve(x, y, z, -toolDistance);
                     }
 

@@ -21,7 +21,7 @@ namespace MillSimSharp.Simulation
         public TaperEndMill(float tipDiameter, float length, float taperAngleDegrees)
             : base(tipDiameter, length, ToolType.Taper)
         {
-            if (taperAngleDegrees < 0 || taperAngleDegrees >= 90)
+            if (!float.IsFinite(taperAngleDegrees) || taperAngleDegrees < 0 || taperAngleDegrees >= 90)
                 throw new ArgumentException("Taper angle must be in [0, 90) degrees.", nameof(taperAngleDegrees));
 
             TaperAngleDegrees = taperAngleDegrees;

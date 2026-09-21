@@ -49,10 +49,24 @@ namespace MillSimSharp.Toolpath
         /// </summary>
         public event Action<int, int>? ProgressChanged;
 
+        private int _stepSize = 1;
+
         /// <summary>
-        /// Number of commands to execute per step (default: 1).
+        /// Number of commands to execute per step (default: 1). Must be at least 1.
         /// </summary>
-        public int StepSize { get; set; } = 1;
+        public int StepSize
+        {
+            get => _stepSize;
+            set
+            {
+                if (value < 1)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(StepSize), value, "StepSize must be at least 1.");
+                }
+
+                _stepSize = value;
+            }
+        }
 
         /// <summary>
         /// Current command index in the loaded command list.

@@ -232,5 +232,14 @@ namespace MillSimSharp.Tests.Toolpath
             Assert.Throws<OperationCanceledException>(() => executor.ExecuteCommands(commands, cts.Token));
             Assert.That(executed, Is.EqualTo(2), "Execution must stop after cancellation");
         }
+
+        [Test]
+        public void StepSize_BelowOne_Throws()
+        {
+            var executor = new ToolpathExecutor(new CutterSimulator(CreateGrid()), new EndMill(2f, 10f, false), Vector3.Zero);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => executor.StepSize = 0);
+            Assert.Throws<ArgumentOutOfRangeException>(() => executor.StepSize = -3);
+        }
     }
 }

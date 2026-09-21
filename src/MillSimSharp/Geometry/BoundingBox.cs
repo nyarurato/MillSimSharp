@@ -30,9 +30,13 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Creates a bounding box from minimum and maximum corners.
+        /// Both corners must contain only finite coordinates.
         /// </summary>
         public BoundingBox(Vector3 min, Vector3 max)
         {
+            if (!IsFinite(min) || !IsFinite(max))
+                throw new ArgumentException("Bounds must contain only finite coordinates.");
+
             if (max.X < min.X || max.Y < min.Y || max.Z < min.Z)
                 throw new ArgumentException("Max must be greater than or equal to Min in all dimensions.");
 
@@ -41,15 +45,24 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Creates a bounding box from center point and size.
+        /// Creates a bounding box from center point and size. Both must contain only finite
+        /// coordinates and the size must be non-negative.
         /// </summary>
         public static BoundingBox FromCenterAndSize(Vector3 center, Vector3 size)
         {
+            if (!IsFinite(center) || !IsFinite(size))
+                throw new ArgumentException("Center and size must contain only finite coordinates.");
+
             if (size.X < 0 || size.Y < 0 || size.Z < 0)
                 throw new ArgumentException("Size must be non-negative in all dimensions.");
 
             Vector3 halfSize = size / 2.0f;
             return new BoundingBox(center - halfSize, center + halfSize);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
         }
 
         /// <summary>

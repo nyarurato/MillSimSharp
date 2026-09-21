@@ -77,8 +77,10 @@ namespace MillSimSharp.Simulation
         /// <exception cref="ArgumentException"></exception>
         protected Tool(float diameter, float length, ToolType type)
         {
-            if (diameter <= 0) throw new ArgumentException("Diameter must be positive", nameof(diameter));
-            if (length <= 0) throw new ArgumentException("Length must be positive", nameof(length));
+            if (!float.IsFinite(diameter) || diameter <= 0)
+                throw new ArgumentException("Diameter must be a finite positive number.", nameof(diameter));
+            if (!float.IsFinite(length) || length <= 0)
+                throw new ArgumentException("Length must be a finite positive number.", nameof(length));
 
             Diameter = diameter;
             Length = length;

@@ -327,6 +327,12 @@ All tools derive from `Tool` and expose their cutting solid through `GetCuttingG
 
 Use `ToolCollisionDetector.IntersectsMaterial(...)` to check a tool pose against a `VoxelGrid` or `SDFGrid` before cutting.
 
+Notes:
+
+- The stock is sampled at voxel centers, so a contact that does not reach any voxel center (for example a sub-resolution tool passing through a voxel corner) may not be detected. The check is resolution-limited.
+- The tool axis may be any finite non-zero vector; it is normalized internally. Zero or non-finite axes throw `ArgumentException`.
+- Custom `IToolGeometry` implementations must be solids of revolution around the local +Z (tool) axis: the simulators map world points to `(radial distance, 0, axial distance)`, so azimuthal features (for example elliptical cross-sections) cannot be represented.
+
 ### Stock Origin Configuration
 
 Configure where the work origin (0,0,0) is located on the stock:

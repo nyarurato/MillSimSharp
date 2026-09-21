@@ -21,6 +21,17 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void TestNonFiniteResolution_IsRejected()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(bbox, float.NaN));
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(bbox, float.PositiveInfinity));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(bbox, float.NaN));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(bbox, float.PositiveInfinity));
+        }
+
+        [Test]
         public void TestInitialState()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));

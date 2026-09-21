@@ -150,8 +150,8 @@ namespace MillSimSharp.Geometry
         /// <param name="resolution">Voxel size in millimeters (default: 0.5mm).</param>
         public VoxelGrid(BoundingBox workArea, float resolution = 0.5f)
         {
-            if (resolution <= 0)
-                throw new ArgumentException("Resolution must be positive.", nameof(resolution));
+            if (!float.IsFinite(resolution) || resolution <= 0)
+                throw new ArgumentException("Resolution must be a finite positive number.", nameof(resolution));
 
             _resolution = resolution;
 
@@ -562,8 +562,10 @@ namespace MillSimSharp.Geometry
 
             if (length < 1e-6f)
             {
-                // Degenerate case: cylinder is a sphere
-                RemoveVoxelsInSphere(start, radius);
+                // Degenerate cases match the SDF backend semantics:
+                // capsule -> sphere, flat-ended cylinder -> no volume (nothing removed).
+                if (!flatEnds)
+                    RemoveVoxelsInSphere(start, radius);
                 return;
             }
 

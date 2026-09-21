@@ -67,5 +67,90 @@ namespace MillSimSharp.Tests.Simulation
 
             Assert.That(collides, Is.False);
         }
+
+        // ---------------------------------------------------------------------
+        // V4: axis vector contract
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void IntersectsMaterial_ScaledAxis_MatchesUnitAxis()
+        {
+            // Material exists only near the top of the shank (z in [6, 9]), so scaling the axis to
+            // (0,0,2) would push every center out of the solid unless the axis is normalized.
+            var bbox = new BoundingBox(new Vector3(-2, -2, 6), new Vector3(2, 2, 9));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var shank = new FlatEndMillGeometry(2f, 10f);
+
+            bool unit = ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, Vector3.UnitZ);
+            bool scaled = ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, new Vector3(0, 0, 2));
+
+            Assert.That(unit, Is.True);
+            Assert.That(scaled, Is.EqualTo(unit),
+                "A finite non-zero axis must behave like its normalized direction");
+        }
+
+        [Test]
+        public void IntersectsMaterial_ZeroOrNonFiniteAxis_Throws()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var shank = new FlatEndMillGeometry(2f, 10f);
+
+            Assert.Throws<ArgumentException>(() =>
+                ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, Vector3.Zero));
+            Assert.Throws<ArgumentException>(() =>
+                ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, new Vector3(float.NaN, 0, 1)));
+            Assert.Throws<ArgumentException>(() =>
+                ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, new Vector3(0, 0, float.PositiveInfinity)));
+        }
+
+        // ---------------------------------------------------------------------
+        // V5: LocalBounds.Min.Z contract
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void IntersectsMaterial_GeometryExtendingBelowTip_IsDetected()
+        {
+            // A test-only solid spans local z in [-5, +5]; the stock material exists only below z = -1.
+            var bbox = new BoundingBox(new Vector3(-2, -2, -4), new Vector3(2, 2, -1));
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            var geometry = new TestSpanningCapsuleGeometry(radius: 1f, halfLength: 5f);
+            bool collides = ToolCollisionDetector.IntersectsMaterial(grid, geometry, Vector3.Zero, Vector3.UnitZ);
+
+            Assert.That(collides, Is.True,
+                "World bounds must cover negative local Z (solid extends below the physical tip)");
+        }
+
+        // ---------------------------------------------------------------------
+        // V6: center-sampling limitation (documented behavior)
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void Collision_SubResolutionTool_IsCenterSampled()
+        {
+            // Known limitation: only material voxel centers are tested. A 0.2mm tool at a voxel
+            // corner is continuously inside the stock but misses every center.
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var tiny = new FlatEndMillGeometry(0.1f, 5f);
+
+            bool collides = ToolCollisionDetector.IntersectsMaterial(grid, tiny, Vector3.Zero, Vector3.UnitZ);
+
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(0.5f, 0.5f, 0.5f)), Is.True);
+            Assert.That(collides, Is.False,
+                "Known limitation: sub-resolution tools passing through a voxel corner are not detected");
+        }
+
+        [Test]
+        public void Collision_CornerGrazingTool_IsCenterSampled()
+        {
+            // Radius 0.5 at the corner (0,0,0): the nearest voxel centers are 0.707mm away.
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var graze = new FlatEndMillGeometry(0.5f, 4f);
+
+            bool collides = ToolCollisionDetector.IntersectsMaterial(grid, graze, Vector3.Zero, Vector3.UnitZ);
+
+            Assert.That(collides, Is.False,
+                "Known limitation: a tool that only cuts voxel corners/edges is not detected by center sampling");
+        }
     }
 }

@@ -171,5 +171,38 @@ namespace MillSimSharp.Tests.Viewer
             Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
                 "The ignored arc must leave the position unchanged");
         }
+
+        [Test]
+        public void Parse_ModalWords_OrderIndependent()
+        {
+            // G91 before or after the axis word must produce the same target.
+            var relativeFirst = GCodeParser.ParseText("G90\nG1 X5\nG91 G1 X1\n", Vector3.Zero);
+            var relativeLast = GCodeParser.ParseText("G90\nG1 X5\nX1 G91 G1\n", Vector3.Zero);
+
+            Assert.That(((G1Move)relativeLast[^1]).Target, Is.EqualTo(new Vector3(6, 0, 0)));
+            Assert.That(((G1Move)relativeLast[^1]).Target, Is.EqualTo(((G1Move)relativeFirst[^1]).Target),
+                "Relative mode must apply regardless of the word order in the block");
+
+            // G20 before or after the axis word must produce the same (inch-scaled) target.
+            var inchFirst = GCodeParser.ParseText("G21\nG20 G1 X1\n", Vector3.Zero);
+            var inchLast = GCodeParser.ParseText("G21\nX1 G20 G1\n", Vector3.Zero);
+
+            Assert.That(((G1Move)inchLast[^1]).Target.X, Is.EqualTo(25.4f).Within(1e-3f));
+            Assert.That(((G1Move)inchLast[^1]).Target.X, Is.EqualTo(((G1Move)inchFirst[^1]).Target.X).Within(1e-3f),
+                "Unit mode must apply regardless of the word order in the block");
+        }
+
+        [Test]
+        public void Parse_ArcMode_IsModal()
+        {
+            // The second line continues the G3 arc without repeating the G code.
+            var points = ParseArcTargets("G3 X0 Y1 R1\nX-1 Y0 R1\n", new Vector3(1, 0, 0));
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1].X, Is.EqualTo(-1f).Within(1e-3f));
+            Assert.That(points[^1].Y, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(HasPointNear(points, -0.7071f, 0.7071f), Is.True,
+                "The second arc (modal G3 from (0,1) to (-1,0)) must pass through (-0.707, 0.707)");
+        }
     }
 }

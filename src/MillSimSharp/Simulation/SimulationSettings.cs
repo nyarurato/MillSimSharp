@@ -9,32 +9,76 @@ namespace MillSimSharp.Simulation
     /// </summary>
     public class SimulationSettings
     {
+        private float _maxLinearStep = 0.5f;
+        private float _maxAngularStep = 2f;
+        private int _minimumSteps = 1;
+        private float _maxChordError = 0.25f;
+
         /// <summary>
         /// Maximum linear interpolation step in millimeters.
-        /// Default is set by each simulator to 0.5 * voxel resolution.
+        /// Must be a finite positive value (default 0.5; each simulator sets 0.5 * resolution).
         /// </summary>
-        public float MaxLinearStep { get; set; } = 0.5f;
+        public float MaxLinearStep
+        {
+            get => _maxLinearStep;
+            set => _maxLinearStep = ValidatePositiveFinite(value, nameof(MaxLinearStep));
+        }
 
         /// <summary>
-        /// Maximum angular interpolation step in degrees (default: 2 degrees).
+        /// Maximum angular interpolation step in degrees (default 2 degrees).
+        /// Must be a finite positive value.
         /// </summary>
-        public float MaxAngularStep { get; set; } = 2f;
+        public float MaxAngularStep
+        {
+            get => _maxAngularStep;
+            set => _maxAngularStep = ValidatePositiveFinite(value, nameof(MaxAngularStep));
+        }
 
         /// <summary>
-        /// Minimum number of interpolation steps per cutting command (default: 1).
+        /// Minimum number of interpolation steps per cutting command (default 1).
+        /// Must be at least 1.
         /// </summary>
-        public int MinimumSteps { get; set; } = 1;
+        public int MinimumSteps
+        {
+            get => _minimumSteps;
+            set
+            {
+                if (value < 1)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(MinimumSteps), value,
+                        "MinimumSteps must be at least 1.");
+                }
+
+                _minimumSteps = value;
+            }
+        }
 
         /// <summary>
         /// Maximum chord deviation of the curved cutting-center path in millimeters (default: 0.25).
+        /// Must be a finite positive value.
         /// </summary>
-        public float MaxChordError { get; set; } = 0.25f;
+        public float MaxChordError
+        {
+            get => _maxChordError;
+            set => _maxChordError = ValidatePositiveFinite(value, nameof(MaxChordError));
+        }
 
         /// <summary>
         /// Enables feature-aware refinement so that the cutting-center chord error stays below
         /// <see cref="MaxChordError"/> (default: true).
         /// </summary>
         public bool EnableAdaptiveSampling { get; set; } = true;
+
+        private static float ValidatePositiveFinite(float value, string propertyName)
+        {
+            if (!float.IsFinite(value) || value <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(propertyName, value,
+                    "Value must be a finite positive number.");
+            }
+
+            return value;
+        }
 
         /// <summary>
         /// Computes the number of interpolation steps for a move based on linear and angular motion.

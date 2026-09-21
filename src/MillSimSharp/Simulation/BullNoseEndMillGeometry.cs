@@ -33,10 +33,14 @@ namespace MillSimSharp.Simulation
         /// <param name="length">Cutting length from the physical tip in millimeters.</param>
         public BullNoseEndMillGeometry(float radius, float cornerRadius, float length)
         {
-            if (radius <= 0) throw new ArgumentException("Radius must be positive.", nameof(radius));
-            if (length <= 0) throw new ArgumentException("Length must be positive.", nameof(length));
-            if (cornerRadius <= 0) throw new ArgumentException("Corner radius must be positive.", nameof(cornerRadius));
-            if (cornerRadius > radius) throw new ArgumentException("Corner radius must not exceed the tool radius.", nameof(cornerRadius));
+            if (!float.IsFinite(radius) || radius <= 0)
+                throw new ArgumentException("Radius must be a finite positive number.", nameof(radius));
+            if (!float.IsFinite(length) || length <= 0)
+                throw new ArgumentException("Length must be a finite positive number.", nameof(length));
+            if (!float.IsFinite(cornerRadius) || cornerRadius <= 0)
+                throw new ArgumentException("Corner radius must be a finite positive number.", nameof(cornerRadius));
+            if (cornerRadius > radius)
+                throw new ArgumentException("Corner radius must not exceed the tool radius.", nameof(cornerRadius));
 
             Radius = radius;
             CornerRadius = cornerRadius;

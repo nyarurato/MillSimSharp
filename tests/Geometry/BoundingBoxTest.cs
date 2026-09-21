@@ -27,6 +27,19 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void TestNonFiniteConstruction_IsRejected()
+        {
+            Assert.Throws<ArgumentException>(() =>
+                new BoundingBox(new Vector3(float.NaN, 0, 0), new Vector3(1, 1, 1)));
+            Assert.Throws<ArgumentException>(() =>
+                new BoundingBox(new Vector3(0, 0, 0), new Vector3(float.PositiveInfinity, 1, 1)));
+            Assert.Throws<ArgumentException>(() =>
+                BoundingBox.FromCenterAndSize(new Vector3(0, 0, 0), new Vector3(float.NaN, 1, 1)));
+            Assert.Throws<ArgumentException>(() =>
+                BoundingBox.FromCenterAndSize(new Vector3(0, 0, float.NegativeInfinity), new Vector3(1, 1, 1)));
+        }
+
+        [Test]
         public void TestSize()
         {
             var min = new Vector3(0, 0, 0);

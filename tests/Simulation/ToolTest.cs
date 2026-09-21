@@ -50,5 +50,26 @@ namespace MillSimSharp.Tests.Simulation
             Assert.Throws<ArgumentException>(() => new FlatEndMillGeometry(1f, 0f));
             Assert.Throws<ArgumentException>(() => new BallEndMillGeometry(-1f, 10f));
         }
+
+        [Test]
+        public void TestNonFiniteDimensions_AreRejected()
+        {
+            Assert.Throws<ArgumentException>(() => new EndMill(float.NaN, 10f));
+            Assert.Throws<ArgumentException>(() => new EndMill(10f, float.NaN));
+            Assert.Throws<ArgumentException>(() => new EndMill(float.PositiveInfinity, 10f));
+            Assert.Throws<ArgumentException>(() => new EndMill(10f, float.PositiveInfinity));
+
+            Assert.Throws<ArgumentException>(() => new FlatEndMillGeometry(float.NaN, 10f));
+            Assert.Throws<ArgumentException>(() => new FlatEndMillGeometry(5f, float.NaN));
+            Assert.Throws<ArgumentException>(() => new BallEndMillGeometry(float.NaN, 10f));
+            Assert.Throws<ArgumentException>(() => new BallEndMillGeometry(5f, float.NaN));
+            Assert.Throws<ArgumentException>(() => new BullNoseEndMillGeometry(5f, float.NaN, 10f));
+            Assert.Throws<ArgumentException>(() => new BullNoseEndMillGeometry(5f, 2f, float.NaN));
+            Assert.Throws<ArgumentException>(() => new TaperedEndMillGeometry(float.NaN, 10f, 20f));
+            Assert.Throws<ArgumentException>(() => new TaperedEndMillGeometry(2f, float.NaN, 20f));
+
+            Assert.Throws<ArgumentException>(() => new BullNoseEndMill(10f, 30f, float.NaN));
+            Assert.Throws<ArgumentException>(() => new TaperEndMill(4f, 20f, float.NaN));
+        }
     }
 }

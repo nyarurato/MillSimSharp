@@ -1,3 +1,4 @@
+using System;
 using MillSimSharp.Simulation;
 using NUnit.Framework;
 
@@ -55,6 +56,26 @@ namespace MillSimSharp.Tests.Simulation
             };
 
             Assert.That(settings.ComputeSteps(0f, 180f, cuttingCenterOffset: 5f), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void SimulationSettings_NonPositiveOrNonFiniteValues_Throw()
+        {
+            var settings = new SimulationSettings();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxLinearStep = 0f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxLinearStep = -1f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxLinearStep = float.NaN);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxLinearStep = float.PositiveInfinity);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxAngularStep = 0f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxAngularStep = float.NaN);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxChordError = -0.1f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MaxChordError = float.NaN);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MinimumSteps = 0);
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.MinimumSteps = -5);
         }
     }
 }

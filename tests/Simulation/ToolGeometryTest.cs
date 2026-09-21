@@ -324,5 +324,29 @@ namespace MillSimSharp.Tests.Simulation
                         }
             }
         }
+
+        [Test]
+        public void NonAxisymmetricGeometry_LosesYExtent()
+        {
+            // Documented limitation: the production path maps world points to (radial, 0, axial),
+            // so a non-axisymmetric solid cannot be represented. An elliptical geometry
+            // (X radius 4, Y radius 1) is treated as a solid of revolution with radius 4.
+            var geometry = new TestEllipticalGeometry(xRadius: 4f, yRadius: 1f, length: 10f);
+            var tool = new TestGeometryTool(geometry, diameter: 8f, length: 10f);
+
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(25, 25, 25));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            new CutterSimulator(grid).CutPoint(Vector3.Zero, tool);
+
+            // The true ellipse keeps (0, 2, 5) outside (Y radius is 1)...
+            Assert.That(geometry.SignedDistance(new Vector3(0f, 2f, 5f)), Is.GreaterThan(0f));
+            // ...but the production cut removes it anyway (Y information is discarded).
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(0f, 2f, 5f)), Is.False,
+                "Known limitation: non-axisymmetric geometry is treated as a solid of revolution");
+
+            // The X extent is honoured because it matches the collapsed radial direction.
+            Assert.That(geometry.SignedDistance(new Vector3(2f, 0f, 5f)), Is.LessThan(0f));
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(2f, 0f, 5f)), Is.False);
+        }
     }
 }
