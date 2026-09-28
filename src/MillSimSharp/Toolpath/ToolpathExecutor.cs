@@ -118,7 +118,9 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
-        /// Load commands for step-by-step execution.
+        /// Load commands for step-by-step execution. Resets the executor state (command cursor,
+        /// pose, tool baseline and estimated time) like <see cref="Reset"/>; it does not restore
+        /// stock material removed through the simulator.
         /// </summary>
         /// <param name="commands">List of commands to execute.</param>
         public void LoadCommands(IEnumerable<IToolpathCommand> commands)
@@ -170,7 +172,11 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
-        /// Reset to initial state.
+        /// Reset to initial state: command cursor, pose, tool baseline and estimated time.
+        /// <para>
+        /// This resets the executor only. Stock material removed through the simulator is not
+        /// restored (the executor does not own the material state).
+        /// </para>
         /// </summary>
         public void Reset()
         {

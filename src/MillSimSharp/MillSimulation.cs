@@ -114,7 +114,13 @@ namespace MillSimSharp
         }
 
         /// <summary>
-        /// Resets the grid to initial state (all material).
+        /// Resets the simulation to its initial state (all material).
+        /// <para>
+        /// <see cref="Grid"/>, <see cref="Simulator"/> and <see cref="Executor"/> are replaced with
+        /// new instances; only the current tool is carried over. References and event subscriptions
+        /// to the old instances are not migrated, so re-subscribe to the new <see cref="Grid"/> /
+        /// <see cref="Executor"/> after calling this method.
+        /// </para>
         /// </summary>
         public void Reset()
         {

@@ -59,6 +59,14 @@ failed final command does not report `IsCompleted`. Material removal is not tran
 that throws part-way through may leave partial cuts in the stock even though the cursor is not
 advanced (cursor rollback is not an undo).
 
+### Reset and Lifecycle
+
+`MillSimulation.Reset()` resets the stock to all material and replaces the grid, simulator and
+executor instances; only the current tool is carried over. References and event subscriptions to
+the old instances are not migrated, so re-subscribe to the new `Grid` / `Executor` after a reset.
+`ToolpathExecutor.Reset()` and `LoadCommands()` only reset executor state (cursor, pose, tool
+baseline, estimated time) and do not restore removed stock material.
+
 ## Installation
 
 The library is published to NuGet via CI. You can install it with:

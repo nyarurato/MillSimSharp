@@ -331,6 +331,90 @@ namespace MillSimSharp.Tests.Integration
         }
 
         [Test]
+        public void MillSimulation_Reset_ReplacesGridSimulatorAndExecutor()
+        {
+            var sim = CreateSimulation();
+            sim.ExecuteToolpath(new List<IToolpathCommand> { new G1Move(new Vector3(5, 0, 0)) });
+
+            var oldGrid = sim.Grid;
+            var oldSimulator = sim.Simulator;
+            var oldExecutor = sim.Executor;
+
+            sim.Reset();
+
+            Assert.That(sim.Grid, Is.Not.SameAs(oldGrid));
+            Assert.That(sim.Simulator, Is.Not.SameAs(oldSimulator));
+            Assert.That(sim.Executor, Is.Not.SameAs(oldExecutor));
+            Assert.That(sim.GetMaterialVoxelCount(), Is.EqualTo(1000),
+                "Reset must restore the 10x10x10mm stock as all material");
+        }
+
+        [Test]
+        public void MillSimulation_Reset_KeepsCurrentTool()
+        {
+            var sim = CreateSimulation();
+            var newTool = new EndMill(5.0f, 20.0f, false);
+            sim.Executor.ExecuteCommand(new ToolChange(newTool)); // tool state is owned by the executor
+
+            sim.Reset();
+
+            Assert.That(sim.Tool, Is.SameAs(newTool), "Reset must carry the executor's current tool over");
+            Assert.That(sim.Executor.CurrentTool, Is.SameAs(newTool));
+        }
+
+        [Test]
+        public void Executor_Reset_DoesNotRestoreStock()
+        {
+            var sim = CreateSimulation();
+            sim.ExecuteToolpath(new List<IToolpathCommand> { new G1Move(new Vector3(5, 0, 0)) });
+            int afterCut = sim.GetMaterialVoxelCount();
+            Assert.That(afterCut, Is.LessThan(1000));
+
+            sim.Executor.Reset();
+
+            Assert.That(sim.GetMaterialVoxelCount(), Is.EqualTo(afterCut),
+                "Executor.Reset must not restore stock material");
+            Assert.That(sim.Executor.CurrentCommandIndex, Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void Executor_LoadCommands_DoesNotRestoreStock()
+        {
+            var sim = CreateSimulation();
+            sim.ExecuteToolpath(new List<IToolpathCommand> { new G1Move(new Vector3(5, 0, 0)) });
+            int afterCut = sim.GetMaterialVoxelCount();
+            Assert.That(afterCut, Is.LessThan(1000));
+
+            sim.Executor.LoadCommands(new List<IToolpathCommand> { new G0Move(new Vector3(1, 0, 0)) });
+
+            Assert.That(sim.GetMaterialVoxelCount(), Is.EqualTo(afterCut),
+                "Executor.LoadCommands must not restore stock material");
+            Assert.That(sim.Executor.CurrentCommandIndex, Is.EqualTo(-1));
+        }
+
+        [Test]
+        public void MillSimulation_Reset_OldGridSubscribers_AreNotConnectedToNewGrid()
+        {
+            var sim = CreateSimulation();
+            var oldGrid = sim.Grid;
+            int oldGridEvents = 0;
+            oldGrid.VoxelsChanged += (minX, minY, minZ, maxX, maxY, maxZ) => oldGridEvents++;
+
+            sim.Reset();
+
+            Assert.That(sim.Grid, Is.Not.SameAs(oldGrid));
+
+            int newGridEvents = 0;
+            sim.Grid.VoxelsChanged += (minX, minY, minZ, maxX, maxY, maxZ) => newGridEvents++;
+            sim.Grid.SetVoxelAtWorld(new Vector3(1, 1, 1), false);
+
+            Assert.That(oldGridEvents, Is.EqualTo(0),
+                "Subscriptions on the replaced grid must not receive new grid events");
+            Assert.That(newGridEvents, Is.EqualTo(1),
+                "Subscriptions on the new grid must work normally");
+        }
+
+        [Test]
         public void TestExportToStlViaSdf()
         {
             var stockConfig = new StockConfiguration
