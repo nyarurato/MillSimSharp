@@ -727,16 +727,18 @@ namespace MillSimSharp.Viewer
                 {
                     var mesh = t.Result;
                     bool applied = false;
-                    lock (_meshLock)
+
+                    // A result is only shown when it is still current AND no follow-up build is
+                    // queued; otherwise the queued build's mesh will be shown instead of flashing
+                    // the outdated one.
+                    if (_meshScheduler.TryApplyResult(generation))
                     {
-                        // Discard the result if a newer generation was started meanwhile (for
-                        // example after a fast mode switch): the newer mesh must win.
-                        if (_meshScheduler.IsCurrent(generation))
+                        lock (_meshLock)
                         {
                             _pendingMesh = mesh;
                             _meshUpdatePending = true;
-                            applied = true;
                         }
+                        applied = true;
                     }
 
                     if (applied)
@@ -746,7 +748,7 @@ namespace MillSimSharp.Viewer
                     }
                     else
                     {
-                        Console.WriteLine("Discarding stale mesh result (a newer generation is active).");
+                        Console.WriteLine("Discarding stale mesh result (a newer generation is active or queued).");
                     }
                 }
                 else if (t.IsFaulted)

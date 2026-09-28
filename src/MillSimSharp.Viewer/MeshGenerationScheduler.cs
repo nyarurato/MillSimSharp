@@ -7,9 +7,11 @@ namespace MillSimSharp.Viewer
     /// follow-up request is queued, and results from stale generations are rejected.
     /// <para>
     /// Usage: call <see cref="TryBegin"/> before starting a build. When it returns a generation,
-    /// start the build and check <see cref="IsCurrent"/> with that generation when the result
-    /// arrives. Call <see cref="Complete"/> when the build finishes; if it returns true, a request
-    /// arrived while the build was running and another build must be started.
+    /// start the build and check <see cref="TryApplyResult"/> with that generation when the result
+    /// arrives: a result is only applied when it is still the latest generation and no follow-up
+    /// request is queued, so an outdated mesh is never displayed while a newer build is pending.
+    /// Call <see cref="Complete"/> afterwards; if it returns true, a request arrived while the
+    /// build was running and another build must be started.
     /// </para>
     /// </summary>
     public sealed class MeshGenerationScheduler
@@ -86,8 +88,23 @@ namespace MillSimSharp.Viewer
         }
 
         /// <summary>
-        /// Returns true when the given generation may still apply its result (no newer build has
-        /// started since).
+        /// Returns true when the given generation may apply its result right now: it is still the
+        /// latest generation and no follow-up build is queued. A queued follow-up means its own mesh
+        /// will be shown instead, so the outdated result is not displayed even briefly.
+        /// </summary>
+        /// <param name="generation">Generation returned by <see cref="TryBegin"/>.</param>
+        public bool TryApplyResult(int generation)
+        {
+            lock (_sync)
+            {
+                return generation == _generation && !_rerunQueued;
+            }
+        }
+
+        /// <summary>
+        /// Returns true when the given generation is still the latest one. Unlike
+        /// <see cref="TryApplyResult"/> this ignores queued follow-ups; it is used for status
+        /// reporting where a pending rerun does not matter.
         /// </summary>
         /// <param name="generation">Generation returned by <see cref="TryBegin"/>.</param>
         public bool IsCurrent(int generation)

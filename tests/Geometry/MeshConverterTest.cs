@@ -174,6 +174,9 @@ namespace MillSimSharp.Tests.Geometry
             Console.WriteLine($"Index usage: min={minUsage}, max={maxUsage}, avg={avgUsage:F2}");
 
             Assert.That(maxUsage, Is.GreaterThan(0), "the mesh must reference its vertices");
+            Assert.That(minUsage, Is.GreaterThan(0),
+                $"every merged vertex must be referenced by at least one triangle "
+                + $"(unused vertices would be invisible output; min={minUsage}, total={totalVerts})");
         }
 
         [Test]
