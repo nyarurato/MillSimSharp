@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Binary / ASCII STL export now writes facet normals computed from the triangle geometry (cross product). Previously the first vertex normal of each triangle was copied, which for voxel meshes is an averaged surface normal that may differ from the facet orientation (more than 8° in measured cases). Degenerate triangles are written with a zero normal; OBJ / PLY vertex normals are unchanged.
+
+### Fixed
+
+- `ToolpathExecutor.ExecuteNextSteps` advanced its command cursor before executing the command, so a command that threw was skipped by the next call and a failed final command could report `IsCompleted == true`. The cursor is now committed only after successful execution; material removal remains non-transactional (partial cuts from a failing command are kept).
+
 ## [0.2.1] - 2026-09-22
 
 ### Changed
@@ -70,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release: voxel-based 3-axis simulation, SDF mesh conversion, STL export, viewer and samples.
 
+[Unreleased]: https://github.com/nyarurato/MillSimSharp/compare/0.2.1...HEAD
 [0.2.0]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0-beta...0.2.0
 [0.2.1]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0...0.2.1
 [0.2.0-beta]: https://github.com/nyarurato/MillSimSharp/compare/0.1.0...0.2.0-beta

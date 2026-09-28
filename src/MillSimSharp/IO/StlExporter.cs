@@ -153,8 +153,7 @@ namespace MillSimSharp.IO
                 Vector3 v1 = mesh.Vertices[mesh.Indices[i + 0]];
                 Vector3 v2 = mesh.Vertices[mesh.Indices[i + 1]];
                 Vector3 v3 = mesh.Vertices[mesh.Indices[i + 2]];
-                Vector3 n = mesh.Normals[mesh.Indices[i + 0]];
-                triangles.Add(new Triangle(v1, v2, v3, n));
+                triangles.Add(new Triangle(v1, v2, v3, ComputeFacetNormal(v1, v2, v3)));
             }
             return triangles;
         }
@@ -170,10 +169,20 @@ namespace MillSimSharp.IO
                 Vector3 v1 = mesh.Vertices[mesh.Indices[i + 0]];
                 Vector3 v2 = mesh.Vertices[mesh.Indices[i + 1]];
                 Vector3 v3 = mesh.Vertices[mesh.Indices[i + 2]];
-                Vector3 n = mesh.Normals[mesh.Indices[i + 0]];
-                triangles.Add(new Triangle(v1, v2, v3, n));
+                triangles.Add(new Triangle(v1, v2, v3, ComputeFacetNormal(v1, v2, v3)));
             }
             return triangles;
+        }
+
+        /// <summary>
+        /// Computes the geometric facet normal from the triangle winding. Degenerate triangles
+        /// (zero area or non-finite input) get a zero normal; the face is still written.
+        /// </summary>
+        private static Vector3 ComputeFacetNormal(Vector3 v1, Vector3 v2, Vector3 v3)
+        {
+            Vector3 normal = Vector3.Cross(v2 - v1, v3 - v1);
+            float length = normal.Length();
+            return length > 0f ? normal / length : Vector3.Zero;
         }
 
 

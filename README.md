@@ -50,6 +50,15 @@ Configure stock origin placement:
 - **`StockOriginType.MinCorner`**: Origin at minimum corner (X-, Y-, Z-), stock extends in positive directions
 - **`StockOriginType.Center`**: Origin at center, stock extends equally in all directions  
 
+### Step-by-Step Execution
+
+`ToolpathExecutor.ExecuteNextSteps()` runs one step at a time (`StepSize` commands per call) for
+interactive / incremental simulation. The command cursor is committed only after a command returns
+successfully, so a command that throws is retried on the next call instead of being skipped, and a
+failed final command does not report `IsCompleted`. Material removal is not transactional: a command
+that throws part-way through may leave partial cuts in the stock even though the cursor is not
+advanced (cursor rollback is not an undo).
+
 ## Installation
 
 The library is published to NuGet via CI. You can install it with:

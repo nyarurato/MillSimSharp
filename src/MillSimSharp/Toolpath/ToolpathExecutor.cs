@@ -135,6 +135,19 @@ namespace MillSimSharp.Toolpath
         /// <summary>
         /// Execute the next step(s) based on StepSize.
         /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The command cursor (<see cref="CurrentCommandIndex"/>) is committed only after a command
+        /// returns without throwing. A command that throws is therefore retried by the next call
+        /// instead of being skipped, and a failed final command leaves <see cref="IsCompleted"/>
+        /// false.
+        /// </para>
+        /// <para>
+        /// Material removal is not transactional: a command that throws part-way through may leave
+        /// partial cuts in the stock even though the cursor is not advanced. The cursor rollback is
+        /// not an undo, and <see cref="ProgressChanged"/> only fires for committed commands.
+        /// </para>
+        /// </remarks>
         /// <param name="count">Number of commands to execute. If -1, uses StepSize.</param>
         /// <returns>Number of commands actually executed.</returns>
         public int ExecuteNextSteps(int count = -1)
@@ -146,8 +159,9 @@ namespace MillSimSharp.Toolpath
 
             while (executed < stepsToExecute && _currentCommandIndex < _commands.Count - 1)
             {
-                _currentCommandIndex++;
-                ExecuteCore(_commands[_currentCommandIndex]);
+                int nextIndex = _currentCommandIndex + 1;
+                ExecuteCore(_commands[nextIndex]);
+                _currentCommandIndex = nextIndex;
                 ProgressChanged?.Invoke(_currentCommandIndex + 1, TotalCommands);
                 executed++;
             }
