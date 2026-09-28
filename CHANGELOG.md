@@ -8,31 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ToolOrientation.FromAxisTowardSpindle(axis)` for IJK-style pose input (shortest-rotation orientation; any finite non-zero axis is accepted).
-- `SDFGrid.SyncFromVoxelGrid()` rebuilds the field from its source voxel grid (also after `UnbindFromVoxelGrid`).
-- `ChunkedVoxelMeshBuilder` per-chunk API (`UpdateChunks`, `GetChunkMesh`, `GetChunkCoordinates`) for incremental rendering.
+- IJK-style pose input `ToolOrientation.FromAxisTowardSpindle`, `SDFGrid.SyncFromVoxelGrid()`, and a per-chunk `ChunkedVoxelMeshBuilder` API (`UpdateChunks` / `GetChunkMesh` / `GetChunkCoordinates`).
 
 ### Changed
 
-- **Zero-size bounds are rejected** by `VoxelGrid` and `SDFGrid` (`ArgumentException`); an unconfigured `MillSimulation` stock now fails fast instead of building a degenerate grid.
-- **STL export writes geometric facet normals** instead of copied vertex normals; degenerate triangles get a zero normal.
-- **`CoordinateTransform.InterpolateOrientation` uses shortest-rotation slerp**, matching the simulator pose path (the midpoint of 350° → 10° is now 0°, not 180°). The returned Euler values may be an equivalent representation with different angles (e.g. 350° → -10°).
-- Voxel mesh output is deterministic: the same grid always yields identical vertex arrays and STL bytes (the vertex order may differ from previous releases).
-- Documented material-state and lifecycle contracts: `FromVoxelGrid` = one-time snapshot, `BindToVoxelGrid` = future changes only, `UnbindFromVoxelGrid` keeps SDF-native edits; `MillSimulation.Reset()` replaces the grid / simulator / executor (tool kept, subscriptions not migrated); executor `Reset` / `LoadCommands` do not restore stock.
-- Documented accuracy and collision scope in `docs/Accuracy.md`: voxel-center sampling, pose-sampling error, narrow band clamping, and single-pose, cutting-edge-only collision checks (no holder / fixture / target part).
-- CI builds now use `-warnaserror`, matching the documented zero-warning policy.
+- **Zero-size bounds are rejected** by `VoxelGrid` / `SDFGrid`; an unconfigured `MillSimulation` stock now fails fast instead of building a degenerate grid.
+- **STL export writes geometric facet normals** (degenerate triangles get a zero normal).
+- **`CoordinateTransform.InterpolateOrientation` uses shortest-rotation slerp**; the returned Euler values may be an equivalent representation (e.g. 350° → -10°).
+- Voxel mesh output is deterministic: the same grid always yields identical vertex arrays and STL bytes (vertex order may differ from previous releases).
+- Documented contracts: SDF material state (`FromVoxelGrid` snapshot, `BindToVoxelGrid` future changes only, unbind keeps SDF-native edits), reset / lifecycle, and accuracy / collision scope (`docs/Accuracy.md`).
+- CI builds now use `-warnaserror`.
 
 ### Fixed
 
-- `ToolpathExecutor.ExecuteNextSteps` no longer skips a command that throws: the cursor advances only after success and a failed last command is not reported as completed.
-- Viewer G-code parser: inconsistent I/J arcs are ignored without moving the tool, valid arcs far from the origin are no longer misjudged (the radius check uses double precision), the last chord lands exactly on the commanded end (previously the tool position and the emitted arc could jump apart), and the active plane is tracked modally so arcs selected in G18/G19 are ignored instead of running as XY arcs.
-- Viewer G-code parser: a block with an unsupported G code (G28, canned cycles, work offsets, ...) no longer runs as the previous modal motion (e.g. `G28 X0` after `G1 X10` cut back to the origin); such blocks emit no motion and keep the position, while their modal unit / distance words still apply.
-- `VoxelGrid` rejects work areas whose voxel count exceeds `int.MaxValue` at construction (the count is bounded per axis, so the check itself cannot overflow; previously the public counts overflowed, e.g. 200 mm at 0.1 mm resolution); grids up to the `int` boundary keep working.
-- `SDFGrid` rejects bounds whose dense sample count exceeds `int.MaxValue` at construction, mirroring the `VoxelGrid` limit (previously extreme finite inputs could wrap a dimension or attempt an oversized allocation).
-- `SimulationSettings.ComputeSteps` throws `ArgumentOutOfRangeException` when a move would require more than `int.MaxValue` interpolation steps (previously the `int` conversion wrapped and silently fell back to the minimum step count, undersampling the move).
-- `CoordinateTransform.ToolTipToSpindlePosition` documentation corrected: the returned spindle position stays in the input (work) coordinate system; apply `WorkToMachine` when machine coordinates are needed (the implementation never applied a work-origin offset).
-- Viewer step mode requests the initial step-state mesh when it is enabled, queues mesh regeneration requests that arrive while a build is running, and applies a pending result only when it is still the latest generation and no follow-up request is queued - re-checked when the mesh is actually drawn, with a queued regeneration keeping the old result invalid until its own build starts, so a result superseded before the next frame is discarded instead of reaching the screen.
-- `ToolOrientation.FromAxisTowardSpindle` now returns the actual shortest rotation (the previous construction added an unnecessary roll, e.g. 98.4° instead of 90°), only the exact `-Z` direction is pinned to the 180° X flip (near-antipodal axes keep their direction), and tool axes are normalized robustly: tiny (but non-zero) and very large finite axes are accepted by `FromAxisTowardSpindle` and `ToolCollisionDetector.IntersectsMaterial` as documented.
+- `ToolpathExecutor.ExecuteNextSteps` retries a throwing command instead of skipping it, and a failed final command is no longer reported as completed.
+- Viewer G-code parser: invalid or unsupported-plane I/J arcs are ignored without moving the tool, the last chord lands exactly on the commanded end, and unsupported G-code blocks (e.g. `G28`) no longer run as the previous modal motion.
+- `VoxelGrid` / `SDFGrid` reject grids beyond `int.MaxValue` voxels / samples, and `SimulationSettings.ComputeSteps` fails explicitly instead of overflowing.
+- `ToolOrientation.FromAxisTowardSpindle` returns the actual shortest rotation, and tiny or huge (but finite non-zero) axes are accepted by it and `ToolCollisionDetector`.
+- Viewer step mode cannot show a stale mesh (initial step-state mesh, queued regeneration, and draw-time validation).
+- `CoordinateTransform.ToolTipToSpindlePosition` documentation corrected: the result stays in work coordinates; use `WorkToMachine` for machine coordinates.
 
 ## [0.2.1] - 2026-09-22
 
