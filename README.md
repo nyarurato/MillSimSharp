@@ -9,7 +9,7 @@ The repository also contains a lightweight viewer app for visualization and demo
 MillSimSharp simulates CNC milling operations using both voxel-based representations and SDFs. It is designed for accurate material removal simulation and for producing high-quality meshes from the resulting geometry. It provides:
 
 - **3-axis and 5-axis machining support** with tool orientation control
-- **Voxel-based material representation** for accurate, conservative milling simulation (fast incremental operations)
+- **Voxel-based material representation** for milling simulation (fast incremental operations)
 - **Signed Distance Field (SDF) generation** (exact Euclidean Distance Transform) for high-quality mesh conversion and fast distance queries
 - **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
 - **Tool library** - flat, ball, bull-nose and tapered end mills sharing a common cutting-geometry abstraction (`IToolGeometry`)
@@ -17,14 +17,15 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **Tool changes and cancellable execution** with progress reporting and estimated machining time
 - **Additional exporters** for OBJ and PLY (plus binary/ASCII STL)
 - **Incremental voxel remeshing** with `ChunkedVoxelMeshBuilder` (per-chunk meshes for incremental rendering)
+- **Material and removed volume queries** on both backends (`GetMaterialVolume`, `GetRemovedVolume`, `CountMaterialSamples`) - center-sampled and resolution-limited
 - **Flexible stock origin configuration** (center or corner-based)
-- **G-code parser independence** - bring your own parser; the viewer includes a small example parser (G0/G1/G2/G3, inch/mm, absolute/incremental)
+- **G-code parser independence** - bring your own parser; the viewer includes a small example parser (G0/G1/G2/G3 in the XY plane, inch/mm, absolute/incremental; unsupported G-code blocks are ignored)
 - **Flexible resolution** - adjust voxel size based on your needs
 - **Simple API** for toolpath execution
 
 **Default Configuration:**
-- Voxel resolution: 0.5mm
-- Work area: 100×100×100mm
+- Voxel resolution: 0.5mm (grid default)
+- Work area: no implicit default; configure `StockConfiguration.WorkSize` (an unconfigured, zero-size stock is rejected)
 
 ## Documentation
 
@@ -289,7 +290,8 @@ dotnet test
 dotnet format MillSimSharp.sln --verify-no-changes
 ```
 
-CI builds the `netstandard2.1` target and all samples, enforces `dotnet format` and runs the test suite.
+CI builds with `-warnaserror` (core solution, `netstandard2.1` target and samples), enforces
+`dotnet format` and runs both test projects (core and viewer).
 
 ## Versioning and Releases
 
@@ -382,6 +384,15 @@ change:
   chunk-local indices and normalized per-chunk normals) for incremental rendering.
 - `GetChunkCoordinates()` enumerates the cached chunks.
 
+### Material and Removed Volume
+
+Both backends expose center-sampled volume queries (resolution-limited, matching the voxel / SDF
+sample grid):
+
+- `VoxelGrid.CountMaterialVoxels()` / `SDFGrid.CountMaterialSamples()`: number of material samples.
+- `GetMaterialVolume()` / `GetRemovedVolume()` (both grids): material and air volume in mm^3 inside the effective bounds.
+- `SDFGrid.FromVoxelGrid` reproduces the source voxel occupancy exactly in the sample signs, so both volumes match the source grid.
+
 ### Stock Origin Configuration
 
 Configure where the work origin (0,0,0) is located on the stock:
@@ -414,8 +425,13 @@ Interpolation step counts for cutting moves are derived from both linear and ang
 - **`EnableAdaptiveSampling`**: feature-aware refinement so the cutting-center chord error stays below `MaxChordError` (default: `true`)
 
 Orientation is interpolated with quaternion slerp (shortest rotation), and steps are computed as
-`max(linearSteps, angularSteps, MinimumSteps)`. This guarantees smooth 5-axis orientation changes
+`max(linearSteps, angularSteps, MinimumSteps)`. This keeps 5-axis orientation changes smooth
 and ensures that **rotation-only moves** (same position, different orientation) still sweep the tool.
+
+Straight moves with a constant orientation perpendicular to the tool axis use an exact swept solid;
+all other moves sample poses. Configured step and chord-error values are used as given (no hidden
+floors), and a move that would require more than `int.MaxValue` steps throws
+`ArgumentOutOfRangeException`.
 
 SDF carving is parallelised per cell and the CSG narrow band / repair pass is limited to the affected
 region. As a reference, sample 05 (five-axis, 0.5mm resolution) simulates in roughly 12 seconds,

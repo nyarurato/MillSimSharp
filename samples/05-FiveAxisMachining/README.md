@@ -178,6 +178,10 @@ Vector3 spindlePos = CoordinateTransform.ToolTipToSpindlePosition(
 );
 ```
 
+The result stays in the input (work) coordinate system: `ToolTipToSpindlePosition` only offsets the
+tip along the tool axis and does not apply a work-origin offset. Apply
+`CoordinateTransform.WorkToMachine(spindlePos, workOrigin)` when machine coordinates are needed.
+
 ### Tool Orientation
 
 The tool orientation uses Euler angles in the order Z-Y-X (C-B-A):
@@ -194,15 +198,16 @@ The default tool direction is along the negative Z-axis (0, 0, -1).
 
 - `MaxLinearStep` (default `0.5 × resolution`)
 - `MaxAngularStep` (default `2°`)
-- `MaxChordError` for adaptive refinement of the curved cutting-center path (ball tools)
+- `MaxChordError` for adaptive refinement of the curved cutting-center path (any tool; the rotation radius comes from `IToolGeometry.LocalBounds`)
 - `MinimumSteps`
 
 Orientation is interpolated with quaternion slerp (shortest rotation), and rotation-only moves
 (same position, changed orientation) are swept as well. Straight moves with constant orientation
 and no axial motion use an exact swept solid.
 
-This sample overrides `MaxLinearStep` to `1.0mm` (the chord sagitta of the R5 ball is only ~0.025mm)
-to keep the sample fast while staying well below the 0.5mm voxel size.
+This sample overrides `MaxLinearStep` to `1.0mm` to keep the sample fast. The angular step and the
+adaptive refinement still bound the curved cutting-center chord error by `MaxChordError` (0.25mm,
+below the 0.5mm voxel size).
 
 ### Coordinate Systems
 
