@@ -622,16 +622,16 @@ namespace MillSimSharp.Tests.Simulation
         private const float SweepToolLength = 10f;
         private const float SweepDistance = 8f;
 
-        private static BoundingBox SweptBounds(Vector3 start, Vector3 end, Tool tool)
+        private static BoundingBox SweptBounds(Vector3 start, Vector3 end, float maxRadius, float toolLength)
         {
             // The tool extends from the tip toward the spindle (+Z), so the bounds must cover
             // [tip, tip + length], not just the sweep path.
             Vector3 center = (start + end) * 0.5f;
-            center.Z += 0.5f * tool.Length;
+            center.Z += 0.5f * toolLength;
             return BoundingBox.FromCenterAndSize(center, new Vector3(
-                Vector3.Distance(start, end) + 2f * tool.Diameter + 2f,
-                tool.Diameter + 2f,
-                tool.Length + 2f));
+                Vector3.Distance(start, end) + 2f * maxRadius + 2f,
+                2f * maxRadius + 2f,
+                toolLength + 2f));
         }
 
         private static double BoundingBoxSurfaceArea(BoundingBox bounds)
@@ -689,7 +689,7 @@ namespace MillSimSharp.Tests.Simulation
             var end = new Vector3(SweepDistance, 0, 0);
             var (analyticVolume, surfaceArea) = FlatSweepSolid();
 
-            var grid = new VoxelGrid(SweptBounds(start, end, tool), resolution);
+            var grid = new VoxelGrid(SweptBounds(start, end, SweepRadius, SweepToolLength), resolution);
             new CutterSimulator(grid).CutLinear(start, end, tool);
 
             double removedVolume = MeasureRemovedVolume(grid);
@@ -712,7 +712,7 @@ namespace MillSimSharp.Tests.Simulation
             var start = new Vector3(0, 0, 0);
             var end = new Vector3(SweepDistance, 0, 0);
             double analyticVolume = BallSweepSolidVolume();
-            var bounds = SweptBounds(start, end, tool);
+            var bounds = SweptBounds(start, end, SweepRadius, SweepToolLength);
             // Conservative bound: the swept solid lies inside its bounding box and a shape's surface
             // area does not exceed its bounding box surface area.
             double surfaceArea = BoundingBoxSurfaceArea(bounds);
@@ -741,7 +741,7 @@ namespace MillSimSharp.Tests.Simulation
             var end = new Vector3(SweepDistance, 0, 0);
             var (analyticVolume, surfaceArea) = FlatSweepSolid();
 
-            var sdf = new SDFGrid(SweptBounds(start, end, tool), resolution, narrowBandWidth: 4);
+            var sdf = new SDFGrid(SweptBounds(start, end, SweepRadius, SweepToolLength), resolution, narrowBandWidth: 4);
             new SDFCutterSimulator(sdf).CutLinear(start, end, tool);
 
             double removedVolume = MeasureRemovedVolume(sdf);
@@ -764,7 +764,7 @@ namespace MillSimSharp.Tests.Simulation
             var start = new Vector3(0, 0, 0);
             var end = new Vector3(SweepDistance, 0, 0);
             double analyticVolume = BallSweepSolidVolume();
-            var bounds = SweptBounds(start, end, tool);
+            var bounds = SweptBounds(start, end, SweepRadius, SweepToolLength);
             double surfaceArea = BoundingBoxSurfaceArea(bounds);
 
             var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
@@ -924,6 +924,226 @@ namespace MillSimSharp.Tests.Simulation
 
             Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
                 "positive control: the circle must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        // ---------------------------------------------------------------------
+        // D4: bull-nose / taper / tilted 5-axis sweep volumes
+        // ---------------------------------------------------------------------
+
+        private const float BullNoseCornerRadius = 1.5f;
+        private const float TaperTipRadius = 2f;
+        private const float TaperAngleDegrees = 10f;
+
+        /// <summary>
+        /// Analytic volume of a bull-nose tool swept perpendicular to its axis. Profile radius:
+        /// R - rc for the flat core (z in [0, rc]), then the torus corner
+        /// (R - rc) + sqrt(rc^2 - (rc - z)^2), then the full radius R up to L. With
+        /// I1 = integral r dz and I2 = integral r^2 dz, V = 2*d*I1 + pi*I2.
+        /// </summary>
+        private static double BullNoseSweptVolume()
+        {
+            double a = SweepRadius - BullNoseCornerRadius;
+            double integralR = a * BullNoseCornerRadius
+                + Math.PI * BullNoseCornerRadius * BullNoseCornerRadius / 4.0
+                + SweepRadius * (SweepToolLength - BullNoseCornerRadius);
+            double integralR2 = a * a * BullNoseCornerRadius
+                + a * Math.PI * BullNoseCornerRadius * BullNoseCornerRadius / 2.0
+                + 2.0 / 3.0 * BullNoseCornerRadius * BullNoseCornerRadius * BullNoseCornerRadius
+                + SweepRadius * SweepRadius * (SweepToolLength - BullNoseCornerRadius);
+            return 2.0 * SweepDistance * integralR + Math.PI * integralR2;
+        }
+
+        /// <summary>
+        /// Analytic volume of a tapered tool swept perpendicular to its axis. The profile is
+        /// r(z) = tipRadius + z*tan(angle), so with I1 = integral r dz and I2 = integral r^2 dz,
+        /// V = 2*d*I1 + pi*I2.
+        /// </summary>
+        private static double TaperSweptVolume()
+        {
+            double t = Math.Tan(TaperAngleDegrees * Math.PI / 180.0);
+            double topRadius = TaperTipRadius + SweepToolLength * t;
+            double integralR = TaperTipRadius * SweepToolLength + t * SweepToolLength * SweepToolLength / 2.0;
+            double integralR2 = (topRadius * topRadius * topRadius - TaperTipRadius * TaperTipRadius * TaperTipRadius)
+                / (3.0 * t);
+            return 2.0 * SweepDistance * integralR + Math.PI * integralR2;
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BullNoseSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            var tool = new BullNoseEndMill(SweepRadius * 2f, SweepToolLength, cornerRadius: BullNoseCornerRadius);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = BullNoseSweptVolume();
+
+            var bounds = SweptBounds(start, end, SweepRadius, SweepToolLength);
+            var grid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(grid).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(grid);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel bull-nose sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BullNoseSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new BullNoseEndMill(SweepRadius * 2f, SweepToolLength, cornerRadius: BullNoseCornerRadius);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = BullNoseSweptVolume();
+
+            var bounds = SweptBounds(start, end, SweepRadius, SweepToolLength);
+            var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
+            new SDFCutterSimulator(sdf).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf bull-nose sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_TaperSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            var tool = new TaperEndMill(TaperTipRadius * 2f, SweepToolLength, TaperAngleDegrees);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = TaperSweptVolume();
+            float maxRadius = TaperTipRadius + SweepToolLength * MathF.Tan(TaperAngleDegrees * MathF.PI / 180f);
+
+            var bounds = SweptBounds(start, end, maxRadius, SweepToolLength);
+            var grid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(grid).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(grid);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel taper sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_TaperSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new TaperEndMill(TaperTipRadius * 2f, SweepToolLength, TaperAngleDegrees);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = TaperSweptVolume();
+            float maxRadius = TaperTipRadius + SweepToolLength * MathF.Tan(TaperAngleDegrees * MathF.PI / 180f);
+
+            var bounds = SweptBounds(start, end, maxRadius, SweepToolLength);
+            var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
+            new SDFCutterSimulator(sdf).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf taper sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FiveAxisTiltedSweep_RemovedVolumeMatchesCapsule(float resolution)
+        {
+            // A tilted (A = 30 degrees) ball-only tool swept along a straight move that is not
+            // perpendicular to the tool axis: the ball centers follow the tip path, so the swept
+            // solid is a capsule of the tip-path length. The flute is excluded because a tilted
+            // flute sweep has no closed-form volume; the tilted pose exercises the 5-axis path.
+            const float tiltDegrees = 30f;
+            var tool = new BallOnlyTool(SweepRadius);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, SweepDistance, 0);
+            double pathLength = Vector3.Distance(start, end);
+            double analyticVolume = Math.PI * SweepRadius * SweepRadius * pathLength
+                + 4.0 / 3.0 * Math.PI * SweepRadius * SweepRadius * SweepRadius;
+
+            // The ball center is offset by R along the tilted axis, so the solid reaches up to 2*R
+            // from the tip path (plus a margin), not just R.
+            var bounds = BoundingBox.FromCenterAndSize(
+                new Vector3(0.5f * SweepDistance, 0.5f * SweepDistance, 0f),
+                new Vector3(
+                    SweepDistance + 4f * SweepRadius + 2f,
+                    SweepDistance + 4f * SweepRadius + 2f,
+                    4f * SweepRadius + 2f));
+
+            var grid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(grid).CutLinearWithOrientation(
+                start, end, tool, new ToolOrientation(tiltDegrees, 0, 0), new ToolOrientation(tiltDegrees, 0, 0));
+
+            double removedVolume = MeasureRemovedVolume(grid);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel 5-axis tilted sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FiveAxisTiltedSweep_RemovedVolumeMatchesCapsule_Sdf(float resolution)
+        {
+            const float tiltDegrees = 30f;
+            var tool = new BallOnlyTool(SweepRadius);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, SweepDistance, 0);
+            double pathLength = Vector3.Distance(start, end);
+            double analyticVolume = Math.PI * SweepRadius * SweepRadius * pathLength
+                + 4.0 / 3.0 * Math.PI * SweepRadius * SweepRadius * SweepRadius;
+
+            var bounds = BoundingBox.FromCenterAndSize(
+                new Vector3(0.5f * SweepDistance, 0.5f * SweepDistance, 0f),
+                new Vector3(
+                    SweepDistance + 4f * SweepRadius + 2f,
+                    SweepDistance + 4f * SweepRadius + 2f,
+                    4f * SweepRadius + 2f));
+
+            var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
+            new SDFCutterSimulator(sdf).CutLinearWithOrientation(
+                start, end, tool, new ToolOrientation(tiltDegrees, 0, 0), new ToolOrientation(tiltDegrees, 0, 0));
+
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf 5-axis tilted sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
             Assert.That(error, Is.LessThan(bound),
                 $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
         }
