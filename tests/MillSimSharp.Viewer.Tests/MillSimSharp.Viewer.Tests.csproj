@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -7,12 +7,6 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
-  <ItemGroup>
-    <!-- The viewer tests live in their own project nested under tests/. -->
-    <Compile Remove="MillSimSharp.Viewer.Tests/**" />
-    <None Remove="MillSimSharp.Viewer.Tests/**" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4">
@@ -31,21 +25,14 @@
   <ItemGroup>
     <Using Include="NUnit.Framework" />
   </ItemGroup>
-  
+
   <ItemGroup>
-    <ProjectReference Include="..\src\MillSimSharp\MillSimSharp.csproj" />
-  </ItemGroup>
-  
-  <ItemGroup>
-    <Folder Include="Geometry\" />
-    <Folder Include="Simulation\" />
-    <Folder Include="Toolpath\" />
-    <Folder Include="Util\" />
-    <Folder Include="Config\" />
+    <ProjectReference Include="..\..\src\MillSimSharp\MillSimSharp.csproj" />
+    <ProjectReference Include="..\..\src\MillSimSharp.Viewer\MillSimSharp.Viewer.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\configs\*.xml" Link="configs\%(Filename)%(Extension)">
+    <None Include="..\..\src\MillSimSharp.Viewer\gcodes\*.nc" Link="gcodes\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

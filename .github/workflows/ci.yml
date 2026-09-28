@@ -41,5 +41,6 @@ jobs:
       - name: Build samples
         run: dotnet build samples/samples.sln --configuration Release -warnaserror
 
+      # Runs both test projects (core tests and viewer tests) through the solution.
       - name: Run tests
         run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"

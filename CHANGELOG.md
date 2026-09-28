@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `SDFGrid.SyncFromVoxelGrid()` rebuilds the whole field from the source voxel grid (the grid passed to `FromVoxelGrid` or `BindToVoxelGrid`), throwing `InvalidOperationException` when the SDF has no source grid.
+- `ChunkedVoxelMeshBuilder` chunk-level API: `UpdateChunks(...)` rebuilds the dirty chunks and returns their coordinates without combining, and `GetChunkMesh(...)` / `GetChunkCoordinates()` expose per-chunk meshes for incremental rendering. `BuildAll()` / `Update(...)` keep returning the combined mesh; their full-grid combine cost is now documented.
 
 ### Changed
 

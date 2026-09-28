@@ -85,5 +85,69 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(rebuilds, Is.GreaterThan(0), "At least one chunk must be rebuilt");
             Assert.That(rebuilds, Is.LessThanOrEqualTo(8), "Only chunks near the change may be rebuilt");
         }
+
+        [Test]
+        public void ChunkApi_GetChunkMesh_MatchesCombinedMesh()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 8f);
+
+            var builder = new ChunkedVoxelMeshBuilder(grid, chunkSize: 8);
+            Mesh combined = builder.BuildAll();
+
+            var chunkTriangles = new List<string>();
+            int chunkCount = 0;
+            foreach (var (cx, cy, cz) in builder.GetChunkCoordinates())
+            {
+                chunkTriangles.AddRange(TriangleKeys(builder.GetChunkMesh(cx, cy, cz)));
+                chunkCount++;
+            }
+            chunkTriangles.Sort(StringComparer.Ordinal);
+
+            Assert.That(chunkCount, Is.GreaterThan(1), "the test grid must span multiple chunks");
+            Assert.That(chunkTriangles, Is.EqualTo(TriangleKeys(combined)),
+                "the union of the per-chunk meshes must match the combined mesh");
+        }
+
+        [Test]
+        public void ChunkApi_UpdateChunks_ReturnsRebuiltChunksAndMatchesFullRebuild()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            grid.RemoveVoxelsInSphere(new Vector3(-10, 0, 0), 5f);
+
+            var builder = new ChunkedVoxelMeshBuilder(grid, chunkSize: 16);
+            builder.BuildAll();
+            int buildsBefore = builder.ChunkBuildCount;
+
+            grid.RemoveVoxelsInSphere(new Vector3(10, 0, 0), 5f);
+            var rebuilt = builder.UpdateChunks(25, 15, 15, 35, 25, 25);
+
+            Assert.That(rebuilt, Is.Not.Empty);
+            Assert.That(builder.ChunkBuildCount - buildsBefore, Is.EqualTo(rebuilt.Count),
+                "only the returned chunks may be rebuilt");
+
+            var chunkTriangles = new List<string>();
+            foreach (var (cx, cy, cz) in builder.GetChunkCoordinates())
+            {
+                chunkTriangles.AddRange(TriangleKeys(builder.GetChunkMesh(cx, cy, cz)));
+            }
+            chunkTriangles.Sort(StringComparer.Ordinal);
+
+            var fresh = new ChunkedVoxelMeshBuilder(grid, chunkSize: 16).BuildAll();
+            Assert.That(chunkTriangles, Is.EqualTo(TriangleKeys(fresh)),
+                "the per-chunk meshes after UpdateChunks must match a full rebuild");
+        }
+
+        [Test]
+        public void ChunkApi_GetChunkMesh_UnknownChunk_IsEmpty()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var builder = new ChunkedVoxelMeshBuilder(grid, chunkSize: 8);
+
+            Mesh chunk = builder.GetChunkMesh(99, 99, 99);
+
+            Assert.That(chunk.Vertices, Is.Empty);
+            Assert.That(chunk.Indices, Is.Empty);
+        }
     }
 }

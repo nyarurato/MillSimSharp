@@ -39,7 +39,56 @@ namespace MillSimSharp.Geometry
         public int CachedChunkCount => _chunks.Count;
 
         /// <summary>
+        /// Enumerates the coordinates of the currently cached chunks (including chunks without
+        /// geometry). The returned list is a snapshot.
+        /// </summary>
+        public IReadOnlyList<(int X, int Y, int Z)> GetChunkCoordinates()
+        {
+            var coordinates = new List<(int X, int Y, int Z)>(_chunks.Count);
+            foreach (var key in _chunks.Keys)
+            {
+                coordinates.Add(key);
+            }
+            return coordinates;
+        }
+
+        /// <summary>
+        /// Gets the cached mesh of one chunk: world-space vertices with chunk-local indices and
+        /// per-chunk averaged, normalized normals. Returns an empty mesh when the chunk has not
+        /// been built.
+        /// </summary>
+        /// <param name="chunkX">Chunk index X.</param>
+        /// <param name="chunkY">Chunk index Y.</param>
+        /// <param name="chunkZ">Chunk index Z.</param>
+        public Mesh GetChunkMesh(int chunkX, int chunkY, int chunkZ)
+        {
+            if (!_chunks.TryGetValue((chunkX, chunkY, chunkZ), out ChunkData chunk))
+            {
+                return new Mesh();
+            }
+
+            var normals = new Vector3[chunk.Normals.Count];
+            for (int i = 0; i < normals.Length; i++)
+            {
+                Vector3 sum = chunk.Normals[i];
+                normals[i] = sum.LengthSquared() > 1e-12f ? Vector3.Normalize(sum) : Vector3.UnitY;
+            }
+
+            return new Mesh
+            {
+                Vertices = chunk.Vertices.ToArray(),
+                Normals = normals,
+                Indices = chunk.Indices.ToArray()
+            };
+        }
+
+        /// <summary>
         /// Rebuilds all chunks and returns the combined mesh.
+        /// <para>
+        /// This combines every cached chunk into one vertex-welded mesh, which costs a full-grid
+        /// pass. For incremental rendering use <see cref="UpdateChunks"/> with
+        /// <see cref="GetChunkMesh"/> instead.
+        /// </para>
         /// </summary>
         /// <returns>Combined mesh of the whole grid.</returns>
         public Mesh BuildAll()
@@ -58,9 +107,15 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Rebuilds the chunks affected by the given changed voxel bounds and returns the combined mesh.
+        /// Rebuilds the chunks affected by the given changed voxel bounds and returns the combined
+        /// mesh.
         /// The bounds are expanded by one voxel because a removed voxel also changes the exposed
         /// faces of its neighbors.
+        /// <para>
+        /// This combines every cached chunk into one vertex-welded mesh (a full-grid pass even
+        /// though only the dirty chunks are rebuilt). For incremental rendering use
+        /// <see cref="UpdateChunks"/> and upload only the returned chunks.
+        /// </para>
         /// </summary>
         /// <param name="minX">Minimum changed voxel index X.</param>
         /// <param name="minY">Minimum changed voxel index Y.</param>
@@ -71,6 +126,30 @@ namespace MillSimSharp.Geometry
         /// <returns>Combined mesh of the whole grid.</returns>
         public Mesh Update(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
         {
+            RebuildDirtyChunks(minX, minY, minZ, maxX, maxY, maxZ);
+            return Combine();
+        }
+
+        /// <summary>
+        /// Rebuilds the chunks affected by the given changed voxel bounds and returns their
+        /// coordinates in rebuild order, without combining the mesh. Use this together with
+        /// <see cref="GetChunkMesh"/> to update only the changed chunks.
+        /// </summary>
+        /// <param name="minX">Minimum changed voxel index X.</param>
+        /// <param name="minY">Minimum changed voxel index Y.</param>
+        /// <param name="minZ">Minimum changed voxel index Z.</param>
+        /// <param name="maxX">Maximum changed voxel index X.</param>
+        /// <param name="maxY">Maximum changed voxel index Y.</param>
+        /// <param name="maxZ">Maximum changed voxel index Z.</param>
+        /// <returns>Coordinates of the rebuilt chunks (empty when nothing changed).</returns>
+        public IReadOnlyList<(int X, int Y, int Z)> UpdateChunks(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+        {
+            return RebuildDirtyChunks(minX, minY, minZ, maxX, maxY, maxZ);
+        }
+
+        private List<(int X, int Y, int Z)> RebuildDirtyChunks(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+        {
+            var rebuilt = new List<(int X, int Y, int Z)>();
             var (sx, sy, sz) = _grid.Dimensions;
 
             minX = Math.Max(0, minX - 1);
@@ -79,7 +158,7 @@ namespace MillSimSharp.Geometry
             maxX = Math.Min(sx - 1, maxX + 1);
             maxY = Math.Min(sy - 1, maxY + 1);
             maxZ = Math.Min(sz - 1, maxZ + 1);
-            if (minX > maxX || minY > maxY || minZ > maxZ) return Combine();
+            if (minX > maxX || minY > maxY || minZ > maxZ) return rebuilt;
 
             int minCx = minX / _chunkSize, maxCx = maxX / _chunkSize;
             int minCy = minY / _chunkSize, maxCy = maxY / _chunkSize;
@@ -90,9 +169,10 @@ namespace MillSimSharp.Geometry
                     for (int cx = minCx; cx <= maxCx; cx++)
                     {
                         _chunks[(cx, cy, cz)] = BuildChunk(cx, cy, cz);
+                        rebuilt.Add((cx, cy, cz));
                     }
 
-            return Combine();
+            return rebuilt;
         }
 
         private ChunkData BuildChunk(int cx, int cy, int cz)

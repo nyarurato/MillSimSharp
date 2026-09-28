@@ -16,7 +16,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **Tool collision check** against voxel or SDF stock (`ToolCollisionDetector`) - single pose, cutting edge by default, resolution-limited (see `docs/Accuracy.md`)
 - **Tool changes and cancellable execution** with progress reporting and estimated machining time
 - **Additional exporters** for OBJ and PLY (plus binary/ASCII STL)
-- **Incremental voxel remeshing** with `ChunkedVoxelMeshBuilder`
+- **Incremental voxel remeshing** with `ChunkedVoxelMeshBuilder` (per-chunk meshes for incremental rendering)
 - **Flexible stock origin configuration** (center or corner-based)
 - **G-code parser independence** - bring your own parser; the viewer includes a small example parser (G0/G1/G2/G3, inch/mm, absolute/incremental)
 - **Flexible resolution** - adjust voxel size based on your needs
@@ -359,6 +359,20 @@ Notes:
 - The stock is sampled at voxel centers, so a contact that does not reach any voxel center (for example a sub-resolution tool passing through a voxel corner) may not be detected. The check is resolution-limited.
 - The tool axis may be any finite non-zero vector; it is normalized internally. Zero or non-finite axes throw `ArgumentException`.
 - Custom `IToolGeometry` implementations must be solids of revolution around the local +Z (tool) axis: the simulators map world points to `(radial distance, 0, axial distance)`, so azimuthal features (for example elliptical cross-sections) cannot be represented.
+
+### Incremental Voxel Remeshing
+
+`ChunkedVoxelMeshBuilder` caches one mesh per chunk and rebuilds only the chunks affected by a
+change:
+
+- `BuildAll()` builds every chunk and returns the combined mesh.
+- `Update(min..max)` rebuilds the dirty chunks and returns the combined mesh. The combine is a
+  **full-grid pass** (all cached chunks are merged and vertices are welded), so that cost remains
+  even when only a few chunks changed.
+- `UpdateChunks(min..max)` rebuilds the dirty chunks and returns their coordinates without
+  combining; `GetChunkMesh(x, y, z)` returns one chunk's mesh (world-space vertices with
+  chunk-local indices and normalized per-chunk normals) for incremental rendering.
+- `GetChunkCoordinates()` enumerates the cached chunks.
 
 ### Stock Origin Configuration
 
