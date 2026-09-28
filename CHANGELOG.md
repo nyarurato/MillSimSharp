@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ToolpathExecutor.ExecuteNextSteps` no longer skips a command that throws: the cursor advances only after success and a failed last command is not reported as completed.
 - Viewer G-code parser: inconsistent I/J arcs are ignored without moving the tool, valid arcs far from the origin are no longer misjudged (the radius check uses double precision), and the last chord lands exactly on the commanded end (previously the tool position and the emitted arc could jump apart).
-- `ToolOrientation.FromAxisTowardSpindle` now returns the actual shortest rotation (the previous construction added an unnecessary roll, e.g. 98.4° instead of 90°), and tool axes are normalized robustly: tiny (but non-zero) and very large finite axes are accepted by `FromAxisTowardSpindle` and `ToolCollisionDetector.IntersectsMaterial` as documented.
+- `ToolOrientation.FromAxisTowardSpindle` now returns the actual shortest rotation (the previous construction added an unnecessary roll, e.g. 98.4° instead of 90°), only the exact `-Z` direction is pinned to the 180° X flip (near-antipodal axes keep their direction), and tool axes are normalized robustly: tiny (but non-zero) and very large finite axes are accepted by `FromAxisTowardSpindle` and `ToolCollisionDetector.IntersectsMaterial` as documented.
 
 ## [0.2.1] - 2026-09-22
 

@@ -170,6 +170,27 @@ namespace MillSimSharp.Tests.Toolpath
         }
 
         [Test]
+        public void Orientation_FromAxis_NearAntipodal_PreservesDirection()
+        {
+            // Review regression: the input Z component rounds to -1f, which previously matched the
+            // pinned antipodal case and collapsed the direction (the X component was lost). Only the
+            // exact antipodal axis may be pinned; near-antipodal axes keep their direction.
+            var axis = new Vector3(0.0001f, 0f, -MathF.Sqrt(1f - 0.0001f * 0.0001f));
+            Vector3 expected = Vector3.Normalize(axis);
+
+            ToolOrientation orientation = ToolOrientation.FromAxisTowardSpindle(axis);
+            Vector3 roundTrip = orientation.GetAxisTowardSpindle();
+
+            Assert.That(roundTrip.X, Is.EqualTo(expected.X).Within(1e-5f));
+            Assert.That(roundTrip.Y, Is.EqualTo(expected.Y).Within(1e-5f));
+            Assert.That(roundTrip.Z, Is.EqualTo(expected.Z).Within(1e-5f));
+
+            // The near-antipodal rotation must still be the shortest one.
+            float expectedAngle = MathF.Acos(Math.Clamp(expected.Z, -1f, 1f)) * 180f / MathF.PI;
+            Assert.That(RotationAngleDegrees(orientation), Is.EqualTo(expectedAngle).Within(0.01f));
+        }
+
+        [Test]
         public void Orientation_180DegreeFlip_IsDeterministic()
         {
             // The antipodal direction has no unique shortest rotation: pin the construction

@@ -170,11 +170,11 @@ namespace MillSimSharp.Toolpath
         /// given direction, expressed in the existing ZYX (C -> B -> A) Euler convention. The roll
         /// component C is generally non-zero for general directions (the shortest rotation is
         /// roll-free about the target axis). Any finite non-zero vector is accepted and normalized
-        /// internally; machine-specific Euler conventions, rotary unwind and tool-axis roll stay
-        /// outside the core, and roll does not change material removal because tool cutting
-        /// geometries are solids of revolution. For the antipodal direction (0, 0, -1), where the
-        /// shortest rotation is not unique, the rotation is pinned to 180 degrees around X
-        /// (A = +/-180, B = C = 0).
+        /// internally; near-antipodal directions keep their axis direction. Machine-specific Euler
+        /// conventions, rotary unwind and tool-axis roll stay outside the core, and roll does not
+        /// change material removal because tool cutting geometries are solids of revolution. For the
+        /// exact antipodal direction (0, 0, -1), where the shortest rotation is not unique, the
+        /// rotation is pinned to 180 degrees around X (A = +/-180, B = C = 0).
         /// </para>
         /// </summary>
         /// <param name="axisTowardSpindle">Direction from the tip toward the spindle. Any finite
@@ -190,33 +190,41 @@ namespace MillSimSharp.Toolpath
                 throw new ArgumentException("Tool axis must be finite.", nameof(axisTowardSpindle));
             }
 
-            // Normalize in double precision: squaring large float components would overflow
-            // (for example 1e20 squared) and tiny non-zero axes must still be accepted.
-            double length = Math.Sqrt(
-                (double)axisTowardSpindle.X * axisTowardSpindle.X +
-                (double)axisTowardSpindle.Y * axisTowardSpindle.Y +
-                (double)axisTowardSpindle.Z * axisTowardSpindle.Z);
+            // Work in double precision: the shortest rotation for a near-antipodal axis has
+            // components at the 1e-8 scale, which float rounding would collapse (for example
+            // u.Z = -0.999999995 rounds to -1 and would lose the axis direction).
+            double x = axisTowardSpindle.X;
+            double y = axisTowardSpindle.Y;
+            double z = axisTowardSpindle.Z;
+
+            double length = Math.Sqrt(x * x + y * y + z * z);
             if (!(length > 0.0))
             {
                 throw new ArgumentException("Tool axis must be a non-zero vector.", nameof(axisTowardSpindle));
             }
 
-            Vector3 u = new Vector3(
-                (float)(axisTowardSpindle.X / length),
-                (float)(axisTowardSpindle.Y / length),
-                (float)(axisTowardSpindle.Z / length));
+            double ux = x / length;
+            double uy = y / length;
+            double uz = z / length;
 
-            // Shortest rotation from +Z to u: rotation axis Z x u, angle acos(u.Z); the quaternion
-            // is normalize((Z x u, 1 + u.Z)).
-            float dot = Math.Clamp(u.Z, -1f, 1f);
-            if (1f + dot < 1e-12f)
+            // Shortest rotation from +Z to u: axis Z x u = (-uy, ux, 0), angle acos(u.Z); the
+            // quaternion is normalize((Z x u, 1 + u.Z)).
+            double crossX = -uy;
+            double crossY = ux;
+            double w = 1.0 + uz;
+
+            double norm = Math.Sqrt(crossX * crossX + crossY * crossY + w * w);
+            if (!(norm > 0.0))
             {
-                // Antipodal: the shortest rotation is not unique; pin it to 180 degrees around X.
+                // Exact antipodal: the shortest rotation is not unique; pin it to 180 degrees around X.
                 return new ToolOrientation(180, 0, 0);
             }
 
-            Vector3 cross = Vector3.Cross(Vector3.UnitZ, u);
-            Quaternion q = Quaternion.Normalize(new Quaternion(cross.X, cross.Y, cross.Z, 1f + dot));
+            var q = new Quaternion(
+                (float)(crossX / norm),
+                (float)(crossY / norm),
+                0f,
+                (float)(w / norm));
             return FromQuaternion(q);
         }
 
