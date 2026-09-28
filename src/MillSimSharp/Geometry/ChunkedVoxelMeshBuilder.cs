@@ -14,7 +14,7 @@ namespace MillSimSharp.Geometry
         private readonly VoxelGrid _grid;
         private readonly int _chunkSize;
         private readonly Dictionary<(int x, int y, int z), ChunkData> _chunks = new Dictionary<(int, int, int), ChunkData>();
-        private readonly VoxelVertexComparer _comparer = new VoxelVertexComparer();
+        private readonly VoxelVertexComparer _comparer;
 
         /// <summary>
         /// Creates a chunked mesh builder for the given voxel grid.
@@ -26,6 +26,7 @@ namespace MillSimSharp.Geometry
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));
             if (chunkSize <= 0) throw new ArgumentException("Chunk size must be positive.", nameof(chunkSize));
             _chunkSize = chunkSize;
+            _comparer = new VoxelVertexComparer(VoxelVertexComparer.ForResolution(grid.Resolution));
         }
 
         /// <summary>

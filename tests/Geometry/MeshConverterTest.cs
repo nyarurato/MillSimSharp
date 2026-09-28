@@ -259,6 +259,38 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void ConvertToMesh_FineResolution_DoesNotMergeDistinctVertices()
+        {
+            // Review regression: the fixed 1e-3 vertex merge step collapsed the lattice at
+            // resolutions below ~2e-3 (for example 0.0004 mm) and produced degenerate triangles.
+            const float resolution = 0.0004f;
+            var bounds = BoundingBox.FromCenterAndSize(
+                Vector3.Zero,
+                new Vector3(8 * resolution, 8 * resolution, 8 * resolution));
+            var grid = new VoxelGrid(bounds, resolution);
+
+            var mesh = MeshConverter.ConvertToMesh(grid);
+
+            Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
+            Assert.That(CountDegenerateTriangles(mesh), Is.EqualTo(0),
+                "distinct lattice vertices must not be merged at fine resolutions");
+        }
+
+        private static int CountDegenerateTriangles(Mesh mesh)
+        {
+            int degenerate = 0;
+            for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
+            {
+                Vector3 a = mesh.Vertices[mesh.Indices[i]];
+                Vector3 b = mesh.Vertices[mesh.Indices[i + 1]];
+                Vector3 c = mesh.Vertices[mesh.Indices[i + 2]];
+                if (Vector3.Cross(b - a, c - a).LengthSquared() < 1e-20f) degenerate++;
+            }
+
+            return degenerate;
+        }
+
+        [Test]
         public void ConvertToMeshFromSDF_CubeIndexCrossingsPerSlice()
         {
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));

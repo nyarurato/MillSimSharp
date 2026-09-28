@@ -227,6 +227,20 @@ namespace MillSimSharp.Tests.Viewer
             Assert.That(xy, Is.Not.Empty, "G17 must re-enable XY arcs");
         }
 
+        [Test]
+        public void Parse_FractionalGCode_IsNotRoundedToAnotherCommand()
+        {
+            // Review regression: G90.1 used to round to G90 (absolute mode) and G0.1 to G0 (rapid).
+            var absoluteAttempt = GCodeParser.ParseText("G91\nG1 X10\nG90.1\nG1 X0\n", Vector3.Zero);
+            Assert.That(absoluteAttempt.Count, Is.EqualTo(2));
+            Assert.That(((G1Move)absoluteAttempt[1]).Target, Is.EqualTo(new Vector3(10, 0, 0)),
+                "G90.1 must not switch to absolute mode");
+
+            var rapidAttempt = GCodeParser.ParseText("G1 X10\nG0.1 X0\n", Vector3.Zero);
+            Assert.That(rapidAttempt.Count, Is.EqualTo(1), "G0.1 must not emit a rapid move");
+            Assert.That(((G1Move)rapidAttempt[0]).Target, Is.EqualTo(new Vector3(10, 0, 0)));
+        }
+
         // ---------------------------------------------------------------------
         // R-format arcs: positive R = minor arc, negative R = major arc
         // ---------------------------------------------------------------------

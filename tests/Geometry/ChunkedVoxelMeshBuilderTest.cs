@@ -160,5 +160,33 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(chunk.Vertices, Is.Empty);
             Assert.That(chunk.Indices, Is.Empty);
         }
+
+        [Test]
+        public void ChunkApi_FineResolution_ChunkMeshesAreNotCollapsed()
+        {
+            // Review regression: the chunk builder used the same fixed 1e-3 vertex merge step and
+            // collapsed fine lattices; chunk meshes must not contain degenerate triangles.
+            const float resolution = 0.0004f;
+            var bounds = BoundingBox.FromCenterAndSize(
+                Vector3.Zero,
+                new Vector3(8 * resolution, 8 * resolution, 8 * resolution));
+            var grid = new VoxelGrid(bounds, resolution);
+            var builder = new ChunkedVoxelMeshBuilder(grid, chunkSize: 4);
+
+            Mesh mesh = builder.BuildAll();
+
+            Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
+            int degenerate = 0;
+            for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
+            {
+                Vector3 a = mesh.Vertices[mesh.Indices[i]];
+                Vector3 b = mesh.Vertices[mesh.Indices[i + 1]];
+                Vector3 c = mesh.Vertices[mesh.Indices[i + 2]];
+                if (Vector3.Cross(b - a, c - a).LengthSquared() < 1e-20f) degenerate++;
+            }
+
+            Assert.That(degenerate, Is.EqualTo(0),
+                "fine-resolution chunk meshes must not collapse");
+        }
     }
 }

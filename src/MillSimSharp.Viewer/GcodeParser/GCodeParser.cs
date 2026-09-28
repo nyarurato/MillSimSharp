@@ -74,7 +74,15 @@ namespace MillSimSharp.Viewer
                 {
                     if (letter != 'G') continue;
 
-                    switch ((int)Math.Round(value))
+                    if (!TryGetExactGCode(value, out int g))
+                    {
+                        // Fractional codes (G90.1, G0.1, ...) are not supported: rounding them would
+                        // execute a different command (absolute mode / rapid move).
+                        hasUnsupportedG = true;
+                        continue;
+                    }
+
+                    switch (g)
                     {
                         case 0:
                         case 1:
@@ -126,7 +134,12 @@ namespace MillSimSharp.Viewer
                     switch (letter)
                     {
                         case 'G':
-                            int g = (int)Math.Round(value);
+                            if (!TryGetExactGCode(value, out int g))
+                            {
+                                // Already filtered by the modal scan above; keep the block inert.
+                                break;
+                            }
+
                             switch (g)
                             {
                                 case 0:
@@ -149,7 +162,7 @@ namespace MillSimSharp.Viewer
                                     absolute = false;
                                     break;
                                 default:
-                                    break; // unsupported G code (plane/offset/cycle/...)
+                                    break; // plane selection is handled in the modal scan
                             }
                             break;
 
@@ -234,6 +247,22 @@ namespace MillSimSharp.Viewer
         {
             if (path == null) throw new ArgumentNullException(nameof(path));
             return ParseText(File.ReadAllText(path), initialPosition, arcSegmentAngleDegrees);
+        }
+
+        /// <summary>
+        /// Parses a G code word exactly: fractional codes (G90.1, G0.1, ...) must not be rounded to
+        /// another command. Returns false for non-integer or out-of-range values.
+        /// </summary>
+        private static bool TryGetExactGCode(double value, out int code)
+        {
+            if (double.IsNaN(value) || value != Math.Floor(value) || value < int.MinValue || value > int.MaxValue)
+            {
+                code = 0;
+                return false;
+            }
+
+            code = (int)value;
+            return true;
         }
 
         private static double SetAxis(double current, double value, double unitScale, bool absolute)

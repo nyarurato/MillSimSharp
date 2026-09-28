@@ -61,8 +61,16 @@ namespace MillSimSharp.Simulation
             Quaternion qStart = startOrientation.GetQuaternion();
             Quaternion qEnd = endOrientation.GetQuaternion();
 
+            // The exact swept solid is only valid when the orientation is constant along the move:
+            // even a small rotation moves tool points away from the tip (0.1 degrees over a 100 mm
+            // tool is ~0.17 mm). The relative rotation is evaluated through its vector part, which is
+            // well conditioned near identity, and the maximum point drift must stay below 1e-4 mm.
+            Quaternion relativeRotation = Quaternion.Multiply(qEnd, Quaternion.Conjugate(qStart));
+            float sinHalfAngle = new Vector3(relativeRotation.X, relativeRotation.Y, relativeRotation.Z).Length();
+            float orientationDrift = ToolPoseMath.GetRotationSweepRadius(geometry) * (2f * sinHalfAngle);
+
             if (distance > 1e-6f &&
-                Quaternion.Dot(qStart, qEnd) >= 1f - 1e-6f &&
+                orientationDrift <= 1e-4f &&
                 MathF.Abs(Vector3.Dot(Vector3.Transform(Vector3.UnitZ, qStart), delta)) <= 1e-5f * distance)
             {
                 // Exact swept solid for a straight move that is perpendicular to the tool axis.

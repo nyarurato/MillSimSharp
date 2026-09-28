@@ -305,6 +305,38 @@ namespace MillSimSharp.Tests.Toolpath
             Assert.That(grid.GetVoxelAtWorld(below), Is.True);
         }
 
+        [Test]
+        public void FiveAxis_SmallOrientationChange_RemovesMaterialAtTheEndPose()
+        {
+            // Review regression: a 0.1 degree orientation change used to take the exact-swept-solid
+            // fast path, which swept only the start pose. With a 100 mm tool the top of the tool
+            // moves about 0.17 mm, so material covered only by the end pose was missed.
+            const float resolution = 0.1f;
+            var tool = new EndMill(6f, 100f, isBallEnd: false);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(10, 0, 0);
+
+            // Voxel center (9.9, -3.1, 99.0): outside the start-pose swept solid (radius 3 around
+            // y = 0) but inside the end pose rotated by A = 0.1 degrees (the top shifts toward -Y).
+            var bounds = new BoundingBox(new Vector3(9.85f, -3.15f, 98.95f), new Vector3(11.05f, -2.75f, 99.15f));
+            var probe = new Vector3(9.9f, -3.1f, 99.0f);
+
+            var tiltedGrid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(tiltedGrid).CutLinearWithOrientation(
+                start, end, tool, ToolOrientation.Default, new ToolOrientation(0.1f, 0, 0));
+
+            Assert.That(tiltedGrid.GetVoxelAtWorld(probe), Is.False,
+                "material covered only by the end pose must be removed");
+
+            // Negative control: without the tilt the probe is outside the swept solid.
+            var straightGrid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(straightGrid).CutLinearWithOrientation(
+                start, end, tool, ToolOrientation.Default, ToolOrientation.Default);
+
+            Assert.That(straightGrid.GetVoxelAtWorld(probe), Is.True,
+                "the probe must remain material without the orientation change");
+        }
+
         [TestCase(1.0f, true)]
         [TestCase(1.0f, false)]
         public void FiveAxis_DefaultOrientation_MatchesThreeAxisGeometry(float resolution, bool isBallEnd)

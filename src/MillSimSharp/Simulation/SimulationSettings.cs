@@ -100,11 +100,12 @@ namespace MillSimSharp.Simulation
 
         /// <summary>
         /// Computes one step count in double precision and rejects values that do not fit in
-        /// <see cref="int"/> instead of wrapping into an undersampled move.
+        /// <see cref="int"/> instead of wrapping into an undersampled move. The configured step size
+        /// is used as given (no hidden floor).
         /// </summary>
         private static int ComputeStepCount(float distance, float maxStep, string distanceName, string settingName)
         {
-            double required = Math.Ceiling((double)distance / Math.Max(maxStep, 1e-6f));
+            double required = Math.Ceiling((double)distance / maxStep);
             if (!(required <= int.MaxValue))
             {
                 throw new ArgumentOutOfRangeException(distanceName, distance,
@@ -129,6 +130,9 @@ namespace MillSimSharp.Simulation
         /// rotation sweep radius.
         /// </param>
         /// <returns>Number of steps.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the required step count exceeds
+        /// <see cref="int.MaxValue"/> (for example an extremely small <see cref="MaxChordError"/> for
+        /// the given rotation radius). Increase <see cref="MaxChordError"/>.</exception>
         public int ComputeSteps(float linearDistance, float angularDistanceDegrees, float cuttingCenterOffset)
         {
             int steps = ComputeSteps(linearDistance, angularDistanceDegrees);
@@ -137,22 +141,38 @@ namespace MillSimSharp.Simulation
                 return steps;
 
             float angleRad = angularDistanceDegrees * MathF.PI / 180f;
-            float chordError = MathF.Max(MaxChordError, 1e-4f);
 
             // The cutting center travels on an arc of radius = offset. For n steps the sagitta is
             // r * (1 - cos(angle / (2n))) <= chordError, so n >= angle / (2 * acos(1 - chordError / r)).
-            float ratio = 1f - chordError / cuttingCenterOffset;
-            if (ratio < 1f)
+            // The configured chord error is used as given (no hidden floor); the computation runs in
+            // double so values below the old 1e-4 clamp are honored.
+            double chordFraction = (double)MaxChordError / cuttingCenterOffset;
+            if (!(chordFraction < 1.0))
             {
-                float denominator = 2f * MathF.Acos(Math.Clamp(ratio, -1f, 1f));
-                if (denominator > 1e-6f)
-                {
-                    int adaptiveSteps = (int)MathF.Ceiling(angleRad / denominator);
-                    steps = Math.Max(steps, adaptiveSteps);
-                }
+                // An allowed chord error at or above the sweep radius is satisfied by one step.
+                return Math.Max(steps, 1);
             }
 
-            return steps;
+            // For very small fractions the acos argument loses precision, so the series
+            // acos(1 - x) ~ sqrt(2x) * (1 + x / 12) is used instead.
+            double denominator = chordFraction < 1e-8
+                ? 2.0 * Math.Sqrt(2.0 * chordFraction) * (1.0 + chordFraction / 12.0)
+                : 2.0 * Math.Acos(1.0 - chordFraction);
+
+            if (denominator <= 0.0)
+            {
+                // Unreachable for a positive chord fraction; keeps the guard explicit.
+                return steps;
+            }
+
+            double required = angleRad / denominator;
+            if (!(required <= int.MaxValue))
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxChordError), MaxChordError,
+                    $"The rotation requires {required} adaptive interpolation steps, which exceeds the supported maximum of {int.MaxValue}. Increase MaxChordError.");
+            }
+
+            return Math.Max(steps, (int)Math.Ceiling(required));
         }
     }
 }

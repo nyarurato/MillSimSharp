@@ -35,12 +35,12 @@ namespace MillSimSharp.Geometry
         }
 
         // Helper: Merge the per-slice collected results into global arrays in slice order.
-        private static void MergeSliceData(IEnumerable<SliceMeshData> sliceData, out List<Vector3> globalVerts, out List<Vector3> globalNormals, out List<int> globalInds)
+        private static void MergeSliceData(IEnumerable<SliceMeshData> sliceData, float vertexEpsilon, out List<Vector3> globalVerts, out List<Vector3> globalNormals, out List<int> globalInds)
         {
             globalVerts = new List<Vector3>();
             globalNormals = new List<Vector3>();
             globalInds = new List<int>();
-            var comparer = new VoxelVertexComparer();
+            var comparer = new VoxelVertexComparer(vertexEpsilon);
             var globalVertexMap = new Dictionary<Vector3, int>(comparer);
             var globalNormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(comparer);
 
@@ -102,6 +102,10 @@ namespace MillSimSharp.Geometry
             var (sizeX, sizeY, sizeZ) = grid.Dimensions;
             float res = grid.Resolution;
 
+            // Merge tolerance scaled to the voxel size; a fixed 1e-3 step collapses distinct
+            // lattice vertices at fine resolutions and degenerates the triangles.
+            float vertexEpsilon = VoxelVertexComparer.ForResolution(res);
+
             // One result slot per Z slice keeps the merge order deterministic even though the
             // slices are processed in parallel (the previous ConcurrentBag enumeration order
             // depended on thread scheduling).
@@ -114,8 +118,8 @@ namespace MillSimSharp.Geometry
                 {
                     Vertices = new List<Vector3>(),
                     Indices = new List<int>(),
-                    VertexMap = new Dictionary<Vector3, int>(new VoxelVertexComparer()),
-                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new VoxelVertexComparer())
+                    VertexMap = new Dictionary<Vector3, int>(new VoxelVertexComparer(vertexEpsilon)),
+                    NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new VoxelVertexComparer(vertexEpsilon))
                 };
 
                 // Helper to add vertex and return index
@@ -172,7 +176,7 @@ namespace MillSimSharp.Geometry
                 sliceData[z + 1] = data;
             });
 
-            MergeSliceData(sliceData, out var globalVerts, out var globalNormals, out var globalInds);
+            MergeSliceData(sliceData, vertexEpsilon, out var globalVerts, out var globalNormals, out var globalInds);
 
             return new Mesh()
             {

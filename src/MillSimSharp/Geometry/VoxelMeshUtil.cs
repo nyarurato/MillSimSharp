@@ -114,13 +114,53 @@ namespace MillSimSharp.Geometry
     }
 
     /// <summary>
-    /// Position comparer used to merge mesh vertices (quantization step 1e-3). Equality uses the
-    /// same quantization as <see cref="GetHashCode"/>, so the <see cref="IEqualityComparer{T}"/>
-    /// contract (Equals implies equal hash codes) is satisfied.
+    /// Position comparer used to merge mesh vertices (quantization step 1e-3 by default).
+    /// Equality uses the same quantization as <see cref="GetHashCode"/>, so the
+    /// <see cref="IEqualityComparer{T}"/> contract (Equals implies equal hash codes) is satisfied.
+    /// <para>
+    /// The tolerance must stay well below the voxel resolution; use <see cref="ForResolution"/> so
+    /// distinct lattice vertices never collapse at fine resolutions.
+    /// </para>
     /// </summary>
     internal sealed class VoxelVertexComparer : IEqualityComparer<Vector3>
     {
+        /// <summary>Default quantization step (legacy fixed 1e-3 mm).</summary>
         public const float Epsilon = 1e-3f;
+
+        private readonly float _epsilon;
+
+        /// <summary>
+        /// Creates a comparer with the default quantization step.
+        /// </summary>
+        public VoxelVertexComparer()
+            : this(Epsilon)
+        {
+        }
+
+        /// <summary>
+        /// Creates a comparer with the given quantization step. The step must be a positive,
+        /// finite number.
+        /// </summary>
+        public VoxelVertexComparer(float epsilon)
+        {
+            if (!float.IsFinite(epsilon) || epsilon <= 0f)
+            {
+                throw new ArgumentException("Vertex merge epsilon must be a finite positive number.", nameof(epsilon));
+            }
+
+            _epsilon = epsilon;
+        }
+
+        /// <summary>
+        /// Quantization step for a voxel resolution: a thousandth of a voxel, floored only to avoid
+        /// underflow for absurdly small resolutions. The previous fixed 1e-3 step merged distinct
+        /// vertices below ~2e-3 mm resolutions and produced degenerate triangles.
+        /// </summary>
+        /// <param name="resolution">Voxel size in millimeters.</param>
+        public static float ForResolution(float resolution)
+        {
+            return Math.Max(resolution * 1e-3f, 1e-12f);
+        }
 
         public bool Equals(Vector3 a, Vector3 b)
         {
@@ -132,12 +172,12 @@ namespace MillSimSharp.Geometry
             return Quantize(v).GetHashCode();
         }
 
-        private static (long X, long Y, long Z) Quantize(Vector3 v)
+        private (long X, long Y, long Z) Quantize(Vector3 v)
         {
             return (
-                (long)MathF.Round(v.X / Epsilon),
-                (long)MathF.Round(v.Y / Epsilon),
-                (long)MathF.Round(v.Z / Epsilon));
+                (long)MathF.Round(v.X / _epsilon),
+                (long)MathF.Round(v.Y / _epsilon),
+                (long)MathF.Round(v.Z / _epsilon));
         }
     }
 }

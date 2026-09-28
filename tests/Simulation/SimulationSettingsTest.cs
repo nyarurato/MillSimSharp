@@ -97,6 +97,55 @@ namespace MillSimSharp.Tests.Simulation
         }
 
         [Test]
+        public void ComputeSteps_UsesSpecifiedValuesBelowTheOldFloors()
+        {
+            // Review regression: values below 1e-6 (steps) and 1e-4 (chord error) were silently
+            // clamped, coarsening the sampling relative to the configured precision.
+            var linear = new SimulationSettings { MaxLinearStep = 1e-7f };
+            Assert.That(linear.ComputeSteps(1f, 0f), Is.EqualTo(10000000), "1 mm at 1e-7 mm/step");
+
+            var angular = new SimulationSettings { MaxAngularStep = 1e-7f };
+            Assert.That(angular.ComputeSteps(0f, 1f), Is.EqualTo(10000000), "1 degree at 1e-7 deg/step");
+
+            // 1e-5 mm chord error at radius 5 needs ~786 steps; the old 1e-4 floor delivered ~124.
+            var adaptive = new SimulationSettings
+            {
+                MaxLinearStep = 1000f,
+                MaxAngularStep = 180f,
+                MaxChordError = 1e-5f
+            };
+            Assert.That(adaptive.ComputeSteps(0f, 180f, cuttingCenterOffset: 5f), Is.EqualTo(786).Within(5));
+
+            // Very small chord errors use the series fallback: 5e-18 mm at radius 5 needs ~1.1e9 steps.
+            var tinyChord = new SimulationSettings
+            {
+                MaxLinearStep = 1000f,
+                MaxAngularStep = 180f,
+                MaxChordError = 5e-18f
+            };
+            Assert.That(tinyChord.ComputeSteps(0f, 180f, cuttingCenterOffset: 5f),
+                Is.GreaterThan(1000000000), "the series fallback must resolve very small chord errors");
+        }
+
+        [Test]
+        public void ComputeSteps_ImpossiblePrecision_Throws()
+        {
+            // Requests that cannot be represented by an int are rejected instead of silently
+            // clamped to a coarser sampling.
+            var linear = new SimulationSettings { MaxLinearStep = 1e-30f };
+            Assert.Throws<ArgumentOutOfRangeException>(() => linear.ComputeSteps(1f, 0f));
+
+            var adaptive = new SimulationSettings
+            {
+                MaxLinearStep = 1000f,
+                MaxAngularStep = 180f,
+                MaxChordError = 1e-20f
+            };
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                adaptive.ComputeSteps(0f, 180f, cuttingCenterOffset: 5f));
+        }
+
+        [Test]
         public void SimulationSettings_DefaultsAndValidBoundaryValues_AreAccepted()
         {
             var defaults = new SimulationSettings();
