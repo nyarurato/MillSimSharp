@@ -166,6 +166,50 @@ namespace MillSimSharp.Tests.Viewer
         }
 
         // ---------------------------------------------------------------------
+        // Unsupported G codes: the whole block is ignored (no motion)
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void Parse_UnsupportedGCodeBlock_DoesNotMove()
+        {
+            // Review regression: G28 on the same line was treated as a modal G1 cut to the origin.
+            var commands = GCodeParser.ParseText("G1 X10\nG28 X0\n", Vector3.Zero);
+            Assert.That(commands.Count, Is.EqualTo(1), "the G28 block must not emit a move");
+            Assert.That(((G1Move)commands[0]).Target, Is.EqualTo(new Vector3(10, 0, 0)));
+
+            // The ignored block must also leave the position unchanged for following moves.
+            var relative = GCodeParser.ParseText("G1 X10\nG91\nG28 X0\nG1 X5\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(2));
+            Assert.That(((G1Move)relative[1]).Target, Is.EqualTo(new Vector3(15, 0, 0)),
+                "the ignored block must not move the position");
+
+            // G18/G19 arc planes are unsupported: the block must not run as a G17 arc.
+            var plane = GCodeParser.ParseText("G18 G3 X10 Y0 I5 J0\n", Vector3.Zero);
+            Assert.That(plane, Is.Empty, "an unsupported arc plane must not emit chords");
+        }
+
+        [Test]
+        public void Parse_ModalWordsInUnsupportedBlock_StillApply()
+        {
+            // Only the motion of an unsupported block is dropped; its modal words still apply.
+            var commands = GCodeParser.ParseText("G28 G91\nG1 X5\n", Vector3.Zero);
+
+            Assert.That(commands.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)commands[0]).Target, Is.EqualTo(new Vector3(5, 0, 0)),
+                "the relative mode from the G28 block must still apply");
+        }
+
+        [Test]
+        public void Parse_PlaneSelection_DoesNotSuppressTheMove()
+        {
+            // G17 is the supported XY plane: it must not turn its block into an unsupported one.
+            var commands = GCodeParser.ParseText("G17 G1 X10\n", Vector3.Zero);
+
+            Assert.That(commands.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)commands[0]).Target, Is.EqualTo(new Vector3(10, 0, 0)));
+        }
+
+        // ---------------------------------------------------------------------
         // R-format arcs: positive R = minor arc, negative R = major arc
         // ---------------------------------------------------------------------
 

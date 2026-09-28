@@ -154,7 +154,9 @@ namespace MillSimSharp.Geometry
         /// <param name="resolution">Voxel size in millimeters (default: 0.5mm).</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="workArea"/> is null.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="resolution"/> is not a
-        /// finite positive number or the work area has a zero or non-finite size in any dimension.</exception>
+        /// finite positive number, the work area has a zero or non-finite size in any dimension, or
+        /// the grid would contain more voxels than <see cref="int.MaxValue"/> (the public voxel
+        /// counts are <see cref="int"/>-based).</exception>
         public VoxelGrid(BoundingBox workArea, float resolution = 0.5f)
         {
             if (workArea == null) throw new ArgumentNullException(nameof(workArea));
@@ -172,6 +174,19 @@ namespace MillSimSharp.Geometry
             _sizeY = (int)Math.Ceiling(size.Y / resolution);
             _sizeZ = (int)Math.Ceiling(size.Z / resolution);
 
+            // The public voxel counts (CountMaterialVoxels, GetMaterialVoxelCount) are int-based:
+            // reject grids that cannot be represented instead of silently overflowing (for example
+            // 200 mm at 0.1 mm resolution is 2000^3 = 8e9 cells).
+            long totalVoxels = (long)_sizeX * _sizeY * _sizeZ;
+            if (totalVoxels > int.MaxValue)
+            {
+                throw new ArgumentException(
+                    $"The work area contains {totalVoxels} voxels, which exceeds the supported maximum of {int.MaxValue}. Increase the resolution or reduce the work area.",
+                    nameof(workArea));
+            }
+
+            _totalVoxels = (int)totalVoxels;
+
             // Effective bounds of the discretized field: whole voxels from the requested minimum.
             _bounds = new BoundingBox(
                 workArea.Min,
@@ -180,8 +195,6 @@ namespace MillSimSharp.Geometry
             // Calculate max level for SVO
             int maxDim = Math.Max(_sizeX, Math.Max(_sizeY, _sizeZ));
             _maxLevel = (int)Math.Ceiling(Math.Log(maxDim, 2));
-
-            _totalVoxels = _sizeX * _sizeY * _sizeZ;
 
             // Root is null initially, meaning all voxels are material (true)
             _root = null;

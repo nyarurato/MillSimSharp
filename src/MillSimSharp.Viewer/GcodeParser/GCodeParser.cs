@@ -19,7 +19,8 @@ namespace MillSimSharp.Viewer
     /// <item>G90 / G91 absolute / incremental distance mode</item>
     /// <item>F feed rate and M codes (M codes are ignored)</item>
     /// </list>
-    /// Unsupported G codes (G18/G19 arcs, G28, canned cycles, ...) are ignored.
+    /// Unsupported G codes (G18/G19 arcs, G28, canned cycles, work offsets, ...) are ignored as
+    /// blocks: no motion is generated from such a line and the position stays unchanged.
     /// </summary>
     public static class GCodeParser
     {
@@ -63,13 +64,23 @@ namespace MillSimSharp.Viewer
 
                 // Apply modal words (units / distance mode) before interpreting coordinates, so the
                 // result does not depend on the word order inside the block: "G91 G1 X1" and
-                // "X1 G91 G1" must be equivalent.
+                // "X1 G91 G1" must be equivalent. A G code this parser does not implement makes the
+                // whole block unsupported: its modal words still apply, but it must not generate a
+                // motion (for example "G28 X0" after "G1 X10" is not a return-to-origin cut).
+                bool hasUnsupportedG = false;
                 foreach (var (letter, value) in words)
                 {
                     if (letter != 'G') continue;
 
                     switch ((int)Math.Round(value))
                     {
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                            break; // motion: handled with the coordinates below
+                        case 17:
+                            break; // XY plane: the only plane this parser supports
                         case 20:
                             unitScale = 25.4;
                             break;
@@ -82,7 +93,17 @@ namespace MillSimSharp.Viewer
                         case 91:
                             absolute = false;
                             break;
+                        default:
+                            hasUnsupportedG = true;
+                            break;
                     }
+                }
+
+                if (hasUnsupportedG)
+                {
+                    // Unsupported block (G28, canned cycles, work offsets, ...): emit no motion and
+                    // keep the position unchanged.
+                    continue;
                 }
 
                 bool hasAxis = false;

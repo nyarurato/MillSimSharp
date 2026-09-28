@@ -24,6 +24,9 @@ namespace MillSimSharp.Viewer
         private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
         private bool _meshUpdatePending = false;
+        // Set when a mesh regeneration is requested while one is already running. The running task
+        // re-runs once after finishing, so consecutive steps / mode switches cannot leave a stale mesh.
+        private bool _meshRegenerationRequested = false;
         // Key state helper for toggles
         private bool _rKeyPrev = false;
         private bool _cKeyPrev = false;
@@ -467,6 +470,9 @@ namespace MillSimSharp.Viewer
                     _stepExecutor.LoadCommands(_pendingToolpathCommands);
 
                     Console.WriteLine($"Step executor initialized. Total commands: {_stepExecutor.TotalCommands}, Step size: {_stepExecutor.StepSize}");
+
+                    // Show the initial (all material) step state instead of the previous full-path mesh.
+                    StartMeshGenerationAsync();
                 }
                 else if (!_stepByStepMode)
                 {
@@ -658,74 +664,96 @@ namespace MillSimSharp.Viewer
 
         /// <summary>
         /// Start mesh generation on a background thread and apply it on the render thread once ready.
+        /// If a generation is already running, a follow-up run is queued instead of dropping the
+        /// request, so the display always converges to the current state.
         /// </summary>
         private void StartMeshGenerationAsync()
         {
             if (_sdfGrid == null) return;
 
-            if (_meshComputeTask != null && !_meshComputeTask.IsCompleted)
+            lock (_meshLock)
             {
-                Console.WriteLine("Mesh generation already in progress...");
-                return;
-            }
-
-            // Use step grid if in step mode, otherwise use original grid
-            var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
-            if (gridCopy == null)
-            {
-                Console.WriteLine("No SDF grid available for mesh generation.");
-                return;
-            }
-
-            _meshGenerationInProgress = true;
-            _processingStatus = "Generating mesh...";
-            Console.WriteLine("Starting mesh generation...");
-
-            var meshGenStopwatch = new Stopwatch();
-            meshGenStopwatch.Start();
-
-            // Progress reporting for mesh generation
-            var meshProgressTask = System.Threading.Tasks.Task.Run(async () =>
-            {
-                while (_meshGenerationInProgress)
+                if (_meshComputeTask != null && !_meshComputeTask.IsCompleted)
                 {
-                    await System.Threading.Tasks.Task.Delay(5000); // Every 5 seconds
-                    if (_meshGenerationInProgress)
-                    {
-                        Console.WriteLine($"Mesh generation in progress... ({meshGenStopwatch.ElapsedMilliseconds / 1000}s elapsed)");
-                    }
+                    _meshRegenerationRequested = true;
+                    Console.WriteLine("Mesh generation already in progress; a follow-up run is queued.");
+                    return;
                 }
-            });
 
-            _meshComputeTask = System.Threading.Tasks.Task.Run(() =>
-            {
-                // Generate mesh directly from SDF
-                return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(gridCopy);
-            });
+                _meshRegenerationRequested = false;
 
-            _meshComputeTask.ContinueWith((t) =>
-            {
-                meshGenStopwatch.Stop();
-                _meshGenerationInProgress = false;
-
-                if (t.IsCompletedSuccessfully)
+                // Use step grid if in step mode, otherwise use original grid
+                var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
+                if (gridCopy == null)
                 {
-                    var mesh = t.Result;
+                    Console.WriteLine("No SDF grid available for mesh generation.");
+                    return;
+                }
+
+                _meshGenerationInProgress = true;
+                _processingStatus = "Generating mesh...";
+                Console.WriteLine("Starting mesh generation...");
+
+                var meshGenStopwatch = new Stopwatch();
+                meshGenStopwatch.Start();
+
+                // Progress reporting for mesh generation
+                var meshProgressTask = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    while (_meshGenerationInProgress)
+                    {
+                        await System.Threading.Tasks.Task.Delay(5000); // Every 5 seconds
+                        if (_meshGenerationInProgress)
+                        {
+                            Console.WriteLine($"Mesh generation in progress... ({meshGenStopwatch.ElapsedMilliseconds / 1000}s elapsed)");
+                        }
+                    }
+                });
+
+                _meshComputeTask = System.Threading.Tasks.Task.Run(() =>
+                {
+                    // Generate mesh directly from SDF
+                    return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(gridCopy);
+                });
+
+                _meshComputeTask.ContinueWith((t) =>
+                {
+                    meshGenStopwatch.Stop();
+                    _meshGenerationInProgress = false;
+
+                    if (t.IsCompletedSuccessfully)
+                    {
+                        var mesh = t.Result;
+                        lock (_meshLock)
+                        {
+                            _pendingMesh = mesh;
+                            _meshUpdatePending = true;
+                        }
+                        _processingStatus = "";
+                        Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
+                    }
+                    else if (t.IsFaulted)
+                    {
+                        _processingStatus = "Mesh generation failed";
+                        // Print full exception details to help diagnose failures
+                        Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
+                    }
+
+                    // Run the queued follow-up request now (the state / mode may have changed while
+                    // the previous generation was running).
+                    bool rerun;
                     lock (_meshLock)
                     {
-                        _pendingMesh = mesh;
-                        _meshUpdatePending = true;
+                        rerun = _meshRegenerationRequested;
+                        _meshRegenerationRequested = false;
                     }
-                    _processingStatus = "";
-                    Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
-                }
-                else if (t.IsFaulted)
-                {
-                    _processingStatus = "Mesh generation failed";
-                    // Print full exception details to help diagnose failures
-                    Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
-                }
-            }, System.Threading.Tasks.TaskScheduler.Default);
+
+                    if (rerun)
+                    {
+                        StartMeshGenerationAsync();
+                    }
+                }, System.Threading.Tasks.TaskScheduler.Default);
+            }
         }
     }
 }

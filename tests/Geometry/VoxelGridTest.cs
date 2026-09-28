@@ -236,5 +236,29 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(grid.Bounds.Max, Is.EqualTo(new Vector3(1f, 1f, 1f)));
             Assert.That(grid.GetVoxel(0, 0, 0), Is.True);
         }
+
+        [Test]
+        public void VoxelGrid_ExcessiveVoxelCount_Throws()
+        {
+            // Review regression: 200 mm at 0.1 mm resolution is 2000^3 = 8e9 voxels, which overflowed
+            // the int-based public counts. Unrepresentable grids are rejected at construction.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(200, 200, 200));
+
+            var exception = Assert.Throws<ArgumentException>(() => new VoxelGrid(bbox, 0.1f));
+            Assert.That(exception!.Message, Does.Contain("voxels"));
+        }
+
+        [Test]
+        public void VoxelGrid_MaxCountBoundary_IsAccepted()
+        {
+            // 1290^3 = 2,146,689,000 voxels is below int.MaxValue and must be constructible. The SVO
+            // is sparse, so an all-material grid of this size costs no volume allocation.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(1290, 1290, 1290));
+
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            Assert.That(grid.Dimensions, Is.EqualTo((1290, 1290, 1290)));
+            Assert.That(grid.CountMaterialVoxels(), Is.EqualTo(2146689000));
+        }
     }
 }
