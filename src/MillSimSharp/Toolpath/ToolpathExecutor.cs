@@ -189,8 +189,9 @@ namespace MillSimSharp.Toolpath
 
         /// <summary>
         /// Executes a single command while keeping position and orientation state consistent.
-        /// All execution paths (batch, single, step-by-step) share this method so that 5-axis
-        /// orientation state is never lost.
+        /// All execution paths (batch, single, step-by-step) share this method. The built-in move
+        /// commands are normalized to one pose-sweep plan; custom commands keep the public
+        /// <see cref="IToolpathCommand.Execute"/> path.
         /// </summary>
         private void ExecuteCore(IToolpathCommand command)
         {
@@ -201,65 +202,119 @@ namespace MillSimSharp.Toolpath
                 return;
             }
 
-            var position = CurrentPosition;
-            var orientation = CurrentOrientation;
-            Vector3 positionBefore = position;
+            Vector3 positionBefore = CurrentPosition;
 
-            if (command is G1Move5Axis g1Move5Axis)
+            if (TryCreateMovePlan(command, out MovePlan plan))
             {
-                g1Move5Axis.Execute(_simulator, _tool, ref position, orientation);
-                orientation = g1Move5Axis.Orientation;
-            }
-            else if (command is G0Move5Axis g0Move5Axis)
-            {
-                position = g0Move5Axis.Target;
-                orientation = g0Move5Axis.Orientation;
-            }
-            else if (command is G1Move g1Move)
-            {
-                // A normal G1 keeps the current orientation: after a 5-axis move it must not
-                // silently fall back to the default 3-axis pose. For the default orientation this
-                // is identical to CutLinear.
-                _simulator.CutLinearWithOrientation(position, g1Move.Target, _tool, orientation, orientation);
-                position = g1Move.Target;
-            }
-            else
-            {
-                command.Execute(_simulator, _tool, ref position);
+                ApplyMove(plan);
+                AccumulateMoveTime(plan, positionBefore, CurrentPosition);
+                return;
             }
 
+            // Custom command: execute through the public interface. The position is only committed
+            // when Execute returns, the orientation is kept and no time is estimated.
+            Vector3 position = CurrentPosition;
+            command.Execute(_simulator, _tool, ref position);
             CurrentPosition = position;
-            CurrentOrientation = orientation;
-
-            AccumulateTime(command, positionBefore, position);
         }
 
-        private void AccumulateTime(IToolpathCommand command, Vector3 from, Vector3 to)
+        /// <summary>
+        /// Normalizes the built-in move commands into a single pose-sweep plan. Returns false for
+        /// custom commands, which are executed through <see cref="IToolpathCommand.Execute"/>.
+        /// </summary>
+        private bool TryCreateMovePlan(IToolpathCommand command, out MovePlan plan)
         {
+            switch (command)
+            {
+                case G1Move5Axis g1Move5Axis:
+                    plan = new MovePlan(CurrentPosition, g1Move5Axis.Target,
+                        CurrentOrientation, g1Move5Axis.Orientation,
+                        EffectiveFeedRate(g1Move5Axis.FeedRate), cutsMaterial: true);
+                    return true;
+                case G0Move5Axis g0Move5Axis:
+                    plan = new MovePlan(CurrentPosition, g0Move5Axis.Target,
+                        CurrentOrientation, g0Move5Axis.Orientation,
+                        RapidFeedRate, cutsMaterial: false);
+                    return true;
+                case G1Move g1Move:
+                    // A normal G1 keeps the current orientation: after a 5-axis move it must not
+                    // silently fall back to the default 3-axis pose. For the default orientation
+                    // this is identical to CutLinear.
+                    plan = new MovePlan(CurrentPosition, g1Move.Target,
+                        CurrentOrientation, CurrentOrientation,
+                        EffectiveFeedRate(g1Move.FeedRate), cutsMaterial: true);
+                    return true;
+                case G0Move g0Move:
+                    plan = new MovePlan(CurrentPosition, g0Move.Target,
+                        CurrentOrientation, CurrentOrientation,
+                        RapidFeedRate, cutsMaterial: false);
+                    return true;
+                default:
+                    plan = default;
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Applies a normalized move: cutting moves sweep the tool to the new pose, rapid moves
+        /// only update the pose.
+        /// </summary>
+        private void ApplyMove(in MovePlan plan)
+        {
+            if (plan.CutsMaterial)
+            {
+                _simulator.CutLinearWithOrientation(
+                    plan.Start, plan.End, _tool, plan.StartOrientation, plan.EndOrientation);
+            }
+
+            CurrentPosition = plan.End;
+            CurrentOrientation = plan.EndOrientation;
+        }
+
+        /// <summary>
+        /// Effective feed rate for the time estimate: a missing (non-positive) G1 feed falls back
+        /// to <see cref="RapidFeedRate"/>.
+        /// </summary>
+        private float EffectiveFeedRate(float feedRate)
+        {
+            return feedRate > 0f ? feedRate : RapidFeedRate;
+        }
+
+        private void AccumulateMoveTime(in MovePlan plan, Vector3 from, Vector3 to)
+        {
+            // Mirrors the previous "feed > 0" guard, which also skipped NaN.
+            if (!(plan.FeedRate > 0f)) return;
+
             float distance = Vector3.Distance(from, to);
             if (distance <= 0f) return;
 
-            float feed;
-            switch (command)
+            EstimatedTimeSeconds += distance / plan.FeedRate * 60.0; // mm / (mm/min) -> minutes -> seconds
+        }
+
+        /// <summary>
+        /// Normalized move: start / end pose, effective feed rate for the time estimate and whether
+        /// the move removes material (G1) or is a rapid positioning move (G0).
+        /// </summary>
+        private readonly struct MovePlan
+        {
+            public MovePlan(Vector3 start, Vector3 end,
+                ToolOrientation startOrientation, ToolOrientation endOrientation,
+                float feedRate, bool cutsMaterial)
             {
-                case G1Move g1:
-                    feed = g1.FeedRate > 0f ? g1.FeedRate : RapidFeedRate;
-                    break;
-                case G1Move5Axis g1FiveAxis:
-                    feed = g1FiveAxis.FeedRate > 0f ? g1FiveAxis.FeedRate : RapidFeedRate;
-                    break;
-                case G0Move _:
-                case G0Move5Axis _:
-                    feed = RapidFeedRate;
-                    break;
-                default:
-                    return;
+                Start = start;
+                End = end;
+                StartOrientation = startOrientation;
+                EndOrientation = endOrientation;
+                FeedRate = feedRate;
+                CutsMaterial = cutsMaterial;
             }
 
-            if (feed > 0f)
-            {
-                EstimatedTimeSeconds += distance / feed * 60.0; // mm / (mm/min) -> minutes -> seconds
-            }
+            public Vector3 Start { get; }
+            public Vector3 End { get; }
+            public ToolOrientation StartOrientation { get; }
+            public ToolOrientation EndOrientation { get; }
+            public float FeedRate { get; }
+            public bool CutsMaterial { get; }
         }
 
         /// <summary>

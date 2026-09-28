@@ -11,6 +11,12 @@ namespace MillSimSharp
 {
     /// <summary>
     /// Main facade class that integrates all simulation components.
+    /// <para>
+    /// This is a <b>voxel convenience API</b>: it owns a <see cref="VoxelGrid"/> and a
+    /// <see cref="CutterSimulator"/>. For the SDF backend, use <see cref="SDFGrid"/> /
+    /// <see cref="SDFCutterSimulator"/> with <see cref="ToolpathExecutor"/> directly. A
+    /// backend-neutral facade is a 0.3.x design topic.
+    /// </para>
     /// </summary>
     public class MillSimulation
     {

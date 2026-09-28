@@ -124,5 +124,71 @@ namespace MillSimSharp.Tests.Toolpath
 
             Assert.That(differences, Is.EqualTo(0), "Full and step execution must remove the same voxels");
         }
+
+        // ---------------------------------------------------------------------
+        // Normalized move paths (C-2): each built-in command type updates position,
+        // orientation, time and material exactly as documented.
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void NormalizedMoves_RapidMoves_DoNotCutAndUseRapidTime()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var executor = new ToolpathExecutor(new CutterSimulator(grid), new EndMill(4f, 20f, false), Vector3.Zero)
+            {
+                RapidFeedRate = 600f
+            };
+            long initialMaterial = grid.CountMaterialVoxels();
+
+            executor.ExecuteCommand(new G0Move(new Vector3(0, 0, 5)));
+
+            Assert.That(executor.CurrentPosition, Is.EqualTo(new Vector3(0, 0, 5)));
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(0f));
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(0.5).Within(1e-3)); // 5mm at 600
+            Assert.That(grid.CountMaterialVoxels(), Is.EqualTo(initialMaterial), "G0 must not cut");
+
+            executor.ExecuteCommand(new G0Move5Axis(new Vector3(0, 5, 5), new ToolOrientation(30, 0, 0)));
+
+            Assert.That(executor.CurrentPosition, Is.EqualTo(new Vector3(0, 5, 5)));
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(30f).Within(1e-5f),
+                "G0 5-axis moves update the orientation");
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(1.0).Within(1e-3)); // +5mm at 600
+            Assert.That(grid.CountMaterialVoxels(), Is.EqualTo(initialMaterial), "G0 5-axis must not cut");
+        }
+
+        [Test]
+        public void NormalizedMoves_G1Move_KeepsOrientationAndEstimatesFeedTime()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var executor = new ToolpathExecutor(new CutterSimulator(grid), new EndMill(4f, 20f, false), Vector3.Zero)
+            {
+                RapidFeedRate = 600f
+            };
+            executor.ExecuteCommand(new G0Move5Axis(new Vector3(0, 0, 5), new ToolOrientation(30, 0, 0)));
+
+            executor.ExecuteCommand(new G1Move(new Vector3(10, 0, 5), feedRate: 60f));
+
+            Assert.That(executor.CurrentPosition, Is.EqualTo(new Vector3(10, 0, 5)));
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(30f).Within(1e-5f),
+                "a normal G1 must keep the current orientation");
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(0.5 + 10.0).Within(1e-3)); // rapid + 10mm at 60
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(5, 0, 5)), Is.False,
+                "G1 removes material along the tip path");
+        }
+
+        [Test]
+        public void NormalizedMoves_G1Move5Axis_CutsAndUpdatesOrientation()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var executor = new ToolpathExecutor(new CutterSimulator(grid), new EndMill(4f, 20f, false), Vector3.Zero);
+
+            executor.ExecuteCommand(new G1Move5Axis(new Vector3(0, 5, 0), new ToolOrientation(30, 0, 0), feedRate: 120f));
+
+            Assert.That(executor.CurrentPosition, Is.EqualTo(new Vector3(0, 5, 0)));
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(30f).Within(1e-5f));
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(2.5).Within(1e-3)); // 5mm at 120
+            Assert.That(grid.GetVoxelAtWorld(new Vector3(0, 2.5f, 0)), Is.False,
+                "the 5-axis cut removes material along the tip path");
+        }
     }
 }

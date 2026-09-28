@@ -157,6 +157,40 @@ namespace MillSimSharp.Tests.Toolpath
             AssertVoxelGridsEqual(batchGrid, stepGrid);
         }
 
+        [Test]
+        public void ExecuteNextSteps_CustomCommand_ThrowingMidMove_KeepsIndexPoseTimeAndMaterialConsistent()
+        {
+            var grid = new VoxelGrid(StockBounds, 1.0f);
+            var executor = new ToolpathExecutor(new CutterSimulator(grid), new EndMill(4f, 20f, isBallEnd: false), Vector3.Zero);
+            var partial = new PartialThenThrowCommand(new Vector3(5, 0, 0));
+            executor.LoadCommands(new List<IToolpathCommand>
+            {
+                partial,
+                new G0Move(new Vector3(0, 0, 1)),
+            });
+
+            long materialBefore = grid.CountMaterialVoxels();
+
+            Assert.Throws<InvalidOperationException>(() => executor.ExecuteNextSteps(1));
+
+            // Failure injection: cursor, pose and time must not commit...
+            Assert.That(executor.CurrentCommandIndex, Is.EqualTo(-1), "the cursor must not advance");
+            Assert.That(executor.CurrentPosition, Is.EqualTo(Vector3.Zero), "the pose must not commit");
+            Assert.That(executor.CurrentOrientation.A, Is.EqualTo(0f));
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(0.0), "custom commands add no time");
+
+            // ...but the material removal is not transactional (documented behavior).
+            Assert.That(grid.CountMaterialVoxels(), Is.LessThan(materialBefore),
+                "partial cuts from a failing command are kept");
+
+            // The retry commits the command and the executor advances.
+            Assert.That(executor.ExecuteNextSteps(1), Is.EqualTo(1));
+            Assert.That(partial.ExecuteCalls, Is.EqualTo(2));
+            Assert.That(executor.CurrentCommandIndex, Is.EqualTo(0));
+            Assert.That(executor.CurrentPosition, Is.EqualTo(new Vector3(5, 0, 0)));
+            Assert.That(executor.EstimatedTimeSeconds, Is.EqualTo(0.0), "custom commands still add no time");
+        }
+
         private static List<IToolpathCommand> BuildCustomSequence()
         {
             return new List<IToolpathCommand>
@@ -175,6 +209,37 @@ namespace MillSimSharp.Tests.Toolpath
             public void Execute(ICutterSimulator simulator, Tool tool, ref Vector3 currentPosition)
             {
                 ExecuteCalls++;
+                throw new InvalidOperationException(FailureMessage);
+            }
+        }
+
+        /// <summary>
+        /// Command that cuts a short segment, then throws on the first call. The second call
+        /// succeeds like a rapid move. Used to verify the failure-injection contract per state
+        /// component (index / pose / time / material).
+        /// </summary>
+        private sealed class PartialThenThrowCommand : IToolpathCommand
+        {
+            private readonly Vector3 _target;
+
+            public PartialThenThrowCommand(Vector3 target)
+            {
+                _target = target;
+            }
+
+            public int ExecuteCalls { get; private set; }
+
+            public void Execute(ICutterSimulator simulator, Tool tool, ref Vector3 currentPosition)
+            {
+                ExecuteCalls++;
+                if (ExecuteCalls > 1)
+                {
+                    currentPosition = _target;
+                    return;
+                }
+
+                simulator.CutLinear(currentPosition, new Vector3(2, 0, 0), tool);
+                currentPosition = new Vector3(2, 0, 0);
                 throw new InvalidOperationException(FailureMessage);
             }
         }

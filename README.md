@@ -172,7 +172,9 @@ StlExporter.Export(mesh, "five_axis_output.stl");
 
 ### SDF-Native Workflow (Direct SDF Manipulation)
 
-For SDF-based workflows without voxels, use `SDFGrid` directly:
+For SDF-based workflows without voxels, use `SDFGrid` directly. `MillSimulation` is a **voxel
+convenience facade** (`VoxelGrid` + `CutterSimulator`); combine `SDFGrid` with
+`SDFCutterSimulator` and `ToolpathExecutor` for the SDF backend:
 
 ```csharp
 using MillSimSharp.Geometry;
