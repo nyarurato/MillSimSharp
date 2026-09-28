@@ -30,16 +30,16 @@ jobs:
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -warnaserror
 
       - name: Verify formatting
         run: dotnet format MillSimSharp.sln --verify-no-changes --no-restore
 
       - name: Build netstandard2.1
-        run: dotnet build src/MillSimSharp/MillSimSharp.csproj --configuration Release --no-restore --framework netstandard2.1
+        run: dotnet build src/MillSimSharp/MillSimSharp.csproj --configuration Release --no-restore --framework netstandard2.1 -warnaserror
 
       - name: Build samples
-        run: dotnet build samples/samples.sln --configuration Release
+        run: dotnet build samples/samples.sln --configuration Release -warnaserror
 
       - name: Run tests
         run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage"

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CoordinateTransform.InterpolateOrientation` now uses shortest-rotation quaternion slerp (`ToolOrientation.Slerp`) instead of interpolating the A/B/C Euler angles independently. For example, the midpoint of a 350° → 10° change is now the equivalent of 0° instead of 180°, matching `ToolOrientation.Slerp` and the simulator pose path (behavior change).
 - `VoxelGrid` and `SDFGrid` now reject bounds with a zero or non-finite size in any dimension with `ArgumentException` (behavior change). Previously `VoxelGrid` created a degenerate grid while `SDFGrid` silently clamped each axis to one voxel, so the two backends disagreed on the same input. An unconfigured stock (`StockConfiguration.WorkSize = (0, 0, 0)`) now fails fast in `MillSimulation`.
 - Voxel mesh conversion (`MeshConverter.ConvertToMesh`) now merges its per-Z-slice results in a fixed slice order instead of a `ConcurrentBag` enumeration order, so the same `VoxelGrid` always produces identical vertex, normal and index arrays (and identical STL bytes). The output order can differ from previous releases; the geometry is unchanged.
+- CI builds now pass `-warnaserror` for the solution, the netstandard2.1 target and the samples, enforcing the documented zero-warning policy (previously the flag was not set in CI).
 
 ### Fixed
 
