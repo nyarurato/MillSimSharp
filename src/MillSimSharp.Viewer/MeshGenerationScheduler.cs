@@ -7,11 +7,12 @@ namespace MillSimSharp.Viewer
     /// follow-up request is queued, and results from stale generations are rejected.
     /// <para>
     /// Usage: call <see cref="TryBegin"/> before starting a build. When it returns a generation,
-    /// start the build and check <see cref="TryApplyResult"/> with that generation when the result
-    /// arrives: a result is only applied when it is still the latest generation and no follow-up
-    /// request is queued, so an outdated mesh is never displayed while a newer build is pending.
-    /// Call <see cref="Complete"/> afterwards; if it returns true, a request arrived while the
-    /// build was running and another build must be started.
+    /// start the build and pass that generation to <see cref="TryApplyResult"/> when the result is
+    /// about to be shown - both when it is stored as pending and again right before it is applied
+    /// to the display. A result is only applied when it is still the latest generation and no
+    /// follow-up request is queued, so an outdated mesh is never displayed while a newer build is
+    /// pending. Call <see cref="Complete"/> when the build finishes; if it returns true, a request
+    /// arrived while the build was running and another build must be started.
     /// </para>
     /// </summary>
     public sealed class MeshGenerationScheduler

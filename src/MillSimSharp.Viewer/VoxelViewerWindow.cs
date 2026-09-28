@@ -22,6 +22,7 @@ namespace MillSimSharp.Viewer
         private readonly object _meshLock = new object();
         // Async mesh generation fields
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
+        private int _pendingMeshGeneration = -1;
         private bool _meshUpdatePending = false;
         // Serializes mesh generation: queues a follow-up request while a build runs and rejects
         // results from stale generations (see MeshGenerationScheduler).
@@ -285,9 +286,20 @@ namespace MillSimSharp.Viewer
             {
                 if (_meshUpdatePending && _pendingMesh != null)
                 {
-                    _meshRenderer.UpdateMesh(_pendingMesh);
-                    // Keep a copy of the current active mesh for exports
-                    _currentMesh = _pendingMesh;
+                    // Re-validate at apply time: a newer build may have started (or been queued)
+                    // after this result was stored, in which case its mesh is shown instead and the
+                    // pending one must not reach the screen.
+                    if (_meshScheduler.TryApplyResult(_pendingMeshGeneration))
+                    {
+                        _meshRenderer.UpdateMesh(_pendingMesh);
+                        // Keep a copy of the current active mesh for exports
+                        _currentMesh = _pendingMesh;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Discarding stale pending mesh (a newer generation is active or queued).");
+                    }
+
                     _meshUpdatePending = false;
                     _pendingMesh = null;
                 }
@@ -726,30 +738,19 @@ namespace MillSimSharp.Viewer
                 if (t.IsCompletedSuccessfully)
                 {
                     var mesh = t.Result;
-                    bool applied = false;
 
-                    // A result is only shown when it is still current AND no follow-up build is
-                    // queued; otherwise the queued build's mesh will be shown instead of flashing
-                    // the outdated one.
-                    if (_meshScheduler.TryApplyResult(generation))
+                    // Store the result with its generation; the render thread re-validates it
+                    // (TryApplyResult) when it is actually drawn, so a result superseded by a newer
+                    // request never reaches the screen.
+                    lock (_meshLock)
                     {
-                        lock (_meshLock)
-                        {
-                            _pendingMesh = mesh;
-                            _meshUpdatePending = true;
-                        }
-                        applied = true;
+                        _pendingMesh = mesh;
+                        _pendingMeshGeneration = generation;
+                        _meshUpdatePending = true;
                     }
 
-                    if (applied)
-                    {
-                        _processingStatus = "";
-                        Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Discarding stale mesh result (a newer generation is active or queued).");
-                    }
+                    _processingStatus = "";
+                    Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
                 }
                 else if (t.IsFaulted)
                 {

@@ -71,5 +71,30 @@ namespace MillSimSharp.Tests.Viewer
             Assert.That(scheduler.TryApplyResult(second), Is.True);
             scheduler.Complete();
         }
+
+        [Test]
+        public void PendingResult_InvalidatedByANewerRequestBeforeApply()
+        {
+            // Review regression: the viewer stores a finished mesh and applies it on the next render
+            // frame. A request that arrives in between must invalidate the pending result, and the
+            // same validation is repeated right before the pending mesh is drawn.
+            var scheduler = new MeshGenerationScheduler();
+
+            // Variant 1: the newer build starts before the pending result is consumed.
+            int first = scheduler.TryBegin()!.Value;
+            Assert.That(scheduler.TryApplyResult(first), Is.True, "the result may be stored as pending");
+            scheduler.Complete();
+            scheduler.TryBegin();
+            Assert.That(scheduler.TryApplyResult(first), Is.False,
+                "the pending mesh must be discarded when a newer generation started");
+
+            // Variant 2: the newer request is still queued (the running build has not completed).
+            scheduler.Complete();
+            int second = scheduler.TryBegin()!.Value;
+            Assert.That(scheduler.TryApplyResult(second), Is.True);
+            Assert.That(scheduler.TryBegin(), Is.Null, "the request is queued while the build runs");
+            Assert.That(scheduler.TryApplyResult(second), Is.False,
+                "a queued follow-up invalidates the pending mesh");
+        }
     }
 }
