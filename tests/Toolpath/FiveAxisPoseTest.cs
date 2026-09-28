@@ -70,6 +70,123 @@ namespace MillSimSharp.Tests.Toolpath
                 Is.EqualTo(180f).Within(0.01f));
         }
 
+        // ---------------------------------------------------------------------
+        // Tool axis (IJK-style) pose input
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void Orientation_FromAxis_ZeroOrNonFinite_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => ToolOrientation.FromAxisTowardSpindle(Vector3.Zero));
+            Assert.Throws<ArgumentException>(() =>
+                ToolOrientation.FromAxisTowardSpindle(new Vector3(float.NaN, 0, 1)));
+            Assert.Throws<ArgumentException>(() =>
+                ToolOrientation.FromAxisTowardSpindle(new Vector3(0, 0, float.PositiveInfinity)));
+        }
+
+        [Test]
+        public void Orientation_FromAxis_MatchesEulerRoundTrip()
+        {
+            var axes = new[]
+            {
+                Vector3.UnitZ,
+                Vector3.UnitX,
+                -Vector3.UnitX,
+                new Vector3(0, 1, 0),
+                Vector3.Normalize(new Vector3(1, 1, 1)),
+                Vector3.Normalize(new Vector3(-2, 0.5f, 3)),
+            };
+
+            foreach (Vector3 axis in axes)
+            {
+                ToolOrientation orientation = ToolOrientation.FromAxisTowardSpindle(axis);
+                Vector3 roundTrip = orientation.GetAxisTowardSpindle();
+
+                Assert.That(roundTrip.X, Is.EqualTo(axis.X).Within(1e-5f), $"X for {axis}");
+                Assert.That(roundTrip.Y, Is.EqualTo(axis.Y).Within(1e-5f), $"Y for {axis}");
+                Assert.That(roundTrip.Z, Is.EqualTo(axis.Z).Within(1e-5f), $"Z for {axis}");
+            }
+
+            // Hand-derived case: a 45 degree tilt around X has the canonical A = 45, B = C = 0.
+            var tiltedAxis = new Vector3(0, -MathF.Sqrt(0.5f), MathF.Sqrt(0.5f));
+            ToolOrientation tilted = ToolOrientation.FromAxisTowardSpindle(tiltedAxis);
+            Assert.That(tilted.A, Is.EqualTo(45f).Within(1e-3f));
+            Assert.That(tilted.B, Is.EqualTo(0f).Within(1e-3f));
+            Assert.That(tilted.C, Is.EqualTo(0f).Within(1e-3f));
+        }
+
+        [Test]
+        public void Orientation_180DegreeFlip_IsDeterministic()
+        {
+            // The antipodal direction has no unique shortest rotation: pin the construction
+            // (180 degree X flip) and require deterministic, repeatable results.
+            ToolOrientation flipped = ToolOrientation.FromAxisTowardSpindle(-Vector3.UnitZ);
+            var canonical = new ToolOrientation(180, 0, 0);
+
+            Assert.That(MathF.Abs(Quaternion.Dot(flipped.GetQuaternion(), canonical.GetQuaternion())),
+                Is.GreaterThan(0.99999f), "the antipodal pose must be the 180 degree X flip");
+
+            ToolOrientation midFirst = ToolOrientation.Slerp(ToolOrientation.Default, canonical, 0.5f);
+            ToolOrientation midSecond = ToolOrientation.Slerp(ToolOrientation.Default, canonical, 0.5f);
+
+            Assert.That(MathF.Abs(Quaternion.Dot(midFirst.GetQuaternion(), midSecond.GetQuaternion())),
+                Is.GreaterThan(0.99999f), "180 degree slerp must be deterministic");
+
+            // Both +/-90 degrees around X are equally short half-way poses; the quaternion sign picks
+            // one of them, so only the sign-agnostic property (a horizontal pose) is pinned here.
+            Vector3 midAxis = midFirst.GetAxisTowardSpindle();
+            Assert.That(midAxis.X, Is.EqualTo(0f).Within(1e-4f));
+            Assert.That(MathF.Abs(midAxis.Y), Is.EqualTo(1f).Within(1e-4f));
+            Assert.That(midAxis.Z, Is.EqualTo(0f).Within(1e-4f));
+        }
+
+        [Test]
+        public void Orientation_RollOnly_DoesNotChangeCut()
+        {
+            // With A = B = 0 the C angle is a pure roll about the tool axis. Cutting geometries are
+            // solids of revolution, so the removal must be identical for both backends.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(30, 30, 30));
+            var tool = new EndMill(10f, 30f, isBallEnd: false);
+            var start = new Vector3(0, 0, 10);
+            var end = new Vector3(8, 0, 10);
+
+            var reference = new VoxelGrid(bbox, 1.0f);
+            new CutterSimulator(reference).CutLinearWithOrientation(start, end, tool,
+                new ToolOrientation(0, 0, 0), new ToolOrientation(0, 0, 0));
+
+            var rolled = new VoxelGrid(bbox, 1.0f);
+            new CutterSimulator(rolled).CutLinearWithOrientation(start, end, tool,
+                new ToolOrientation(0, 0, 45), new ToolOrientation(0, 0, 90));
+
+            var (sx, sy, sz) = reference.Dimensions;
+            int differences = 0;
+            for (int x = 0; x < sx; x++)
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                        if (reference.GetVoxel(x, y, z) != rolled.GetVoxel(x, y, z)) differences++;
+
+            Assert.That(differences, Is.EqualTo(0),
+                "roll-only orientation changes must not change the removed voxels");
+
+            var referenceSdf = new SDFGrid(bbox, 1.0f, narrowBandWidth: 4);
+            new SDFCutterSimulator(referenceSdf).CutLinearWithOrientation(start, end, tool,
+                new ToolOrientation(0, 0, 0), new ToolOrientation(0, 0, 0));
+
+            var rolledSdf = new SDFGrid(bbox, 1.0f, narrowBandWidth: 4);
+            new SDFCutterSimulator(rolledSdf).CutLinearWithOrientation(start, end, tool,
+                new ToolOrientation(0, 0, 45), new ToolOrientation(0, 0, 90));
+
+            int signDifferences = 0;
+            for (int x = 0; x < sx; x++)
+                for (int y = 0; y < sy; y++)
+                    for (int z = 0; z < sz; z++)
+                        if ((referenceSdf.GetDistance(x, y, z) < 0f) != (rolledSdf.GetDistance(x, y, z) < 0f))
+                            signDifferences++;
+
+            Assert.That(signDifferences, Is.EqualTo(0),
+                "roll-only orientation changes must not change the SDF sign pattern");
+        }
+
         [TestCase(1.0f)]
         [TestCase(0.5f)]
         public void FiveAxis_RotationOnly_PerformsSweep(float resolution)

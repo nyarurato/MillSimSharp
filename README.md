@@ -322,7 +322,15 @@ Vector3 cuttingAxis = orientation.GetCuttingAxisDirection();
 
 // Or the direction from the tip toward the spindle
 Vector3 towardSpindle = orientation.GetAxisTowardSpindle();
+
+// IJK-style input: tool axis (tip -> spindle) -> canonical orientation (roll C = 0)
+var fromAxis = ToolOrientation.FromAxisTowardSpindle(new Vector3(0, -0.5f, 0.866f));
 ```
+
+`FromAxisTowardSpindle` returns the minimum rotation from the default spindle axis (`+Z`) and pins
+the exact antipodal direction (`-Z`) to a 180° rotation around X; exact 180° slerp flips are
+deterministic. Machine-specific Euler conventions, rotary unwind and tool-axis roll stay outside the
+core, and roll does not change material removal because cutting geometries are solids of revolution.
 
 ### Tool Reference Point and Ball Compensation
 

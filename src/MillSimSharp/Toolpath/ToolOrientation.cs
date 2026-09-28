@@ -163,6 +163,48 @@ namespace MillSimSharp.Toolpath
         }
 
         /// <summary>
+        /// Creates an orientation from the direction pointing from the physical tool tip toward the
+        /// spindle (tip -> spindle), as provided by IJK-style pose input.
+        /// <para>
+        /// The result is the canonical minimum rotation from the default spindle axis (+Z) to the
+        /// given direction, expressed in the existing ZYX (C -> B -> A) Euler convention with
+        /// C = 0: <c>B = asin(x)</c>, <c>A = atan2(-y, z)</c>. Machine-specific Euler conventions,
+        /// rotary unwind and tool-axis roll stay outside the core; roll does not change material
+        /// removal because tool cutting geometries are solids of revolution. For the antipodal
+        /// direction (0, 0, -1) the rotation is pinned to 180 degrees around X
+        /// (A = +/-180, B = C = 0).
+        /// </para>
+        /// </summary>
+        /// <param name="axisTowardSpindle">Direction from the tip toward the spindle. Any finite
+        /// non-zero vector; it is normalized internally.</param>
+        /// <returns>Orientation whose tool axis points along the given direction.</returns>
+        /// <exception cref="ArgumentException">Thrown when the axis is zero or not finite.</exception>
+        public static ToolOrientation FromAxisTowardSpindle(Vector3 axisTowardSpindle)
+        {
+            if (!float.IsFinite(axisTowardSpindle.X) ||
+                !float.IsFinite(axisTowardSpindle.Y) ||
+                !float.IsFinite(axisTowardSpindle.Z))
+            {
+                throw new ArgumentException("Tool axis must be finite.", nameof(axisTowardSpindle));
+            }
+
+            float length = axisTowardSpindle.Length();
+            if (length < 1e-6f)
+            {
+                throw new ArgumentException("Tool axis must be a non-zero vector.", nameof(axisTowardSpindle));
+            }
+
+            Vector3 u = axisTowardSpindle / length;
+
+            // ZYX decomposition with roll C = 0: u = (sin B, -cos B sin A, cos B cos A).
+            float bRad = MathF.Asin(Math.Clamp(u.X, -1f, 1f));
+            float aRad = MathF.Atan2(-u.Y, u.Z);
+
+            const float radiansToDegrees = 180f / MathF.PI;
+            return new ToolOrientation(aRad * radiansToDegrees, bRad * radiansToDegrees, 0f);
+        }
+
+        /// <summary>
         /// Interpolates between two orientations with quaternion spherical linear interpolation
         /// (shortest rotation).
         /// </summary>

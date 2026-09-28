@@ -8,24 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `SDFGrid.SyncFromVoxelGrid()` rebuilds the whole field from the source voxel grid (the grid passed to `FromVoxelGrid` or `BindToVoxelGrid`), throwing `InvalidOperationException` when the SDF has no source grid.
-- `ChunkedVoxelMeshBuilder` chunk-level API: `UpdateChunks(...)` rebuilds the dirty chunks and returns their coordinates without combining, and `GetChunkMesh(...)` / `GetChunkCoordinates()` expose per-chunk meshes for incremental rendering. `BuildAll()` / `Update(...)` keep returning the combined mesh; their full-grid combine cost is now documented.
+- `ToolOrientation.FromAxisTowardSpindle(axis)` for IJK-style pose input (canonical orientation with roll `C = 0`).
+- `SDFGrid.SyncFromVoxelGrid()` rebuilds the field from its source voxel grid.
+- `ChunkedVoxelMeshBuilder` per-chunk API (`UpdateChunks`, `GetChunkMesh`, `GetChunkCoordinates`) for incremental rendering.
 
 ### Changed
 
-- Accuracy and collision scope are now documented (README, XML docs and new `docs/Accuracy.md`): voxel center sampling, pose-sampling chord error (`MaxLinearStep` / `MaxAngularStep` / `MaxChordError` are not final-surface guarantees), mesh reconstruction / narrow band clamping, and the single-pose, cutting-edge-only, resolution-limited collision check. No runtime behavior change.
-- Lifecycle semantics are now documented: `MillSimulation.Reset()` replaces the grid, simulator and executor (only the current tool is carried over; old references and subscriptions are not migrated), while `ToolpathExecutor.Reset()` / `LoadCommands()` reset executor state only and do not restore stock material. No runtime behavior change.
-- Material state ownership between `VoxelGrid` and `SDFGrid` is now a fixed contract: `FromVoxelGrid` is a one-time snapshot, `BindToVoxelGrid` subscribes to future changes only (existing values are not synchronized), direct carving into a bound SDF is overwritten by later voxel-driven rebuilds (`UnbindFromVoxelGrid()` preserves SDF-native edits), and `SyncFromVoxelGrid()` forces a full rebuild. No runtime behavior change; XML docs, README and docs/SDF.md document it.
-- Binary / ASCII STL export now writes facet normals computed from the triangle geometry (cross product). Previously the first vertex normal of each triangle was copied, which for voxel meshes is an averaged surface normal that may differ from the facet orientation (more than 8° in measured cases). Degenerate triangles are written with a zero normal; OBJ / PLY vertex normals are unchanged.
-- `CoordinateTransform.InterpolateOrientation` now uses shortest-rotation quaternion slerp (`ToolOrientation.Slerp`) instead of interpolating the A/B/C Euler angles independently. For example, the midpoint of a 350° → 10° change is now the equivalent of 0° instead of 180°, matching `ToolOrientation.Slerp` and the simulator pose path (behavior change).
-- `VoxelGrid` and `SDFGrid` now reject bounds with a zero or non-finite size in any dimension with `ArgumentException` (behavior change). Previously `VoxelGrid` created a degenerate grid while `SDFGrid` silently clamped each axis to one voxel, so the two backends disagreed on the same input. An unconfigured stock (`StockConfiguration.WorkSize = (0, 0, 0)`) now fails fast in `MillSimulation`.
-- Voxel mesh conversion (`MeshConverter.ConvertToMesh`) now merges its per-Z-slice results in a fixed slice order instead of a `ConcurrentBag` enumeration order, so the same `VoxelGrid` always produces identical vertex, normal and index arrays (and identical STL bytes). The output order can differ from previous releases; the geometry is unchanged.
-- CI builds now pass `-warnaserror` for the solution, the netstandard2.1 target and the samples, enforcing the documented zero-warning policy (previously the flag was not set in CI).
+- **Zero-size bounds are rejected** by `VoxelGrid` and `SDFGrid` (`ArgumentException`); an unconfigured `MillSimulation` stock now fails fast instead of building a degenerate grid.
+- **STL export writes geometric facet normals** instead of copied vertex normals; degenerate triangles get a zero normal.
+- **`CoordinateTransform.InterpolateOrientation` uses shortest-rotation slerp**, matching the simulator pose path (the midpoint of 350° → 10° is now 0°, not 180°).
+- Voxel mesh output is deterministic: the same grid always yields identical vertex arrays and STL bytes (the vertex order may differ from previous releases).
+- Documented material-state and lifecycle contracts: `FromVoxelGrid` = one-time snapshot, `BindToVoxelGrid` = future changes only, `UnbindFromVoxelGrid` keeps SDF-native edits; `MillSimulation.Reset()` replaces the grid / simulator / executor (tool kept, subscriptions not migrated); executor `Reset` / `LoadCommands` do not restore stock.
+- Documented accuracy and collision scope in `docs/Accuracy.md`: voxel-center sampling, pose-sampling error, narrow band clamping, and single-pose, cutting-edge-only collision checks (no holder / fixture / target part).
+- CI builds now use `-warnaserror`, matching the documented zero-warning policy.
 
 ### Fixed
 
-- `ToolpathExecutor.ExecuteNextSteps` advanced its command cursor before executing the command, so a command that threw was skipped by the next call and a failed final command could report `IsCompleted == true`. The cursor is now committed only after successful execution; material removal remains non-transactional (partial cuts from a failing command are kept).
-- Viewer G-code parser: I/J arcs now validate that the commanded end lies on the start-radius circle (tolerance `max(0.0001 mm, 0.001 × radius)`). Inconsistent arcs are ignored without moving the position, and the last chord snaps exactly to the commanded end. Previously the emitted chords ended on the circle while the parser advanced to the commanded end, causing position jumps (e.g. 7.7 mm for `G2 X10 Y0 I0 J4`).
+- `ToolpathExecutor.ExecuteNextSteps` no longer skips a command that throws: the cursor advances only after success and a failed last command is not reported as completed.
+- Viewer G-code parser: inconsistent I/J arcs are ignored without moving the tool, and the last chord lands exactly on the commanded end (previously the tool position and the emitted arc could jump apart).
 
 ## [0.2.1] - 2026-09-22
 
