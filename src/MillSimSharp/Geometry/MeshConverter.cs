@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
-using System.Collections.Concurrent;
 
 namespace MillSimSharp.Geometry
 {
@@ -35,8 +34,8 @@ namespace MillSimSharp.Geometry
             return aPos + (bPos - aPos) * t;
         }
 
-        // Helper: Merge thread-local collected results into global arrays
-        private static void MergeThreadLocal(IEnumerable<ThreadLocalData> threadLocalData, out List<Vector3> globalVerts, out List<Vector3> globalNormals, out List<int> globalInds)
+        // Helper: Merge the per-slice collected results into global arrays in slice order.
+        private static void MergeSliceData(IEnumerable<SliceMeshData> sliceData, out List<Vector3> globalVerts, out List<Vector3> globalNormals, out List<int> globalInds)
         {
             globalVerts = new List<Vector3>();
             globalNormals = new List<Vector3>();
@@ -45,7 +44,7 @@ namespace MillSimSharp.Geometry
             var globalVertexMap = new Dictionary<Vector3, int>(comparer);
             var globalNormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(comparer);
 
-            foreach (var data in threadLocalData)
+            foreach (var data in sliceData)
             {
                 var indexRemap = new int[data.Vertices.Count];
                 for (int i = 0; i < data.Vertices.Count; i++)
@@ -80,11 +79,11 @@ namespace MillSimSharp.Geometry
                 globalNormals.Add(Vector3.Normalize(sum / count));
             }
         }
-        // Thread-local data structure for parallel processing
-        private struct ThreadLocalData
+        // Per-slice mesh data collected while converting a voxel grid. Each Z slice writes its own
+        // slot so the merge order stays fixed regardless of thread scheduling.
+        private struct SliceMeshData
         {
             public List<Vector3> Vertices;
-            public List<Vector3> Normals;
             public List<int> Indices;
             public Dictionary<Vector3, int> VertexMap;
             public Dictionary<Vector3, (Vector3 sum, int count)> NormalSums;
@@ -103,23 +102,22 @@ namespace MillSimSharp.Geometry
             var (sizeX, sizeY, sizeZ) = grid.Dimensions;
             float res = grid.Resolution;
 
-            // Thread-local storage to avoid locks
-            var threadLocalData = new ConcurrentBag<ThreadLocalData>();
+            // One result slot per Z slice keeps the merge order deterministic even though the
+            // slices are processed in parallel (the previous ConcurrentBag enumeration order
+            // depended on thread scheduling).
+            var sliceData = new SliceMeshData[sizeZ + 1];
 
             // Parallel processing by Z slices
-            Parallel.For(-1, sizeZ, () =>
+            Parallel.For(-1, sizeZ, z =>
             {
-                return new ThreadLocalData
+                var data = new SliceMeshData
                 {
                     Vertices = new List<Vector3>(),
-                    Normals = new List<Vector3>(),
                     Indices = new List<int>(),
                     VertexMap = new Dictionary<Vector3, int>(new VoxelVertexComparer()),
                     NormalSums = new Dictionary<Vector3, (Vector3 sum, int count)>(new VoxelVertexComparer())
                 };
-            },
-            (z, loopState, data) =>
-            {
+
                 // Helper to add vertex and return index
                 int AddVertex(Vector3 pos, Vector3 normal)
                 {
@@ -170,11 +168,11 @@ namespace MillSimSharp.Geometry
                             VoxelMeshUtil.EmitFace(5, center, half, addVertex, data.Indices);
                     }
                 }
-                return data;
-            },
-            (data) => threadLocalData.Add(data));
 
-            MergeThreadLocal(threadLocalData, out var globalVerts, out var globalNormals, out var globalInds);
+                sliceData[z + 1] = data;
+            });
+
+            MergeSliceData(sliceData, out var globalVerts, out var globalNormals, out var globalInds);
 
             return new Mesh()
             {

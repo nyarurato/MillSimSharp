@@ -6,8 +6,9 @@ using NUnit.Framework;
 namespace MillSimSharp.Tests.Geometry
 {
     /// <summary>
-    /// Determinism of mesh generation: the dual contouring pipeline uses parallel cell processing,
-    /// so repeated meshing of the same field must produce byte-identical output.
+    /// Determinism of mesh generation: both the dual contouring pipeline and the voxel surface
+    /// mesher process cells in parallel, so repeated meshing of the same field must produce
+    /// byte-identical output.
     /// </summary>
     [TestFixture]
     public class MeshDeterminismTest
@@ -18,6 +19,23 @@ namespace MillSimSharp.Tests.Geometry
             var grid = new VoxelGrid(bbox, resolution);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 5f);
             return SDFGrid.FromVoxelGrid(grid, narrowBandWidth: 12);
+        }
+
+        private static VoxelGrid BuildTexturedVoxelGrid(float resolution)
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(16, 16, 16));
+            var grid = new VoxelGrid(bbox, resolution);
+
+            // Sphere pocket on one side.
+            grid.RemoveVoxelsInSphere(new Vector3(-4, 0, 0), 3.0f);
+
+            // Rectangular notch on the opposite side (explicit voxel writes).
+            for (int z = -6; z <= -4; z++)
+                for (int y = 0; y <= 4; y++)
+                    for (int x = 2; x <= 5; x++)
+                        grid.SetVoxelAtWorld(new Vector3(x, y, z), false);
+
+            return grid;
         }
 
         [TestCase(1.0f)]
@@ -51,6 +69,38 @@ namespace MillSimSharp.Tests.Geometry
             {
                 Assert.That(second.Indices[i], Is.EqualTo(first.Indices[i]), $"index {i}");
             }
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void ConvertToMesh_VoxelGrid_IsDeterministic(float resolution)
+        {
+            var grid = BuildTexturedVoxelGrid(resolution);
+
+            Mesh reference = MeshConverter.ConvertToMesh(grid);
+            Assert.That(reference.Vertices.Length, Is.GreaterThan(0));
+
+            for (int run = 0; run < 4; run++)
+            {
+                Mesh mesh = MeshConverter.ConvertToMesh(grid);
+
+                Assert.That(mesh.Vertices, Is.EqualTo(reference.Vertices), $"vertices differ on run {run}");
+                Assert.That(mesh.Normals, Is.EqualTo(reference.Normals), $"normals differ on run {run}");
+                Assert.That(mesh.Indices, Is.EqualTo(reference.Indices), $"indices differ on run {run}");
+            }
+        }
+
+        [Test]
+        public void ConvertToMesh_VoxelGrid_ChangesWithMaterial()
+        {
+            var grid = BuildTexturedVoxelGrid(1.0f);
+            Mesh baseline = MeshConverter.ConvertToMesh(grid);
+
+            // Carve one surface voxel of the stock corner: the mesh must change.
+            grid.SetVoxelAtWorld(new Vector3(7.5f, 7.5f, 7.5f), false);
+            Mesh modified = MeshConverter.ConvertToMesh(grid);
+
+            Assert.That(modified.Vertices, Is.Not.EqualTo(baseline.Vertices));
         }
     }
 }
