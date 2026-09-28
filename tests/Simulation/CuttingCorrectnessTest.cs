@@ -4,6 +4,7 @@ using System.Numerics;
 using MillSimSharp.Geometry;
 using MillSimSharp.Simulation;
 using MillSimSharp.Tests.Reference;
+using MillSimSharp.Toolpath;
 using NUnit.Framework;
 
 namespace MillSimSharp.Tests.Simulation
@@ -476,6 +477,176 @@ namespace MillSimSharp.Tests.Simulation
                 Assert.That(actual.Y, Is.EqualTo(expected.Y).Within(1e-5f), $"A={a} B={b} C={c}");
                 Assert.That(actual.Z, Is.EqualTo(expected.Z).Within(1e-5f), $"A={a} B={b} C={c}");
             }
+        }
+
+        // ---------------------------------------------------------------------
+        // D4: accuracy model - resolution refinement and adaptive sampling
+        // ---------------------------------------------------------------------
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_ResolutionRefinement_IsMeasuredAndBounded(float resolution)
+        {
+            // Static flat-end-mill cut with an analytically known solid (capped cylinder).
+            const float radius = 2f;
+            const float length = 10f;
+            var tool = new EndMill(radius * 2f, length, isBallEnd: false);
+
+            var bounds = BoundingBox.FromCenterAndSize(
+                new Vector3(0f, 0f, length * 0.5f),
+                new Vector3(2f * radius + 4f, 2f * radius + 4f, length + 4f));
+            var grid = new VoxelGrid(bounds, resolution);
+
+            new CutterSimulator(grid).CutPoint(Vector3.Zero, tool);
+
+            var (sx, sy, sz) = grid.Dimensions;
+            int removed = 0;
+            int disagreements = 0;
+
+            for (int z = 0; z < sz; z++)
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                    {
+                        Vector3 center = VoxelCenter(bounds, resolution, x, y, z);
+                        bool expectedRemoved = ReferenceCutEvaluator.IsInsideFlatCutPointTool(
+                            center, Vector3.Zero, radius, length);
+                        bool actualRemoved = !grid.GetVoxel(x, y, z);
+
+                        if (actualRemoved) removed++;
+                        if (expectedRemoved != actualRemoved) disagreements++;
+                    }
+
+            // Material is removed exactly where the analytic solid contains the voxel center.
+            Assert.That(disagreements, Is.EqualTo(0),
+                "voxel centers must be classified against the analytic tool solid");
+
+            // The removed volume differs from the analytic volume only by the surface layer.
+            // The measured error must stay below the surface-area sampling bound.
+            double analyticVolume = Math.PI * radius * radius * length;
+            double removedVolume = removed * (double)resolution * resolution * resolution;
+            double volumeError = Math.Abs(removedVolume - analyticVolume);
+            double surfaceArea = 2.0 * Math.PI * radius * radius + 2.0 * Math.PI * radius * length;
+            double bound = surfaceArea * resolution * 2.0;
+
+            Assert.That(volumeError, Is.LessThan(bound),
+                $"resolution {resolution}: volume error {volumeError:F4} mm^3 must stay below {bound:F4} mm^3");
+        }
+
+        [Test]
+        public void Accuracy_AdaptiveSampling_ChangesOnlyNearSurface()
+        {
+            // Rotation-only move (A: 0 -> 90 degrees) of a ball-only test tool, so the swept solid
+            // has an exact test-side reference: the union of balls whose centers follow the arc.
+            const float ballRadius = 3f;
+            const float resolution = 0.5f;
+            var tool = new BallOnlyTool(ballRadius);
+            var bounds = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(16, 16, 16));
+            var startOrientation = new ToolOrientation(0, 0, 0);
+            var endOrientation = new ToolOrientation(90, 0, 0);
+
+            var coarseGrid = new VoxelGrid(bounds, resolution);
+            var coarse = new CutterSimulator(coarseGrid);
+            coarse.Settings.MaxAngularStep = 45f; // coarse: poses at 0 / 45 / 90 degrees
+            coarse.Settings.EnableAdaptiveSampling = false;
+            coarse.CutLinearWithOrientation(Vector3.Zero, Vector3.Zero, tool, startOrientation, endOrientation);
+
+            var adaptiveGrid = new VoxelGrid(bounds, resolution);
+            var adaptive = new CutterSimulator(adaptiveGrid);
+            adaptive.Settings.MaxAngularStep = 45f;
+            adaptive.Settings.EnableAdaptiveSampling = true;
+            adaptive.Settings.MaxChordError = 0.01f; // refine to ~5.6 degree poses
+            adaptive.CutLinearWithOrientation(Vector3.Zero, Vector3.Zero, tool, startOrientation, endOrientation);
+
+            // Dense independent oracle: ball centers along the swept arc, evaluated without
+            // production helpers.
+            const int densePoses = 360;
+            var denseCenters = new Vector3[densePoses + 1];
+            for (int i = 0; i <= densePoses; i++)
+            {
+                float aDeg = 90f * i / densePoses;
+                denseCenters[i] = ReferenceCutEvaluator.ExpectedBallCenter(
+                    Vector3.Zero, aDeg, 0f, 0f, ballRadius);
+            }
+
+            float ReferenceDistance(Vector3 point)
+            {
+                float best = float.PositiveInfinity;
+                foreach (Vector3 center in denseCenters)
+                {
+                    float distance = Vector3.Distance(point, center) - ballRadius;
+                    if (distance < best) best = distance;
+                }
+                return best;
+            }
+
+            var (sx, sy, sz) = adaptiveGrid.Dimensions;
+            int differences = 0;
+            int coarseMismatch = 0;
+            int adaptiveMismatch = 0;
+            float maxDifferenceDepth = 0f;
+
+            for (int z = 0; z < sz; z++)
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                    {
+                        Vector3 center = VoxelCenter(adaptiveGrid.Bounds, resolution, x, y, z);
+                        float reference = ReferenceDistance(center);
+                        bool insideReference = reference < 0f;
+                        bool removedCoarse = !coarseGrid.GetVoxel(x, y, z);
+                        bool removedAdaptive = !adaptiveGrid.GetVoxel(x, y, z);
+
+                        if (removedCoarse != insideReference) coarseMismatch++;
+                        if (removedAdaptive != insideReference) adaptiveMismatch++;
+
+                        if (removedCoarse != removedAdaptive)
+                        {
+                            differences++;
+                            maxDifferenceDepth = MathF.Max(maxDifferenceDepth, MathF.Abs(reference));
+                        }
+                    }
+
+            Assert.That(differences, Is.GreaterThan(0),
+                "adaptive sampling must actually change the swept result");
+            Assert.That(maxDifferenceDepth, Is.LessThan(2.4f),
+                $"adaptive changes must stay within the coarse pose chord of the true surface "
+                + $"(max depth {maxDifferenceDepth:F3} mm)");
+            Assert.That(adaptiveMismatch, Is.LessThan(coarseMismatch),
+                "adaptive sampling must approximate the dense sweep better than coarse sampling");
+        }
+
+        /// <summary>Ball-only tool (no flute) for the adaptive-sampling accuracy test.</summary>
+        private sealed class BallOnlyTool : Tool
+        {
+            private readonly BallOnlyGeometry _geometry;
+
+            public BallOnlyTool(float radius)
+                : base(radius * 2f, 2f * radius, ToolType.Ball)
+            {
+                _geometry = new BallOnlyGeometry(radius);
+            }
+
+            public override float BallCenterOffsetFromTip => _geometry.Radius;
+
+            public override IToolGeometry GetCuttingGeometry() => _geometry;
+        }
+
+        private sealed class BallOnlyGeometry : IToolGeometry
+        {
+            public BallOnlyGeometry(float radius)
+            {
+                Radius = radius;
+            }
+
+            public float Radius { get; }
+
+            public BoundingBox LocalBounds => new BoundingBox(
+                new Vector3(-Radius, -Radius, 0f),
+                new Vector3(Radius, Radius, 2f * Radius));
+
+            public float CuttingCenterOffset => Radius;
+
+            public float SignedDistance(Vector3 localPoint) =>
+                Vector3.Distance(localPoint, new Vector3(0f, 0f, Radius)) - Radius;
         }
     }
 }

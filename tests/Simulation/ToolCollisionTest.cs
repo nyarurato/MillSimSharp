@@ -152,5 +152,26 @@ namespace MillSimSharp.Tests.Simulation
             Assert.That(collides, Is.False,
                 "Known limitation: a tool that only cuts voxel corners/edges is not detected by center sampling");
         }
+
+        [Test]
+        public void Accuracy_CollisionLimit_DocumentedSemantics()
+        {
+            // Documented semantics: a single-pose check of the cutting edge only, sampled at voxel
+            // centers. The same corner-grazing contact is resolution-limited: missed at 1mm,
+            // detected at 0.25mm.
+            var bounds = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(4, 4, 4));
+            var graze = new FlatEndMillGeometry(0.5f, 4f);
+
+            var coarse = new VoxelGrid(bounds, 1.0f);
+            bool coarseHit = ToolCollisionDetector.IntersectsMaterial(coarse, graze, Vector3.Zero, Vector3.UnitZ);
+            Assert.That(coarseHit, Is.False, "coarse center sampling misses the corner-grazing contact");
+
+            var fine = new VoxelGrid(bounds, 0.25f);
+            bool fineHit = ToolCollisionDetector.IntersectsMaterial(fine, graze, Vector3.Zero, Vector3.UnitZ);
+            Assert.That(fineHit, Is.True, "a finer resolution detects the same contact");
+
+            Assert.That(new EndMill(10f, 30f, isBallEnd: false).GetShankGeometry(), Is.Null,
+                "the default check covers the cutting edge only (shank / holder are not included)");
+        }
     }
 }

@@ -5,8 +5,15 @@ using MillSimSharp.Geometry;
 namespace MillSimSharp.Simulation
 {
     /// <summary>
-    /// Read-only collision checks between tool parts (cutting edge, shank, holder) and the stock.
+    /// Read-only collision checks between one tool part and the stock at a single pose.
     /// All positions are the physical tool tip.
+    /// <para>
+    /// Scope: only the geometry passed by the caller is tested (by default the cutting edge; pass
+    /// <see cref="Tool.GetShankGeometry"/> explicitly for a shank). Holder, fixture and target part
+    /// are not modelled, continuous motion between poses is not checked, and the stock is sampled at
+    /// voxel centers (resolution-limited). "Gouge" detection against a target part is a separate
+    /// problem.
+    /// </para>
     /// </summary>
     public static class ToolCollisionDetector
     {
@@ -14,8 +21,10 @@ namespace MillSimSharp.Simulation
         /// Checks whether the given tool part intersects remaining material in a voxel grid.
         /// </summary>
         /// <remarks>
-        /// The stock is sampled at voxel centers, so a contact that does not reach any voxel center
-        /// (for example a sub-resolution tool passing through a voxel corner) may not be detected.
+        /// Single-pose check of the given part only. The stock is sampled at voxel centers, so a
+        /// contact that does not reach any voxel center (for example a sub-resolution tool passing
+        /// through a voxel corner) may not be detected, and material between the poses of a moving
+        /// tool is not considered. The check is resolution-limited.
         /// </remarks>
         /// <param name="grid">Stock voxel grid.</param>
         /// <param name="geometry">Tool part geometry (tool-local, origin = physical tip).</param>
@@ -39,8 +48,10 @@ namespace MillSimSharp.Simulation
         /// Checks whether the given tool part intersects remaining material in an SDF grid.
         /// </summary>
         /// <remarks>
-        /// The stock is sampled at voxel centers, so a contact that does not reach any voxel center
-        /// (for example a sub-resolution tool passing through a voxel corner) may not be detected.
+        /// Single-pose check of the given part only. The stock is sampled at voxel centers, so a
+        /// contact that does not reach any voxel center (for example a sub-resolution tool passing
+        /// through a voxel corner) may not be detected, and material between the poses of a moving
+        /// tool is not considered. The check is resolution-limited.
         /// </remarks>
         /// <param name="sdf">Stock SDF grid.</param>
         /// <param name="geometry">Tool part geometry (tool-local, origin = physical tip).</param>

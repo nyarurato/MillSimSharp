@@ -13,7 +13,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 - **Signed Distance Field (SDF) generation** (exact Euclidean Distance Transform) for high-quality mesh conversion and fast distance queries
 - **High-quality mesh export** using Dual Contouring for SDF grids and surface extraction for voxel grids
 - **Tool library** - flat, ball, bull-nose and tapered end mills sharing a common cutting-geometry abstraction (`IToolGeometry`)
-- **Collision / gouge detection** against voxel or SDF stock (`ToolCollisionDetector`)
+- **Tool collision check** against voxel or SDF stock (`ToolCollisionDetector`) - single pose, cutting edge by default, resolution-limited (see `docs/Accuracy.md`)
 - **Tool changes and cancellable execution** with progress reporting and estimated machining time
 - **Additional exporters** for OBJ and PLY (plus binary/ASCII STL)
 - **Incremental voxel remeshing** with `ChunkedVoxelMeshBuilder`
@@ -30,6 +30,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 
 - [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md) - release notes (latest: **0.2.1**)
 - [docs/SDF.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/SDF.md) - SDF internals: algorithms, precision and CSG behaviour (Japanese)
+- [docs/Accuracy.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/Accuracy.md) - accuracy model: resolution, pose sampling, mesh reconstruction and collision scope (Japanese)
 - [samples/README.md](https://github.com/nyarurato/MillSimSharp/blob/master/samples/README.md) - sample project walkthroughs
 - [LICENSE.txt](https://github.com/nyarurato/MillSimSharp/blob/master/LICENSE.txt) - MIT license  
 
@@ -352,6 +353,7 @@ Use `ToolCollisionDetector.IntersectsMaterial(...)` to check a tool pose against
 
 Notes:
 
+- Scope: one tool part at a single pose (by default the cutting edge). Shank, holder, fixture and target part are not included; pass `Tool.GetShankGeometry()` explicitly for a shank. Continuous motion between poses is not checked, and "gouge" detection against a target part is a separate problem. See [docs/Accuracy.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/Accuracy.md).
 - The stock is sampled at voxel centers, so a contact that does not reach any voxel center (for example a sub-resolution tool passing through a voxel corner) may not be detected. The check is resolution-limited.
 - The tool axis may be any finite non-zero vector; it is normalized internally. Zero or non-finite axes throw `ArgumentException`.
 - Custom `IToolGeometry` implementations must be solids of revolution around the local +Z (tool) axis: the simulators map world points to `(radial distance, 0, axial distance)`, so azimuthal features (for example elliptical cross-sections) cannot be represented.
