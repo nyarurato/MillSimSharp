@@ -614,6 +614,188 @@ namespace MillSimSharp.Tests.Simulation
                 "adaptive sampling must approximate the dense sweep better than coarse sampling");
         }
 
+        // ---------------------------------------------------------------------
+        // D4: swept-volume accuracy (voxel and SDF backends)
+        // ---------------------------------------------------------------------
+
+        private const float SweepRadius = 3f;
+        private const float SweepToolLength = 10f;
+        private const float SweepDistance = 8f;
+
+        private static BoundingBox SweptBounds(Vector3 start, Vector3 end, Tool tool)
+        {
+            // The tool extends from the tip toward the spindle (+Z), so the bounds must cover
+            // [tip, tip + length], not just the sweep path.
+            Vector3 center = (start + end) * 0.5f;
+            center.Z += 0.5f * tool.Length;
+            return BoundingBox.FromCenterAndSize(center, new Vector3(
+                Vector3.Distance(start, end) + 2f * tool.Diameter + 2f,
+                tool.Diameter + 2f,
+                tool.Length + 2f));
+        }
+
+        private static double BoundingBoxSurfaceArea(BoundingBox bounds)
+        {
+            Vector3 size = bounds.Size;
+            return 2.0 * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
+        }
+
+        // Center sampling can misclassify at most about surfaceArea / resolution surface-layer cells,
+        // each contributing one cell volume (resolution^3), so the removed volume error is bounded by
+        // surfaceArea * resolution for an exactly-known solid.
+
+        /// <summary>
+        /// Analytic volume and surface area of a flat tool swept perpendicular to its axis: the tool
+        /// cross-section (a disk of radius R) sweeps into a stadium, so V = (2*R*d + pi*R^2) * L.
+        /// </summary>
+        private static (double Volume, double SurfaceArea) FlatSweepSolid()
+        {
+            double stadium = 2.0 * SweepRadius * SweepDistance + Math.PI * SweepRadius * SweepRadius;
+            double perimeter = 2.0 * SweepDistance + 2.0 * Math.PI * SweepRadius;
+            return (stadium * SweepToolLength, 2.0 * stadium + perimeter * SweepToolLength);
+        }
+
+        /// <summary>
+        /// Analytic volume of a ball tool swept perpendicular to its axis. The profile radius by
+        /// height is r(z) = sqrt(R^2 - (z - R)^2) for z in [0, R] and R for z in [R, L]; the swept
+        /// solid at height z is that profile disk swept along the motion (stadium of area
+        /// 2*d*r + pi*r^2), so V = pi*R^2*d/2 + (2/3)*pi*R^3 + (L - R)*(2*R*d + pi*R^2).
+        /// </summary>
+        private static double BallSweepSolidVolume()
+        {
+            double lower = Math.PI * SweepRadius * SweepRadius * SweepDistance / 2.0
+                + (2.0 / 3.0) * Math.PI * SweepRadius * SweepRadius * SweepRadius;
+            double flute = (SweepToolLength - SweepRadius)
+                * (2.0 * SweepRadius * SweepDistance + Math.PI * SweepRadius * SweepRadius);
+            return lower + flute;
+        }
+
+        private static double MeasureRemovedVolume(VoxelGrid grid)
+        {
+            var (sx, sy, sz) = grid.Dimensions;
+            long total = (long)sx * sy * sz;
+            long removed = total - grid.CountMaterialVoxels();
+            double cellVolume = (double)grid.Resolution * grid.Resolution * grid.Resolution;
+            return removed * cellVolume;
+        }
+
+        private static double MeasureRemovedVolume(SDFGrid sdf)
+        {
+            // SDFGrid has no public removed-sample count, so the test counts the air samples itself.
+            var (sx, sy, sz) = sdf.Dimensions;
+            long material = 0;
+            for (int z = 0; z < sz; z++)
+                for (int y = 0; y < sy; y++)
+                    for (int x = 0; x < sx; x++)
+                        if (sdf.GetDistance(x, y, z) < 0f) material++;
+
+            long removed = (long)sx * sy * sz - material;
+            double cellVolume = (double)sdf.Resolution * sdf.Resolution * sdf.Resolution;
+            return removed * cellVolume;
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FlatSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: false);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            var (analyticVolume, surfaceArea) = FlatSweepSolid();
+
+            var grid = new VoxelGrid(SweptBounds(start, end, tool), resolution);
+            new CutterSimulator(grid).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(grid);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel flat sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BallSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: true);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = BallSweepSolidVolume();
+            var bounds = SweptBounds(start, end, tool);
+            // Conservative bound: the swept solid lies inside its bounding box and a shape's surface
+            // area does not exceed its bounding box surface area.
+            double surfaceArea = BoundingBoxSurfaceArea(bounds);
+
+            var grid = new VoxelGrid(bounds, resolution);
+            new CutterSimulator(grid).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(grid);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel ball sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FlatSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: false);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            var (analyticVolume, surfaceArea) = FlatSweepSolid();
+
+            var sdf = new SDFGrid(SweptBounds(start, end, tool), resolution, narrowBandWidth: 4);
+            new SDFCutterSimulator(sdf).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf flat sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BallSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: true);
+            var start = new Vector3(0, 0, 0);
+            var end = new Vector3(SweepDistance, 0, 0);
+            double analyticVolume = BallSweepSolidVolume();
+            var bounds = SweptBounds(start, end, tool);
+            double surfaceArea = BoundingBoxSurfaceArea(bounds);
+
+            var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
+            new SDFCutterSimulator(sdf).CutLinear(start, end, tool);
+
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf ball sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the sweep must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
         /// <summary>Ball-only tool (no flute) for the adaptive-sampling accuracy test.</summary>
         private sealed class BallOnlyTool : Tool
         {
