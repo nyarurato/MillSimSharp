@@ -14,7 +14,8 @@ namespace MillSimSharp.Viewer
     /// <list type="bullet">
     /// <item>G0 rapid and G1 linear moves</item>
     /// <item>G2 / G3 arcs in the G17 (XY) plane, emitted as short G1 chords (helical Z supported);
-    /// I/J arcs whose commanded end is inconsistent with the start radius are ignored</item>
+    /// I/J arcs whose commanded end is inconsistent with the start radius are ignored. The active
+    /// plane is tracked modally: arcs selected in G18/G19 are ignored</item>
     /// <item>G20 / G21 units (inch / millimeter)</item>
     /// <item>G90 / G91 absolute / incremental distance mode</item>
     /// <item>F feed rate and M codes (M codes are ignored)</item>
@@ -46,6 +47,7 @@ namespace MillSimSharp.Viewer
             double unitScale = 1.0;
             bool absolute = true;
             int motion = 0; // 0 = G0, 1 = G1, 2 = G2, 3 = G3
+            int plane = 17; // G17 (XY) is the only plane whose arcs are implemented; 18 = XZ, 19 = YZ
 
             string[] lines = gcode.Split('\n');
             foreach (string rawLine in lines)
@@ -80,7 +82,14 @@ namespace MillSimSharp.Viewer
                         case 3:
                             break; // motion: handled with the coordinates below
                         case 17:
-                            break; // XY plane: the only plane this parser supports
+                            plane = 17; // XY: arc support
+                            break;
+                        case 18:
+                            plane = 18; // XZ: linear moves still work, arcs are ignored
+                            break;
+                        case 19:
+                            plane = 19; // YZ: linear moves still work, arcs are ignored
+                            break;
                         case 20:
                             unitScale = 25.4;
                             break;
@@ -180,9 +189,11 @@ namespace MillSimSharp.Viewer
 
                 if (isArc)
                 {
-                    // An arc without I/J/R cannot be simulated (ignore it instead of turning it
-                    // into a linear move), and an arc with an impossible radius is ignored as well.
-                    bool valid = (hasI || hasJ || hasR)
+                    // Arcs are only implemented in the G17 (XY) plane. An arc without I/J/R cannot
+                    // be simulated either (ignore it instead of turning it into a linear move), and
+                    // an arc with an impossible radius is ignored as well.
+                    bool valid = plane == 17
+                        && (hasI || hasJ || hasR)
                         && EmitArc(commands, moveMotion == 2,
                             x, y, z, nx, ny, nz,
                             i, j, r, hasR, feed, arcSegmentAngleDegrees);

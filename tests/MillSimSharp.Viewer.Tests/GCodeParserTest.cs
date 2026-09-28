@@ -209,6 +209,24 @@ namespace MillSimSharp.Tests.Viewer
             Assert.That(((G1Move)commands[0]).Target, Is.EqualTo(new Vector3(10, 0, 0)));
         }
 
+        [Test]
+        public void Parse_ArcPlaneSelection_PersistsAcrossBlocks()
+        {
+            // Review regression: G18 on its own line must disable XY arcs for following modal arcs.
+            var commands = GCodeParser.ParseText("G18\nG2 X10 Z0 R5\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "arcs in the XZ plane are unsupported");
+
+            // The ignored arc keeps the position for following moves.
+            var relative = GCodeParser.ParseText("G18\nG2 X10 Z0 R5\nG91\nG1 X5\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(5, 0, 0)),
+                "the ignored arc must not move the position");
+
+            // Selecting G17 again re-enables XY arcs.
+            var xy = GCodeParser.ParseText("G18\nG17\nG3 X10 Y0 I5 J0\n", Vector3.Zero, arcSegmentAngleDegrees: 5f);
+            Assert.That(xy, Is.Not.Empty, "G17 must re-enable XY arcs");
+        }
+
         // ---------------------------------------------------------------------
         // R-format arcs: positive R = minor arc, negative R = major arc
         // ---------------------------------------------------------------------

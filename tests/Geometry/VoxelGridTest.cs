@@ -249,6 +249,17 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void VoxelGrid_VoxelCountOverflowingLong_Throws()
+        {
+            // Review regression: 2e6 x 2e6 x 3e6 = 1.2e19 cells exceeds long.MaxValue; the product
+            // must be bounded per axis so it cannot wrap into a negative value and pass the check.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(200000, 200000, 300000));
+
+            var exception = Assert.Throws<ArgumentException>(() => new VoxelGrid(bbox, 0.1f));
+            Assert.That(exception!.Message, Does.Contain("voxels"));
+        }
+
+        [Test]
         public void VoxelGrid_MaxCountBoundary_IsAccepted()
         {
             // 1290^3 = 2,146,689,000 voxels is below int.MaxValue and must be constructible. The SVO

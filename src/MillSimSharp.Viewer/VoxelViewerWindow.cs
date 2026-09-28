@@ -27,6 +27,9 @@ namespace MillSimSharp.Viewer
         // Set when a mesh regeneration is requested while one is already running. The running task
         // re-runs once after finishing, so consecutive steps / mode switches cannot leave a stale mesh.
         private bool _meshRegenerationRequested = false;
+        // Incremented for every started generation. A finished task only applies its result when its
+        // generation is still the latest, so an older result cannot overwrite a newer mesh.
+        private int _meshGeneration = 0;
         // Key state helper for toggles
         private bool _rKeyPrev = false;
         private bool _cKeyPrev = false;
@@ -694,6 +697,8 @@ namespace MillSimSharp.Viewer
                 _processingStatus = "Generating mesh...";
                 Console.WriteLine("Starting mesh generation...");
 
+                int generation = ++_meshGeneration;
+
                 var meshGenStopwatch = new Stopwatch();
                 meshGenStopwatch.Start();
 
@@ -724,19 +729,43 @@ namespace MillSimSharp.Viewer
                     if (t.IsCompletedSuccessfully)
                     {
                         var mesh = t.Result;
+                        bool applied = false;
                         lock (_meshLock)
                         {
-                            _pendingMesh = mesh;
-                            _meshUpdatePending = true;
+                            // Discard the result if a newer generation was started meanwhile (for
+                            // example after a fast mode switch): the newer mesh must win.
+                            if (generation == _meshGeneration)
+                            {
+                                _pendingMesh = mesh;
+                                _meshUpdatePending = true;
+                                applied = true;
+                            }
                         }
-                        _processingStatus = "";
-                        Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
+
+                        if (applied)
+                        {
+                            _processingStatus = "";
+                            Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Discarding stale mesh result (a newer generation is active).");
+                        }
                     }
                     else if (t.IsFaulted)
                     {
-                        _processingStatus = "Mesh generation failed";
-                        // Print full exception details to help diagnose failures
-                        Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
+                        bool current;
+                        lock (_meshLock)
+                        {
+                            current = generation == _meshGeneration;
+                        }
+
+                        if (current)
+                        {
+                            _processingStatus = "Mesh generation failed";
+                            // Print full exception details to help diagnose failures
+                            Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
+                        }
                     }
 
                     // Run the queued follow-up request now (the state / mode may have changed while

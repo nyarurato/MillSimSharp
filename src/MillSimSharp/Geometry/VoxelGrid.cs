@@ -170,20 +170,42 @@ namespace MillSimSharp.Geometry
             if (!IsFinitePositive(size))
                 throw new ArgumentException("Work area must have a finite positive size in all dimensions.", nameof(workArea));
 
-            _sizeX = (int)Math.Ceiling(size.X / resolution);
-            _sizeY = (int)Math.Ceiling(size.Y / resolution);
-            _sizeZ = (int)Math.Ceiling(size.Z / resolution);
-
-            // The public voxel counts (CountMaterialVoxels, GetMaterialVoxelCount) are int-based:
-            // reject grids that cannot be represented instead of silently overflowing (for example
-            // 200 mm at 0.1 mm resolution is 2000^3 = 8e9 cells).
-            long totalVoxels = (long)_sizeX * _sizeY * _sizeZ;
-            if (totalVoxels > int.MaxValue)
+            // Voxel dimensions. The quotient must fit in int before the cast, otherwise the cast
+            // would wrap (for example an enormous work area at a tiny resolution).
+            double sizeX = Math.Ceiling(size.X / resolution);
+            double sizeY = Math.Ceiling(size.Y / resolution);
+            double sizeZ = Math.Ceiling(size.Z / resolution);
+            if (!(sizeX <= int.MaxValue) || !(sizeY <= int.MaxValue) || !(sizeZ <= int.MaxValue))
             {
                 throw new ArgumentException(
-                    $"The work area contains {totalVoxels} voxels, which exceeds the supported maximum of {int.MaxValue}. Increase the resolution or reduce the work area.",
+                    $"The work area contains more than {int.MaxValue} voxels; reduce the work area or increase the resolution.",
                     nameof(workArea));
             }
+
+            _sizeX = (int)sizeX;
+            _sizeY = (int)sizeY;
+            _sizeZ = (int)sizeZ;
+
+            // The public voxel counts (CountMaterialVoxels, GetMaterialVoxelCount) are int-based:
+            // reject grids that cannot be represented instead of overflowing. Each factor is bounded
+            // before multiplying, so the product itself cannot overflow (factors fit in int, and each
+            // intermediate result is checked against int.MaxValue).
+            long totalVoxels = _sizeX;
+            if (totalVoxels > int.MaxValue / _sizeY)
+            {
+                throw new ArgumentException(
+                    $"The work area contains more than {int.MaxValue} voxels; reduce the work area or increase the resolution.",
+                    nameof(workArea));
+            }
+            totalVoxels *= _sizeY;
+
+            if (totalVoxels > int.MaxValue / _sizeZ)
+            {
+                throw new ArgumentException(
+                    $"The work area contains more than {int.MaxValue} voxels; reduce the work area or increase the resolution.",
+                    nameof(workArea));
+            }
+            totalVoxels *= _sizeZ;
 
             _totalVoxels = (int)totalVoxels;
 
