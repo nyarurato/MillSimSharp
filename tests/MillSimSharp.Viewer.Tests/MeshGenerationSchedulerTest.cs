@@ -54,6 +54,25 @@ namespace MillSimSharp.Tests.Viewer
         }
 
         [Test]
+        public void Complete_KeepsQueuedResultInvalidUntilFollowUpBegins()
+        {
+            var scheduler = new MeshGenerationScheduler();
+
+            int first = scheduler.TryBegin()!.Value;
+            Assert.That(scheduler.TryBegin(), Is.Null, "a follow-up is queued");
+            Assert.That(scheduler.Complete(), Is.True);
+
+            // The render thread can consume the pending mesh before the completion callback
+            // calls TryBegin for the follow-up. The old result must remain invalid in that gap.
+            Assert.That(scheduler.TryApplyResult(first), Is.False);
+
+            int second = scheduler.TryBegin()!.Value;
+            Assert.That(scheduler.TryApplyResult(first), Is.False);
+            Assert.That(scheduler.TryApplyResult(second), Is.True);
+            Assert.That(scheduler.Complete(), Is.False);
+        }
+
+        [Test]
         public void TryApplyResult_AfterANewerGenerationStarted_DiscardsTheOldResult()
         {
             // Safety net: if a caller completes generations out of order, only the latest generation

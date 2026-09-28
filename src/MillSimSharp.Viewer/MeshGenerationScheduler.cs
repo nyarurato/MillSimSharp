@@ -76,15 +76,14 @@ namespace MillSimSharp.Viewer
         /// Marks the running build as finished.
         /// </summary>
         /// <returns>True when another build was queued while this one was running; the caller must
-        /// start it. Only one follow-up is queued at a time.</returns>
+        /// start it. The queued request continues to invalidate the old result until the next
+        /// <see cref="TryBegin"/> starts its build.</returns>
         public bool Complete()
         {
             lock (_sync)
             {
                 _running = false;
-                bool rerun = _rerunQueued;
-                _rerunQueued = false;
-                return rerun;
+                return _rerunQueued;
             }
         }
 
