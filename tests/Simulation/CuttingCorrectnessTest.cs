@@ -796,6 +796,152 @@ namespace MillSimSharp.Tests.Simulation
                 $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
         }
 
+        // ---------------------------------------------------------------------
+        // D4: circular-path swept-volume accuracy (full circle executed as chords)
+        // ---------------------------------------------------------------------
+
+        private const float CirclePathRadius = 8f;
+        private const int CircleChordCount = 720; // 0.5 degrees per chord; sagitta ~7.6e-5 mm
+
+        private static BoundingBox CircularSweepBounds(Tool tool)
+        {
+            float xy = 2f * (CirclePathRadius + SweepRadius + 1f);
+            return BoundingBox.FromCenterAndSize(
+                new Vector3(0f, 0f, 0.5f * tool.Length),
+                new Vector3(xy, xy, tool.Length + 2f));
+        }
+
+        /// <summary>
+        /// Builds a full circle as G1 chords (the same representation the viewer G-code parser emits
+        /// for G2/G3). The first chord ends one segment after the start point.
+        /// </summary>
+        private static List<IToolpathCommand> BuildCircleChords(Vector3 center, float radius, float z)
+        {
+            var commands = new List<IToolpathCommand>(CircleChordCount);
+            for (int i = 1; i <= CircleChordCount; i++)
+            {
+                double angle = 2.0 * Math.PI * i / CircleChordCount;
+                commands.Add(new G1Move(new Vector3(
+                    center.X + (float)(radius * Math.Cos(angle)),
+                    center.Y + (float)(radius * Math.Sin(angle)),
+                    z), feedRate: 300f));
+            }
+
+            return commands;
+        }
+
+        private static double ExecuteCircle(VoxelGrid grid, Tool tool, Vector3 start)
+        {
+            var executor = new ToolpathExecutor(new CutterSimulator(grid), tool, start);
+            executor.ExecuteCommands(BuildCircleChords(Vector3.Zero, CirclePathRadius, start.Z));
+            return MeasureRemovedVolume(grid);
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FlatCircleSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            // A flat tool following a full circle (rho > R) sweeps an annulus: V = 4*pi*rho*R*L.
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: false);
+            var start = new Vector3(CirclePathRadius, 0, 0);
+            double analyticVolume = 4.0 * Math.PI * CirclePathRadius * SweepRadius * SweepToolLength;
+
+            var grid = new VoxelGrid(CircularSweepBounds(tool), resolution);
+            double removedVolume = ExecuteCircle(grid, tool, start);
+            double error = Math.Abs(removedVolume - analyticVolume);
+
+            double surfaceArea = 8.0 * Math.PI * CirclePathRadius * SweepRadius
+                + 4.0 * Math.PI * CirclePathRadius * SweepToolLength;
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel flat circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the circle must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BallCircleSweep_RemovedVolumeMatchesAnalytic(float resolution)
+        {
+            // A ball tool following a full circle (rho > R) sweeps a torus below the ball center plus
+            // the flute annulus above it: V = pi^2*rho*R^2 + 4*pi*rho*R*(L - R).
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: true);
+            var start = new Vector3(CirclePathRadius, 0, 0);
+            double analyticVolume = Math.PI * Math.PI * CirclePathRadius * SweepRadius * SweepRadius
+                + 4.0 * Math.PI * CirclePathRadius * SweepRadius * (SweepToolLength - SweepRadius);
+
+            var bounds = CircularSweepBounds(tool);
+            var grid = new VoxelGrid(bounds, resolution);
+            double removedVolume = ExecuteCircle(grid, tool, start);
+            double error = Math.Abs(removedVolume - analyticVolume);
+
+            double surfaceArea = BoundingBoxSurfaceArea(bounds);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"voxel ball circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the circle must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: voxel volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_FlatCircleSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: false);
+            var start = new Vector3(CirclePathRadius, 0, 0);
+            double analyticVolume = 4.0 * Math.PI * CirclePathRadius * SweepRadius * SweepToolLength;
+
+            var sdf = new SDFGrid(CircularSweepBounds(tool), resolution, narrowBandWidth: 4);
+            var executor = new ToolpathExecutor(new SDFCutterSimulator(sdf), tool, start);
+            executor.ExecuteCommands(BuildCircleChords(Vector3.Zero, CirclePathRadius, start.Z));
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+
+            double surfaceArea = 8.0 * Math.PI * CirclePathRadius * SweepRadius
+                + 4.0 * Math.PI * CirclePathRadius * SweepToolLength;
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf flat circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the circle must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void Accuracy_BallCircleSweep_RemovedVolumeMatchesAnalytic_Sdf(float resolution)
+        {
+            var tool = new EndMill(SweepRadius * 2f, SweepToolLength, isBallEnd: true);
+            var start = new Vector3(CirclePathRadius, 0, 0);
+            double analyticVolume = Math.PI * Math.PI * CirclePathRadius * SweepRadius * SweepRadius
+                + 4.0 * Math.PI * CirclePathRadius * SweepRadius * (SweepToolLength - SweepRadius);
+
+            var bounds = CircularSweepBounds(tool);
+            var sdf = new SDFGrid(bounds, resolution, narrowBandWidth: 4);
+            var executor = new ToolpathExecutor(new SDFCutterSimulator(sdf), tool, start);
+            executor.ExecuteCommands(BuildCircleChords(Vector3.Zero, CirclePathRadius, start.Z));
+            double removedVolume = MeasureRemovedVolume(sdf);
+            double error = Math.Abs(removedVolume - analyticVolume);
+
+            double surfaceArea = BoundingBoxSurfaceArea(bounds);
+            double bound = surfaceArea * resolution;
+            TestContext.Progress.WriteLine(
+                $"sdf ball circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
+
+            Assert.That(removedVolume, Is.GreaterThan(0.5 * analyticVolume),
+                "positive control: the circle must remove a substantial volume");
+            Assert.That(error, Is.LessThan(bound),
+                $"resolution {resolution}: SDF volume error {error:F3} mm^3 must stay below {bound:F3} mm^3");
+        }
+
         /// <summary>Ball-only tool (no flute) for the adaptive-sampling accuracy test.</summary>
         private sealed class BallOnlyTool : Tool
         {
