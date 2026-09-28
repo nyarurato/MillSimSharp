@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `ToolpathExecutor.ExecuteNextSteps` advanced its command cursor before executing the command, so a command that threw was skipped by the next call and a failed final command could report `IsCompleted == true`. The cursor is now committed only after successful execution; material removal remains non-transactional (partial cuts from a failing command are kept).
+- Viewer G-code parser: I/J arcs now validate that the commanded end lies on the start-radius circle (tolerance `max(0.0001 mm, 0.001 × radius)`). Inconsistent arcs are ignored without moving the position, and the last chord snaps exactly to the commanded end. Previously the emitted chords ended on the circle while the parser advanced to the commanded end, causing position jumps (e.g. 7.7 mm for `G2 X10 Y0 I0 J4`).
 
 ## [0.2.1] - 2026-09-22
 

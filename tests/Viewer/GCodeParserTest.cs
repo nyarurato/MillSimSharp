@@ -74,6 +74,84 @@ namespace MillSimSharp.Tests.Viewer
         }
 
         // ---------------------------------------------------------------------
+        // I/J-format arcs: the commanded end must lie on the start-radius circle
+        // (within the G-code rounding tolerance); the last chord snaps to the end
+        // ---------------------------------------------------------------------
+
+        [Test]
+        public void Parse_Arc_IJ_MismatchedEndRadius_IsIgnored()
+        {
+            // Center (0,4): start radius 4, the commanded end (10,0) has radius ~10.8.
+            var commands = GCodeParser.ParseText("G2 X10 Y0 I0 J4\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "A mismatched I/J arc must not emit moves");
+
+            var relative = GCodeParser.ParseText("G91\nG2 X10 Y0 I0 J4\nG1 X1 Y0 F100\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
+                "The ignored arc must leave the position unchanged");
+        }
+
+        [Test]
+        public void Parse_Arc_IJ_SmallMismatchWithinTolerance_SnapsLastPointToEnd()
+        {
+            // Center (0,10): start radius 10, tolerance 0.01. The commanded end (7.0774, 2.9226)
+            // has radius ~10.009 (consistent within tolerance) but is not exactly on the circle,
+            // so the last chord must land on the commanded end point.
+            var points = ParseArcTargets("G3 X7.0774 Y2.9226 I0 J10\n", Vector3.Zero, segmentAngleDegrees: 5f);
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1], Is.EqualTo(new Vector3(7.0774f, 2.9226f, 0f)));
+        }
+
+        [Test]
+        public void Parse_Arc_IJ_ConsistentRadius_LastPointEqualsEnd()
+        {
+            var points = ParseArcTargets("G3 X10 Y0 I5 J0\n", Vector3.Zero);
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1], Is.EqualTo(new Vector3(10, 0, 0)));
+        }
+
+        [Test]
+        public void Parse_Arc_IJ_EndPointAtCenter_IsIgnored()
+        {
+            // End == center (5,0): the end radius is 0, far outside the tolerance.
+            var commands = GCodeParser.ParseText("G3 X5 Y0 I5 J0\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "An arc ending at the center must not emit moves");
+
+            var relative = GCodeParser.ParseText("G91\nG3 X5 Y0 I5 J0\nG1 X1 Y0 F100\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
+                "The ignored arc must leave the position unchanged");
+        }
+
+        [Test]
+        public void Parse_Arc_IJ_ZeroRadius_IsIgnored()
+        {
+            // I=J=0: the start coincides with the center.
+            var commands = GCodeParser.ParseText("G2 X10 Y0 I0 J0\n", Vector3.Zero);
+            Assert.That(commands, Is.Empty, "A zero-radius arc must not emit moves");
+
+            var relative = GCodeParser.ParseText("G91\nG2 X10 Y0 I0 J0\nG1 X1 Y0 F100\n", Vector3.Zero);
+            Assert.That(relative.Count, Is.EqualTo(1));
+            Assert.That(((G1Move)relative[0]).Target, Is.EqualTo(new Vector3(1, 0, 0)),
+                "The ignored arc must leave the position unchanged");
+        }
+
+        [Test]
+        public void Parse_Arc_IJ_HalfCircle()
+        {
+            var points = ParseArcTargets("G3 X10 Y0 I5 J0\n", Vector3.Zero, segmentAngleDegrees: 5f);
+
+            Assert.That(points, Is.Not.Empty);
+            Assert.That(points[^1], Is.EqualTo(new Vector3(10, 0, 0)));
+            Assert.That(HasPointNear(points, 5f, -5f), Is.True,
+                "The CCW half circle must pass through (5,-5)");
+            Assert.That(HasPointNear(points, 5f, 5f), Is.False,
+                "The CCW half circle must not take the (5,5) route");
+        }
+
+        // ---------------------------------------------------------------------
         // R-format arcs: positive R = minor arc, negative R = major arc
         // ---------------------------------------------------------------------
 

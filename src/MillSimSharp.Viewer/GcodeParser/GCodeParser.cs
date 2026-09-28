@@ -13,7 +13,8 @@ namespace MillSimSharp.Viewer
     /// core library intentionally does not include a G-code parser.
     /// <list type="bullet">
     /// <item>G0 rapid and G1 linear moves</item>
-    /// <item>G2 / G3 arcs in the G17 (XY) plane, emitted as short G1 chords (helical Z supported)</item>
+    /// <item>G2 / G3 arcs in the G17 (XY) plane, emitted as short G1 chords (helical Z supported);
+    /// I/J arcs whose commanded end is inconsistent with the start radius are ignored</item>
     /// <item>G20 / G21 units (inch / millimeter)</item>
     /// <item>G90 / G91 absolute / incremental distance mode</item>
     /// <item>F feed rate and M codes (M codes are ignored)</item>
@@ -248,6 +249,17 @@ namespace MillSimSharp.Viewer
             {
                 cx = start.X + i;
                 cy = start.Y + j;
+
+                // I/J arcs use the start radius as the circle radius. The commanded end must lie
+                // on that circle within the G-code rounding tolerance; otherwise the block is
+                // ignored (no command emitted, position unchanged). Mismatches are common when a
+                // postprocessor rounds I/J or the end coordinates.
+                double startRadius = Math.Sqrt(
+                    (start.X - cx) * (start.X - cx) + (start.Y - cy) * (start.Y - cy));
+                double endRadius = Math.Sqrt(
+                    (end.X - cx) * (end.X - cx) + (end.Y - cy) * (end.Y - cy));
+                double tolerance = Math.Max(1e-4, 1e-3 * startRadius);
+                if (Math.Abs(endRadius - startRadius) > tolerance) return false;
             }
 
             double startAngle = Math.Atan2(start.Y - cy, start.X - cx);
@@ -273,12 +285,23 @@ namespace MillSimSharp.Viewer
 
             for (int n = 1; n <= segments; n++)
             {
-                double t = (double)n / segments;
-                double angle = startAngle + sweep * t;
-                var target = new Vector3(
-                    (float)(cx + radius * Math.Cos(angle)),
-                    (float)(cy + radius * Math.Sin(angle)),
-                    (float)(start.Z + (end.Z - start.Z) * t));
+                // The final chord lands exactly on the commanded end point: for I/J arcs this
+                // absorbs the small radial mismatch allowed above, and for R arcs it removes
+                // floating-point noise.
+                Vector3 target;
+                if (n == segments)
+                {
+                    target = end;
+                }
+                else
+                {
+                    double t = (double)n / segments;
+                    double angle = startAngle + sweep * t;
+                    target = new Vector3(
+                        (float)(cx + radius * Math.Cos(angle)),
+                        (float)(cy + radius * Math.Sin(angle)),
+                        (float)(start.Z + (end.Z - start.Z) * t));
+                }
                 commands.Add(new G1Move(target, (float)feed));
             }
 
