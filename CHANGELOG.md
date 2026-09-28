@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `CoordinateTransform.InterpolateOrientation` now uses shortest-rotation quaternion slerp (`ToolOrientation.Slerp`) instead of interpolating the A/B/C Euler angles independently. For example, the midpoint of a 350° → 10° change is now the equivalent of 0° instead of 180°, matching `ToolOrientation.Slerp` and the simulator pose path (behavior change).
+
 ## [0.2.1] - 2026-09-22
 
 ### Changed
@@ -70,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release: voxel-based 3-axis simulation, SDF mesh conversion, STL export, viewer and samples.
 
+[Unreleased]: https://github.com/nyarurato/MillSimSharp/compare/0.2.1...HEAD
 [0.2.0]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0-beta...0.2.0
 [0.2.1]: https://github.com/nyarurato/MillSimSharp/compare/0.2.0...0.2.1
 [0.2.0-beta]: https://github.com/nyarurato/MillSimSharp/compare/0.1.0...0.2.0-beta

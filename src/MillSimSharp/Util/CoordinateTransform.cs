@@ -1,4 +1,3 @@
-using System;
 using System.Numerics;
 using MillSimSharp.Geometry;
 using MillSimSharp.Toolpath;
@@ -93,26 +92,16 @@ namespace MillSimSharp.Util
         }
 
         /// <summary>
-        /// Interpolates between two orientations.
+        /// Interpolates between two orientations with shortest-rotation quaternion slerp,
+        /// matching <see cref="ToolOrientation.Slerp"/> and the simulator's pose path.
         /// </summary>
         /// <param name="start">Starting orientation.</param>
         /// <param name="end">Ending orientation.</param>
-        /// <param name="t">Interpolation parameter (0 to 1).</param>
+        /// <param name="t">Interpolation parameter (clamped to 0 to 1).</param>
         /// <returns>Interpolated orientation.</returns>
         public static ToolOrientation InterpolateOrientation(ToolOrientation start, ToolOrientation end, float t)
         {
-            t = Math.Clamp(t, 0f, 1f);
-
-            return new ToolOrientation(
-                Lerp(start.A, end.A, t),
-                Lerp(start.B, end.B, t),
-                Lerp(start.C, end.C, t)
-            );
-        }
-
-        private static float Lerp(float a, float b, float t)
-        {
-            return a + (b - a) * t;
+            return ToolOrientation.Slerp(start, end, t);
         }
     }
 }
