@@ -362,5 +362,24 @@ namespace MillSimSharp.Tests.Integration
             if (File.Exists(outputPath))
                 File.Delete(outputPath);
         }
+
+        [Test]
+        public void MillSimulation_ZeroStockSize_Throws()
+        {
+            // An unconfigured StockConfiguration has WorkSize = (0, 0, 0); creating the simulation
+            // must fail explicitly instead of building a degenerate voxel grid.
+            var stockConfig = new StockConfiguration();
+            var toolConfig = new ToolConfiguration
+            {
+                Diameter = 2.0f,
+                Length = 10.0f,
+                IsBallEnd = false
+            };
+
+            var exception = Assert.Throws<ArgumentException>(
+                () => new MillSimulation(stockConfig, toolConfig, resolution: 1.0f));
+
+            Assert.That(exception!.Message, Does.Contain("Work area"));
+        }
     }
 }

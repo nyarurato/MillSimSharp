@@ -203,5 +203,38 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(grid.GetVoxelAtWorld(new Vector3(2, 3, 0)), Is.False,
                 "A voxel center strictly inside the cylinder must be removed");
         }
+
+        [Test]
+        public void VoxelGrid_ZeroSizeBounds_Throws()
+        {
+            var bbox = new BoundingBox(Vector3.Zero, Vector3.Zero);
+
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(bbox, 1.0f));
+        }
+
+        [Test]
+        public void VoxelGrid_SingleAxisZeroBounds_Throws()
+        {
+            var flatX = new BoundingBox(Vector3.Zero, new Vector3(0, 10, 10));
+            var flatY = new BoundingBox(Vector3.Zero, new Vector3(10, 0, 10));
+            var flatZ = new BoundingBox(Vector3.Zero, new Vector3(10, 10, 0));
+
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(flatX, 1.0f));
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(flatY, 1.0f));
+            Assert.Throws<ArgumentException>(() => new VoxelGrid(flatZ, 1.0f));
+        }
+
+        [Test]
+        public void VoxelGrid_TinyButPositiveBounds_UsesOneVoxelPerAxis()
+        {
+            // A positive size below the resolution rounds up to exactly one voxel per axis.
+            var bbox = new BoundingBox(Vector3.Zero, new Vector3(1e-4f, 5e-5f, 1e-6f));
+
+            var grid = new VoxelGrid(bbox, 1.0f);
+
+            Assert.That(grid.Dimensions, Is.EqualTo((1, 1, 1)));
+            Assert.That(grid.Bounds.Max, Is.EqualTo(new Vector3(1f, 1f, 1f)));
+            Assert.That(grid.GetVoxel(0, 0, 0), Is.True);
+        }
     }
 }

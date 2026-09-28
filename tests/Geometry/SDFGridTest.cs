@@ -297,5 +297,41 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(oobDist, Is.GreaterThan(0));
             Assert.That(Math.Abs(oobDist), Is.LessThanOrEqualTo(sdf.NarrowBandWidth + 1e-6f));
         }
+
+        [Test]
+        public void SDFGrid_ZeroSizeBounds_Throws()
+        {
+            var bbox = new BoundingBox(Vector3.Zero, Vector3.Zero);
+
+            Assert.Throws<ArgumentException>(() => new SDFGrid(bbox, 1.0f));
+        }
+
+        [Test]
+        public void SDFGrid_SingleAxisZeroBounds_Throws()
+        {
+            var flatX = new BoundingBox(Vector3.Zero, new Vector3(0, 10, 10));
+            var flatY = new BoundingBox(Vector3.Zero, new Vector3(10, 0, 10));
+            var flatZ = new BoundingBox(Vector3.Zero, new Vector3(10, 10, 0));
+
+            Assert.Throws<ArgumentException>(() => new SDFGrid(flatX, 1.0f));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(flatY, 1.0f));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(flatZ, 1.0f));
+        }
+
+        [Test]
+        public void SDFGrid_FromVoxelGrid_MatchesVoxelDimensions()
+        {
+            // Non-divisible size: the SDF grid must adopt the voxel grid's effective dimensions
+            // and bounds instead of rounding (or clamping) them a second time.
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 15, 20));
+            var voxelGrid = new VoxelGrid(bbox, 0.6f);
+
+            var sdf = SDFGrid.FromVoxelGrid(voxelGrid);
+
+            Assert.That(sdf.Dimensions, Is.EqualTo(voxelGrid.Dimensions));
+            Assert.That(sdf.Resolution, Is.EqualTo(voxelGrid.Resolution));
+            Assert.That(sdf.Bounds.Min, Is.EqualTo(voxelGrid.Bounds.Min));
+            Assert.That(sdf.Bounds.Max, Is.EqualTo(voxelGrid.Bounds.Max));
+        }
     }
 }

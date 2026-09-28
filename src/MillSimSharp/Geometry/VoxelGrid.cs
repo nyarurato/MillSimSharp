@@ -145,11 +145,19 @@ namespace MillSimSharp.Geometry
         /// voxelized extent (<c>Min + Dimensions * Resolution</c>), so a requested size that is not
         /// divisible by the resolution expands by less than one voxel per axis (Max side only).
         /// </para>
+        /// <para>
+        /// The work area must have a positive, finite size in every dimension; zero-size bounds are
+        /// rejected (matching <see cref="SDFGrid"/>).
+        /// </para>
         /// </summary>
         /// <param name="workArea">The bounding box defining the work area.</param>
         /// <param name="resolution">Voxel size in millimeters (default: 0.5mm).</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="workArea"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="resolution"/> is not a
+        /// finite positive number or the work area has a zero or non-finite size in any dimension.</exception>
         public VoxelGrid(BoundingBox workArea, float resolution = 0.5f)
         {
+            if (workArea == null) throw new ArgumentNullException(nameof(workArea));
             if (!float.IsFinite(resolution) || resolution <= 0)
                 throw new ArgumentException("Resolution must be a finite positive number.", nameof(resolution));
 
@@ -157,6 +165,9 @@ namespace MillSimSharp.Geometry
 
             // Calculate grid dimensions
             Vector3 size = workArea.Size;
+            if (!IsFinitePositive(size))
+                throw new ArgumentException("Work area must have a finite positive size in all dimensions.", nameof(workArea));
+
             _sizeX = (int)Math.Ceiling(size.X / resolution);
             _sizeY = (int)Math.Ceiling(size.Y / resolution);
             _sizeZ = (int)Math.Ceiling(size.Z / resolution);
@@ -174,6 +185,16 @@ namespace MillSimSharp.Geometry
 
             // Root is null initially, meaning all voxels are material (true)
             _root = null;
+        }
+
+        /// <summary>
+        /// Checks that a grid size is finite and strictly positive on every axis.
+        /// </summary>
+        private static bool IsFinitePositive(Vector3 size)
+        {
+            return float.IsFinite(size.X) && size.X > 0f
+                && float.IsFinite(size.Y) && size.Y > 0f
+                && float.IsFinite(size.Z) && size.Z > 0f;
         }
 
         /// <summary>

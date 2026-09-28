@@ -54,6 +54,9 @@ namespace MillSimSharp
         /// <param name="stockConfig">Stock configuration.</param>
         /// <param name="toolConfig">Tool configuration.</param>
         /// <param name="resolution">Voxel resolution in millimeters.</param>
+        /// <exception cref="ArgumentException">Thrown when the stock does not have a positive,
+        /// finite size in every dimension (for example an unconfigured
+        /// <see cref="StockConfiguration"/>).</exception>
         public MillSimulation(StockConfiguration stockConfig, ToolConfiguration toolConfig, float resolution = 1.0f)
         {
             if (stockConfig == null) throw new ArgumentNullException(nameof(stockConfig));

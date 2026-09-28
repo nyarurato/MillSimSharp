@@ -57,10 +57,18 @@ namespace MillSimSharp.Geometry
         /// <see cref="VoxelGrid"/>: a requested size that is not divisible by the resolution
         /// expands by less than one voxel per axis (Max side only).
         /// </para>
+        /// <para>
+        /// The bounds must have a positive, finite size in every dimension; zero-size bounds are
+        /// rejected instead of being clamped to a single voxel per axis.
+        /// </para>
         /// </summary>
         /// <param name="bounds">Bounding box of the SDF grid.</param>
         /// <param name="resolution">Voxel size in millimeters.</param>
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="bounds"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="resolution"/> or
+        /// <paramref name="narrowBandWidth"/> is not positive or the bounds have a zero or
+        /// non-finite size in any dimension.</exception>
         public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10)
         {
             if (bounds == null) throw new ArgumentNullException(nameof(bounds));
@@ -68,9 +76,11 @@ namespace MillSimSharp.Geometry
             if (narrowBandWidth <= 0) throw new ArgumentException("Narrow band width must be positive.", nameof(narrowBandWidth));
 
             var size = bounds.Max - bounds.Min;
-            _sizeX = Math.Max(1, (int)Math.Ceiling(size.X / resolution));
-            _sizeY = Math.Max(1, (int)Math.Ceiling(size.Y / resolution));
-            _sizeZ = Math.Max(1, (int)Math.Ceiling(size.Z / resolution));
+            if (!IsFinitePositive(size)) throw new ArgumentException("Bounds must have a finite positive size in all dimensions.", nameof(bounds));
+
+            _sizeX = (int)Math.Ceiling(size.X / resolution);
+            _sizeY = (int)Math.Ceiling(size.Y / resolution);
+            _sizeZ = (int)Math.Ceiling(size.Z / resolution);
             _resolution = resolution;
             _bounds = new BoundingBox(
                 bounds.Min,
@@ -162,6 +172,16 @@ namespace MillSimSharp.Geometry
             if (value < -_narrowBandWidth) return -_narrowBandWidth;
             if (value > _narrowBandWidth) return _narrowBandWidth;
             return value;
+        }
+
+        /// <summary>
+        /// Checks that a grid size is finite and strictly positive on every axis.
+        /// </summary>
+        private static bool IsFinitePositive(Vector3 size)
+        {
+            return float.IsFinite(size.X) && size.X > 0f
+                && float.IsFinite(size.Y) && size.Y > 0f
+                && float.IsFinite(size.Z) && size.Z > 0f;
         }
 
         /// <summary>

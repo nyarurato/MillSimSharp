@@ -358,6 +358,10 @@ var stockConfig = new StockConfiguration
 - **`MinCorner`**: Origin at (X-, Y-, Z-) corner, stock extends in positive directions (legacy behavior)
 - **`Center`**: Origin at center of stock, extends equally in all directions
 
+Stock dimensions must be positive on every axis. A zero-size stock such as an unconfigured
+`StockConfiguration` (`WorkSize = (0, 0, 0)`) is rejected with `ArgumentException` by
+`MillSimulation`, `VoxelGrid` and `SDFGrid` instead of creating a degenerate grid.
+
 ## Performance Optimization
 
 Interpolation step counts for cutting moves are derived from both linear and angular motion
