@@ -79,6 +79,24 @@ namespace MillSimSharp.Tests.Simulation
         }
 
         [Test]
+        public void ComputeSteps_UnrepresentableStepCount_Throws()
+        {
+            // Review regression: 3000mm at 1e-6mm/step needs ~3e9 steps. The int conversion used to
+            // wrap (int.MinValue) and silently fall back to the minimum step count (undersampling).
+            var settings = new SimulationSettings { MaxLinearStep = 1e-6f };
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => settings.ComputeSteps(3000f, 0f));
+
+            // The same guard applies to the angular term.
+            var angularSettings = new SimulationSettings { MaxAngularStep = 1e-6f };
+            Assert.Throws<ArgumentOutOfRangeException>(() => angularSettings.ComputeSteps(0f, 3000f));
+
+            // A large but representable step count is accepted.
+            var representable = new SimulationSettings { MaxLinearStep = 1f };
+            Assert.That(representable.ComputeSteps(1000000f, 0f), Is.EqualTo(1000000));
+        }
+
+        [Test]
         public void SimulationSettings_DefaultsAndValidBoundaryValues_AreAccepted()
         {
             var defaults = new SimulationSettings();

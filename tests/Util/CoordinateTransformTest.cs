@@ -118,5 +118,25 @@ namespace MillSimSharp.Tests.Util
             Assert.That(ToolOrientation.AngularDistanceDegrees(above, end), Is.LessThan(1e-3f),
                 "t above 1 must clamp to the end orientation");
         }
+
+        [Test]
+        public void ToolTipToSpindlePosition_StaysInWorkCoordinates()
+        {
+            // Review regression: the implementation never applied a work-origin offset, so the
+            // documented "machine coordinates" return value was wrong. The result keeps the input
+            // (work) coordinate system and WorkToMachine must be applied explicitly.
+            var tip = new Vector3(10, 20, 30);
+            var orientation = new ToolOrientation(0, 0, 0);
+
+            Vector3 spindle = CoordinateTransform.ToolTipToSpindlePosition(tip, orientation, toolLength: 5f);
+
+            Assert.That(spindle, Is.EqualTo(new Vector3(10, 20, 35)),
+                "the spindle position keeps the input (work) coordinate system");
+
+            var origin = new Vector3(100, 0, 0);
+            Vector3 machine = CoordinateTransform.WorkToMachine(spindle, origin);
+            Assert.That(machine, Is.EqualTo(new Vector3(110, 20, 35)),
+                "machine coordinates require an explicit WorkToMachine conversion");
+        }
     }
 }

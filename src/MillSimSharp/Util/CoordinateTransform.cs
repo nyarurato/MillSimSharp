@@ -76,12 +76,18 @@ namespace MillSimSharp.Util
         }
 
         /// <summary>
-        /// Converts tool tip position and orientation to machine coordinates.
+        /// Converts a tool tip position and orientation to the spindle position, expressed in the
+        /// <b>same coordinate system as the input</b> (work coordinates).
+        /// <para>
+        /// This only offsets the tip along the tool axis by <paramref name="toolLength"/>; it does
+        /// not apply a work origin offset. Apply <see cref="WorkToMachine"/> to the result when
+        /// machine coordinates are needed.
+        /// </para>
         /// </summary>
         /// <param name="toolTipPosition">Tool tip position in work coordinates.</param>
         /// <param name="orientation">Tool orientation.</param>
         /// <param name="toolLength">Length of the tool.</param>
-        /// <returns>Spindle position in machine coordinates.</returns>
+        /// <returns>Spindle position in the same (work) coordinate system as the input position.</returns>
         public static Vector3 ToolTipToSpindlePosition(Vector3 toolTipPosition, ToolOrientation orientation, float toolLength)
         {
             // Get the axis direction from the physical tool tip toward the spindle

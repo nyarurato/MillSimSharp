@@ -202,8 +202,10 @@ namespace MillSimSharp.Tests.IO
             foreach (var triangle in triangles)
             {
                 Vector3 geometric = GeometricNormal(triangle.V1, triangle.V2, triangle.V3);
-                Assert.That(Math.Abs(Vector3.Dot(triangle.Normal, geometric)), Is.GreaterThan(0.999f),
-                    "every voxel-mesh facet normal must match its triangle geometry");
+
+                // Signed: an inverted facet normal must fail, not just a normal with the wrong magnitude.
+                Assert.That(Vector3.Dot(triangle.Normal, geometric), Is.GreaterThan(0.999f),
+                    "every voxel-mesh facet normal must match its triangle geometry and winding");
             }
         }
 

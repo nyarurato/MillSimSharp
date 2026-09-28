@@ -319,6 +319,19 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void SDFGrid_ExcessiveSampleCount_Throws()
+        {
+            // Review regression: the dense SDF storage must mirror the VoxelGrid voxel-count limit.
+            // A resolution so small that a single dimension no longer fits in int comes first.
+            var unitBounds = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(1, 1, 1));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(unitBounds, 1e-38f));
+
+            // Dimensions that fit int individually but whose product exceeds int.MaxValue samples.
+            var huge = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(200000, 200000, 300000));
+            Assert.Throws<ArgumentException>(() => new SDFGrid(huge, 0.1f));
+        }
+
+        [Test]
         public void SDFGrid_FromVoxelGrid_MatchesVoxelDimensions()
         {
             // Non-divisible size: the SDF grid must adopt the voxel grid's effective dimensions

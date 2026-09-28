@@ -133,6 +133,7 @@ namespace MillSimSharp.Tests.Geometry
             var mesh = MeshConverter.ConvertToMeshFromSDF(sdf);
 
             int totalVerts = mesh.Vertices.Length;
+            Assert.That(totalVerts, Is.GreaterThan(0), "the SDF mesh must not be empty");
 
             // Compute unique positions with two tolerances
             float eps1 = 1e-6f;
@@ -154,39 +155,54 @@ namespace MillSimSharp.Tests.Geometry
                 if (AddUnique(unique2, v, eps2)) uniq2++;
             }
 
-            Console.WriteLine($"Vertex merging diagnostics: total={totalVerts}, uniq_epsilon1={uniq1}, uniq_epsilon2={uniq2}");
-            Assert.That(uniq2, Is.LessThanOrEqualTo(totalVerts));
+            Assert.That(uniq1, Is.InRange(1, totalVerts));
+            Assert.That(uniq2, Is.InRange(1, uniq1),
+                "a coarser tolerance cannot report more unique vertices than a finer one");
 
             // Analyze vertex index usage
             var indexCounts = new int[mesh.Vertices.Length];
             for (int i = 0; i < mesh.Indices.Length; i++)
             {
                 int idx = mesh.Indices[i];
+                Assert.That(idx, Is.InRange(0, mesh.Vertices.Length - 1), $"index {i} out of range");
                 indexCounts[idx]++;
             }
             int maxUsage = 0; int minUsage = int.MaxValue; double avgUsage = 0;
             for (int i = 0; i < indexCounts.Length; i++) { if (indexCounts[i] > maxUsage) maxUsage = indexCounts[i]; if (indexCounts[i] < minUsage) minUsage = indexCounts[i]; avgUsage += indexCounts[i]; }
             avgUsage /= indexCounts.Length;
+            Console.WriteLine($"Vertex merging diagnostics: total={totalVerts}, uniq_epsilon1={uniq1}, uniq_epsilon2={uniq2}");
             Console.WriteLine($"Index usage: min={minUsage}, max={maxUsage}, avg={avgUsage:F2}");
+
+            Assert.That(maxUsage, Is.GreaterThan(0), "the mesh must reference its vertices");
         }
 
         [Test]
         public void MeshDensity_VaryingResolution()
         {
-            // Use smaller bounding box and fewer resolution steps for faster testing
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(12, 12, 12));
-            var resList = new[] { 2.0f, 1.0f };  // Reduced to only 2 resolutions for speed
-            foreach (var res in resList)
-            {
-                var grid = new VoxelGrid(bbox, resolution: res);
-                grid.RemoveVoxelsInSphere(Vector3.Zero, 5.0f);  // Smaller sphere
-                var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10);
-                Console.WriteLine($"res={res:F3}, vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}");
+            var resList = new[] { 2.0f, 1.0f };
+            var vertexCounts = new int[resList.Length];
+            var triangleCounts = new int[resList.Length];
 
-                // Verify that higher resolution produces more vertices
-                Assert.That(mesh.Vertices.Length, Is.GreaterThan(0));
+            for (int i = 0; i < resList.Length; i++)
+            {
+                float res = resList[i];
+                var grid = new VoxelGrid(bbox, resolution: res);
+                grid.RemoveVoxelsInSphere(Vector3.Zero, 5.0f);
+                var mesh = MeshConverter.ConvertToMeshViaSDF(grid, narrowBandWidth: 10);
+
+                vertexCounts[i] = mesh.Vertices.Length;
+                triangleCounts[i] = mesh.Indices.Length / 3;
+                Console.WriteLine($"res={res:F3}, vertices={vertexCounts[i]}, triangles={triangleCounts[i]}");
             }
-            Assert.Pass();
+
+            // Halving the voxel size must actually refine the mesh: the old test only asserted that
+            // each resolution produced *some* vertices, so an empty or constant mesh passed.
+            Assert.That(vertexCounts[0], Is.GreaterThan(0), "the coarse mesh must not be empty");
+            Assert.That(vertexCounts[1], Is.GreaterThan(vertexCounts[0]),
+                "halving the resolution must produce more vertices");
+            Assert.That(triangleCounts[1], Is.GreaterThan(triangleCounts[0]),
+                "halving the resolution must produce more triangles");
         }
 
         [Test]

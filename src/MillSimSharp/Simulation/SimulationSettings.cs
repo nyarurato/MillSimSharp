@@ -86,13 +86,32 @@ namespace MillSimSharp.Simulation
         /// <param name="linearDistance">Linear distance in millimeters.</param>
         /// <param name="angularDistanceDegrees">Shortest angular distance in degrees.</param>
         /// <returns>Number of steps (at least <see cref="MinimumSteps"/> and 1).</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the required step count exceeds
+        /// <see cref="int.MaxValue"/> (for example an extremely long move with a very small
+        /// <see cref="MaxLinearStep"/>). Increase the step size or shorten the move.</exception>
         public int ComputeSteps(float linearDistance, float angularDistanceDegrees)
         {
-            int linearSteps = (int)MathF.Ceiling(linearDistance / MathF.Max(MaxLinearStep, 1e-6f));
-            int angularSteps = (int)MathF.Ceiling(angularDistanceDegrees / MathF.Max(MaxAngularStep, 1e-6f));
+            int linearSteps = ComputeStepCount(linearDistance, MaxLinearStep, nameof(linearDistance), nameof(MaxLinearStep));
+            int angularSteps = ComputeStepCount(angularDistanceDegrees, MaxAngularStep, nameof(angularDistanceDegrees), nameof(MaxAngularStep));
 
             int steps = Math.Max(MinimumSteps, Math.Max(linearSteps, angularSteps));
             return Math.Max(1, steps);
+        }
+
+        /// <summary>
+        /// Computes one step count in double precision and rejects values that do not fit in
+        /// <see cref="int"/> instead of wrapping into an undersampled move.
+        /// </summary>
+        private static int ComputeStepCount(float distance, float maxStep, string distanceName, string settingName)
+        {
+            double required = Math.Ceiling((double)distance / Math.Max(maxStep, 1e-6f));
+            if (!(required <= int.MaxValue))
+            {
+                throw new ArgumentOutOfRangeException(distanceName, distance,
+                    $"The move requires {required} interpolation steps, which exceeds the supported maximum of {int.MaxValue}. Increase {settingName} or shorten the move.");
+            }
+
+            return (int)required;
         }
 
         /// <summary>

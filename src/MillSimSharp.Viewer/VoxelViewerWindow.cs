@@ -21,15 +21,11 @@ namespace MillSimSharp.Viewer
         private MeshRenderer? _meshRenderer;
         private readonly object _meshLock = new object();
         // Async mesh generation fields
-        private System.Threading.Tasks.Task<MillSimSharp.Geometry.Mesh>? _meshComputeTask;
         private MillSimSharp.Geometry.Mesh? _pendingMesh;
         private bool _meshUpdatePending = false;
-        // Set when a mesh regeneration is requested while one is already running. The running task
-        // re-runs once after finishing, so consecutive steps / mode switches cannot leave a stale mesh.
-        private bool _meshRegenerationRequested = false;
-        // Incremented for every started generation. A finished task only applies its result when its
-        // generation is still the latest, so an older result cannot overwrite a newer mesh.
-        private int _meshGeneration = 0;
+        // Serializes mesh generation: queues a follow-up request while a build runs and rejects
+        // results from stale generations (see MeshGenerationScheduler).
+        private readonly MeshGenerationScheduler _meshScheduler = new MeshGenerationScheduler();
         // Key state helper for toggles
         private bool _rKeyPrev = false;
         private bool _cKeyPrev = false;
@@ -668,121 +664,108 @@ namespace MillSimSharp.Viewer
         /// <summary>
         /// Start mesh generation on a background thread and apply it on the render thread once ready.
         /// If a generation is already running, a follow-up run is queued instead of dropping the
-        /// request, so the display always converges to the current state.
+        /// request, and results of older generations are discarded, so the display always converges
+        /// to the current state.
         /// </summary>
         private void StartMeshGenerationAsync()
         {
             if (_sdfGrid == null) return;
 
-            lock (_meshLock)
+            int? requestedGeneration = _meshScheduler.TryBegin();
+            if (requestedGeneration == null)
             {
-                if (_meshComputeTask != null && !_meshComputeTask.IsCompleted)
+                Console.WriteLine("Mesh generation already in progress; a follow-up run is queued.");
+                return;
+            }
+
+            int generation = requestedGeneration.Value;
+
+            // Use step grid if in step mode, otherwise use original grid
+            var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
+            if (gridCopy == null)
+            {
+                Console.WriteLine("No SDF grid available for mesh generation.");
+                if (_meshScheduler.Complete())
                 {
-                    _meshRegenerationRequested = true;
-                    Console.WriteLine("Mesh generation already in progress; a follow-up run is queued.");
-                    return;
+                    StartMeshGenerationAsync();
                 }
+                return;
+            }
 
-                _meshRegenerationRequested = false;
+            _meshGenerationInProgress = true;
+            _processingStatus = "Generating mesh...";
+            Console.WriteLine("Starting mesh generation...");
 
-                // Use step grid if in step mode, otherwise use original grid
-                var gridCopy = _stepByStepMode ? _stepSdfGrid : _sdfGrid;
-                if (gridCopy == null)
+            var meshGenStopwatch = new Stopwatch();
+            meshGenStopwatch.Start();
+
+            // Progress reporting for mesh generation
+            var meshProgressTask = System.Threading.Tasks.Task.Run(async () =>
+            {
+                while (_meshGenerationInProgress)
                 {
-                    Console.WriteLine("No SDF grid available for mesh generation.");
-                    return;
+                    await System.Threading.Tasks.Task.Delay(5000); // Every 5 seconds
+                    if (_meshGenerationInProgress)
+                    {
+                        Console.WriteLine($"Mesh generation in progress... ({meshGenStopwatch.ElapsedMilliseconds / 1000}s elapsed)");
+                    }
                 }
+            });
 
-                _meshGenerationInProgress = true;
-                _processingStatus = "Generating mesh...";
-                Console.WriteLine("Starting mesh generation...");
+            var meshComputeTask = System.Threading.Tasks.Task.Run(() =>
+            {
+                // Generate mesh directly from SDF
+                return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(gridCopy);
+            });
 
-                int generation = ++_meshGeneration;
+            meshComputeTask.ContinueWith((t) =>
+            {
+                meshGenStopwatch.Stop();
+                _meshGenerationInProgress = false;
 
-                var meshGenStopwatch = new Stopwatch();
-                meshGenStopwatch.Start();
-
-                // Progress reporting for mesh generation
-                var meshProgressTask = System.Threading.Tasks.Task.Run(async () =>
+                if (t.IsCompletedSuccessfully)
                 {
-                    while (_meshGenerationInProgress)
-                    {
-                        await System.Threading.Tasks.Task.Delay(5000); // Every 5 seconds
-                        if (_meshGenerationInProgress)
-                        {
-                            Console.WriteLine($"Mesh generation in progress... ({meshGenStopwatch.ElapsedMilliseconds / 1000}s elapsed)");
-                        }
-                    }
-                });
-
-                _meshComputeTask = System.Threading.Tasks.Task.Run(() =>
-                {
-                    // Generate mesh directly from SDF
-                    return MillSimSharp.Geometry.MeshConverter.ConvertToMeshFromSDF(gridCopy);
-                });
-
-                _meshComputeTask.ContinueWith((t) =>
-                {
-                    meshGenStopwatch.Stop();
-                    _meshGenerationInProgress = false;
-
-                    if (t.IsCompletedSuccessfully)
-                    {
-                        var mesh = t.Result;
-                        bool applied = false;
-                        lock (_meshLock)
-                        {
-                            // Discard the result if a newer generation was started meanwhile (for
-                            // example after a fast mode switch): the newer mesh must win.
-                            if (generation == _meshGeneration)
-                            {
-                                _pendingMesh = mesh;
-                                _meshUpdatePending = true;
-                                applied = true;
-                            }
-                        }
-
-                        if (applied)
-                        {
-                            _processingStatus = "";
-                            Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
-                        }
-                        else
-                        {
-                            Console.WriteLine("Discarding stale mesh result (a newer generation is active).");
-                        }
-                    }
-                    else if (t.IsFaulted)
-                    {
-                        bool current;
-                        lock (_meshLock)
-                        {
-                            current = generation == _meshGeneration;
-                        }
-
-                        if (current)
-                        {
-                            _processingStatus = "Mesh generation failed";
-                            // Print full exception details to help diagnose failures
-                            Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
-                        }
-                    }
-
-                    // Run the queued follow-up request now (the state / mode may have changed while
-                    // the previous generation was running).
-                    bool rerun;
+                    var mesh = t.Result;
+                    bool applied = false;
                     lock (_meshLock)
                     {
-                        rerun = _meshRegenerationRequested;
-                        _meshRegenerationRequested = false;
+                        // Discard the result if a newer generation was started meanwhile (for
+                        // example after a fast mode switch): the newer mesh must win.
+                        if (_meshScheduler.IsCurrent(generation))
+                        {
+                            _pendingMesh = mesh;
+                            _meshUpdatePending = true;
+                            applied = true;
+                        }
                     }
 
-                    if (rerun)
+                    if (applied)
                     {
-                        StartMeshGenerationAsync();
+                        _processingStatus = "";
+                        Console.WriteLine($"Mesh generation finished: vertices={mesh.Vertices.Length}, triangles={mesh.Indices.Length / 3}, time={meshGenStopwatch.ElapsedMilliseconds} ms ({meshGenStopwatch.ElapsedMilliseconds / 1000.0:F1}s)");
                     }
-                }, System.Threading.Tasks.TaskScheduler.Default);
-            }
+                    else
+                    {
+                        Console.WriteLine("Discarding stale mesh result (a newer generation is active).");
+                    }
+                }
+                else if (t.IsFaulted)
+                {
+                    if (_meshScheduler.IsCurrent(generation))
+                    {
+                        _processingStatus = "Mesh generation failed";
+                        // Print full exception details to help diagnose failures
+                        Console.WriteLine($"Mesh generation failed after {meshGenStopwatch.ElapsedMilliseconds} ms: {t.Exception?.ToString()}");
+                    }
+                }
+
+                // Start the queued follow-up request now (the state / mode may have changed while
+                // the previous generation was running).
+                if (_meshScheduler.Complete())
+                {
+                    StartMeshGenerationAsync();
+                }
+            }, System.Threading.Tasks.TaskScheduler.Default);
         }
     }
 }

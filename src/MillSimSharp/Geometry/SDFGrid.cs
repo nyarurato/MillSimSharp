@@ -60,7 +60,8 @@ namespace MillSimSharp.Geometry
         /// </para>
         /// <para>
         /// The bounds must have a positive, finite size in every dimension; zero-size bounds are
-        /// rejected instead of being clamped to a single voxel per axis.
+        /// rejected instead of being clamped to a single voxel per axis. The grid is stored densely,
+        /// so bounds whose sample count exceeds <see cref="int.MaxValue"/> are rejected as well.
         /// </para>
         /// </summary>
         /// <param name="bounds">Bounding box of the SDF grid.</param>
@@ -68,8 +69,9 @@ namespace MillSimSharp.Geometry
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="bounds"/> is null.</exception>
         /// <exception cref="ArgumentException">Thrown when <paramref name="resolution"/> or
-        /// <paramref name="narrowBandWidth"/> is not positive or the bounds have a zero or
-        /// non-finite size in any dimension.</exception>
+        /// <paramref name="narrowBandWidth"/> is not positive, the bounds have a zero or non-finite
+        /// size in any dimension, or the grid would contain more samples than
+        /// <see cref="int.MaxValue"/>.</exception>
         public SDFGrid(BoundingBox bounds, float resolution, int narrowBandWidth = 10)
         {
             if (bounds == null) throw new ArgumentNullException(nameof(bounds));
@@ -79,9 +81,38 @@ namespace MillSimSharp.Geometry
             var size = bounds.Max - bounds.Min;
             if (!IsFinitePositive(size)) throw new ArgumentException("Bounds must have a finite positive size in all dimensions.", nameof(bounds));
 
-            _sizeX = (int)Math.Ceiling(size.X / resolution);
-            _sizeY = (int)Math.Ceiling(size.Y / resolution);
-            _sizeZ = (int)Math.Ceiling(size.Z / resolution);
+            // The sample count is validated like VoxelGrid's voxel count: each dimension must fit in
+            // int before the cast (an extreme quotient would otherwise wrap) and the total (dense
+            // float array) must fit the int-based indexing / count APIs.
+            double sizeX = Math.Ceiling(size.X / resolution);
+            double sizeY = Math.Ceiling(size.Y / resolution);
+            double sizeZ = Math.Ceiling(size.Z / resolution);
+            if (!(sizeX <= int.MaxValue) || !(sizeY <= int.MaxValue) || !(sizeZ <= int.MaxValue))
+            {
+                throw new ArgumentException(
+                    $"The SDF grid would contain more than {int.MaxValue} samples; increase the resolution or reduce the bounds.",
+                    nameof(bounds));
+            }
+
+            long totalSamples = (int)sizeX;
+            if (totalSamples > int.MaxValue / (int)sizeY)
+            {
+                throw new ArgumentException(
+                    $"The SDF grid would contain more than {int.MaxValue} samples; increase the resolution or reduce the bounds.",
+                    nameof(bounds));
+            }
+            totalSamples *= (int)sizeY;
+
+            if (totalSamples > int.MaxValue / (int)sizeZ)
+            {
+                throw new ArgumentException(
+                    $"The SDF grid would contain more than {int.MaxValue} samples; increase the resolution or reduce the bounds.",
+                    nameof(bounds));
+            }
+
+            _sizeX = (int)sizeX;
+            _sizeY = (int)sizeY;
+            _sizeZ = (int)sizeZ;
             _resolution = resolution;
             _bounds = new BoundingBox(
                 bounds.Min,

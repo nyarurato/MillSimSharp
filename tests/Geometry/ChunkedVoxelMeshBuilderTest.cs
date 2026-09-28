@@ -19,19 +19,30 @@ namespace MillSimSharp.Tests.Geometry
             return $"{(long)MathF.Round(v.X * 1000f)},{(long)MathF.Round(v.Y * 1000f)},{(long)MathF.Round(v.Z * 1000f)}";
         }
 
+        /// <summary>
+        /// Canonical key of a triangle that preserves its cyclic winding: the three rotations are
+        /// compared and the smallest is used. Sorting the vertices would hide an inverted triangle.
+        /// </summary>
+        private static string TriangleKey(Mesh mesh, int index0, int index1, int index2)
+        {
+            string a = Quantize(mesh.Vertices[index0]);
+            string b = Quantize(mesh.Vertices[index1]);
+            string c = Quantize(mesh.Vertices[index2]);
+
+            string r0 = $"{a}|{b}|{c}";
+            string r1 = $"{b}|{c}|{a}";
+            string r2 = $"{c}|{a}|{b}";
+
+            if (string.CompareOrdinal(r0, r1) <= 0 && string.CompareOrdinal(r0, r2) <= 0) return r0;
+            return string.CompareOrdinal(r1, r2) <= 0 ? r1 : r2;
+        }
+
         private static List<string> TriangleKeys(Mesh mesh)
         {
             var keys = new List<string>();
             for (int i = 0; i + 2 < mesh.Indices.Length; i += 3)
             {
-                var triangle = new List<string>
-                {
-                    Quantize(mesh.Vertices[mesh.Indices[i]]),
-                    Quantize(mesh.Vertices[mesh.Indices[i + 1]]),
-                    Quantize(mesh.Vertices[mesh.Indices[i + 2]])
-                };
-                triangle.Sort(StringComparer.Ordinal);
-                keys.Add(string.Join("|", triangle));
+                keys.Add(TriangleKey(mesh, mesh.Indices[i], mesh.Indices[i + 1], mesh.Indices[i + 2]));
             }
 
             keys.Sort(StringComparer.Ordinal);
