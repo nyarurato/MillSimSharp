@@ -6,8 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SDFGrid.SyncFromVoxelGrid()` rebuilds the whole field from the source voxel grid (the grid passed to `FromVoxelGrid` or `BindToVoxelGrid`), throwing `InvalidOperationException` when the SDF has no source grid.
+
 ### Changed
 
+- Material state ownership between `VoxelGrid` and `SDFGrid` is now a fixed contract: `FromVoxelGrid` is a one-time snapshot, `BindToVoxelGrid` subscribes to future changes only (existing values are not synchronized), direct carving into a bound SDF is overwritten by later voxel-driven rebuilds (`UnbindFromVoxelGrid()` preserves SDF-native edits), and `SyncFromVoxelGrid()` forces a full rebuild. No runtime behavior change; XML docs, README and docs/SDF.md document it.
 - Binary / ASCII STL export now writes facet normals computed from the triangle geometry (cross product). Previously the first vertex normal of each triangle was copied, which for voxel meshes is an averaged surface normal that may differ from the facet orientation (more than 8° in measured cases). Degenerate triangles are written with a zero normal; OBJ / PLY vertex normals are unchanged.
 - `CoordinateTransform.InterpolateOrientation` now uses shortest-rotation quaternion slerp (`ToolOrientation.Slerp`) instead of interpolating the A/B/C Euler angles independently. For example, the midpoint of a 350° → 10° change is now the equivalent of 0° instead of 180°, matching `ToolOrientation.Slerp` and the simulator pose path (behavior change).
 - `VoxelGrid` and `SDFGrid` now reject bounds with a zero or non-finite size in any dimension with `ArgumentException` (behavior change). Previously `VoxelGrid` created a degenerate grid while `SDFGrid` silently clamped each axis to one voxel, so the two backends disagreed on the same input. An unconfigured stock (`StockConfiguration.WorkSize = (0, 0, 0)`) now fails fast in `MillSimulation`.

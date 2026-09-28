@@ -55,6 +55,12 @@ sdfGrid.RemoveFiniteCylinder(start, end, radius);
 - `new SDFGrid(...)` は **effective bounds**（`Min + Dimensions × Resolution`、Max 側のみ拡張）を占める solid block として初期化されます。初期距離は境界面までの解析的な box 距離（narrow band でクランプ）で、境界近傍も `-narrowBand` の一様値ではありません。
 - `BindToVoxelGrid` / `UpdateRegionFromVoxelGrid` は **dimensions / resolution / bounds が一致する `VoxelGrid` のみ**受け付けます（不一致は `ArgumentException`）。`SDFGrid.FromVoxelGrid` は元の `VoxelGrid` の effective bounds をそのまま継承します。
 
+**材料状態の所有契約（0.2.2）**:
+
+- `FromVoxelGrid` は **one-time snapshot** です。以後の `VoxelGrid` の変更は SDF に反映されません（ソース grid は `SyncFromVoxelGrid` 用に記憶されます）。
+- `BindToVoxelGrid` は **以後の変更の購読のみ**で、既存値は同期しません。バインド前に発生したボクセル変更は `SyncFromVoxelGrid()`（全領域再構築）を呼ぶまで反映されません。
+- bound SDF への直接 carve（`RemoveSphere` など）は許容されますが、ボクセル変更がトリガーする再構築が同じ領域に及ぶと上書きされます。SDF-native の編集を維持するには `UnbindFromVoxelGrid()` で解除してください。再バインドしても既存値は同期されないため、必要な場合は `SyncFromVoxelGrid()` を呼びます。
+
 ### 内部実装
 
 #### 1. `SignedDistanceFieldBuilder` (internal)

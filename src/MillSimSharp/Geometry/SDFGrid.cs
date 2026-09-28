@@ -94,6 +94,12 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Creates an SDF grid from an existing VoxelGrid.
+        /// <para>
+        /// This takes a one-time snapshot: later voxel changes are not reflected until the SDF is
+        /// bound with <see cref="BindToVoxelGrid"/> (for live incremental updates) and/or
+        /// synchronized with <see cref="SyncFromVoxelGrid"/>. The source grid is remembered so
+        /// <see cref="SyncFromVoxelGrid"/> can rebuild from it.
+        /// </para>
         /// </summary>
         /// <param name="voxelGrid">Source voxel grid.</param>
         /// <param name="narrowBandWidth">Width of the narrow band in voxels (default: 10).</param>
@@ -117,7 +123,9 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Private constructor used by FromVoxelGrid. Distances are filled by the caller.
+        /// Private constructor used by FromVoxelGrid. Distances are filled by the caller and the
+        /// source grid is remembered for <see cref="SyncFromVoxelGrid"/>; no events are subscribed
+        /// until <see cref="BindToVoxelGrid"/> is called.
         /// </summary>
         private SDFGrid(VoxelGrid voxelGrid, int sizeX, int sizeY, int sizeZ,
                float resolution, BoundingBox bounds, int narrowBandWidth)
@@ -185,9 +193,16 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Bind to a VoxelGrid so that we can react to its VoxelsChanged events and perform incremental SDF updates.
+        /// Binds to a VoxelGrid so that future voxel changes update this SDF incrementally.
         /// The grid must describe the same field (dimensions, resolution and bounds), otherwise
         /// voxel indices and world coordinates would not correspond.
+        /// <para>
+        /// Binding only subscribes to future changes: existing values (including voxel edits made
+        /// before the call) are not synchronized. Use <see cref="SyncFromVoxelGrid"/> for a full
+        /// rebuild. Direct carving into the SDF (for example <see cref="RemoveSphere"/>) is allowed
+        /// while bound, but any region rebuilt from a later voxel change overwrites those edits;
+        /// call <see cref="UnbindFromVoxelGrid"/> to keep SDF-native edits.
+        /// </para>
         /// </summary>
         /// <exception cref="ArgumentException">Thrown when the grid is not compatible with this SDF grid.</exception>
         public void BindToVoxelGrid(VoxelGrid grid)
@@ -224,13 +239,36 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
-        /// Unbind from the VoxelGrid events.
+        /// Unbinds from the source VoxelGrid: future voxel changes no longer update this SDF and
+        /// direct SDF edits are preserved. Rebinding does not resynchronize existing values; call
+        /// <see cref="SyncFromVoxelGrid"/> when a full rebuild is wanted.
         /// </summary>
         public void UnbindFromVoxelGrid()
         {
             if (_boundVoxelGrid == null) return;
             _boundVoxelGrid.VoxelsChanged -= OnVoxelGridChanged;
             _boundVoxelGrid = null;
+        }
+
+        /// <summary>
+        /// Rebuilds the whole field from the source voxel grid (the grid passed to
+        /// <see cref="FromVoxelGrid"/> or <see cref="BindToVoxelGrid"/>).
+        /// <para>
+        /// Use this after edits made while unbound, or to discard direct SDF carving, so that every
+        /// sample is derived from the current voxel state. Incremental binding only synchronizes
+        /// future changes.
+        /// </para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown when this SDF grid has no source
+        /// voxel grid (created with the native constructor and never bound).</exception>
+        public void SyncFromVoxelGrid()
+        {
+            var voxelGrid = _boundVoxelGrid
+                ?? throw new InvalidOperationException(
+                    "This SDF grid has no source voxel grid. Use SDFGrid.FromVoxelGrid or BindToVoxelGrid first.");
+
+            EnsureCompatible(voxelGrid);
+            RebuildRegion(voxelGrid, 0, 0, 0, _sizeX - 1, _sizeY - 1, _sizeZ - 1);
         }
 
         private void OnVoxelGridChanged(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)

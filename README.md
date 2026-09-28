@@ -206,6 +206,12 @@ var mesh = MeshConverter.ConvertToMeshFromSDF(sdfGrid);
 StlExporter.Export(mesh, "output_from_voxel.stl");
 ```
 
+`SDFGrid.FromVoxelGrid` takes a one-time snapshot: later voxel edits are not reflected. Call
+`BindToVoxelGrid(voxelGrid)` to subscribe to live incremental updates (existing values are not
+synchronized), and `SyncFromVoxelGrid()` to rebuild the whole field from the source grid. Direct
+SDF carving is overwritten in regions that a later voxel-driven rebuild touches; call
+`UnbindFromVoxelGrid()` to keep SDF-native edits.
+
 ## Viewer and Samples (Repository Only)
 
 > **Note:** The viewer app and sample projects are included in the **source repository** but are **not part of the NuGet package**. The NuGet package contains only the core `MillSimSharp` library.
