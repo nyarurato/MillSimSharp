@@ -640,6 +640,21 @@ namespace MillSimSharp.Tests.Simulation
             return 2.0 * (size.X * size.Y + size.Y * size.Z + size.Z * size.X);
         }
 
+        /// <summary>
+        /// Volume-error bound for a center-sampled solid: the smaller of the theoretical surface-layer
+        /// bound (surfaceArea * resolution) and a relative bound that drops quadratically with the
+        /// resolution. Measured errors are at most ~7% at resolution 1 and ~0.6% at 0.5, so
+        /// 12% * resolution^2 keeps a margin of at least ~1.6x while rejecting gross under-cutting
+        /// (for example 30%) and wrong tool profiles (a flat/ball mix-up differs by about 6-8%),
+        /// which the surface-layer bound alone would let through.
+        /// </summary>
+        private static double VolumeErrorBound(double surfaceArea, float resolution, double analyticVolume)
+        {
+            double surfaceBound = surfaceArea * resolution;
+            double relativeBound = 0.12 * resolution * resolution * analyticVolume;
+            return Math.Min(surfaceBound, relativeBound);
+        }
+
         // Center sampling can misclassify at most about surfaceArea / resolution surface-layer cells,
         // each contributing one cell volume (resolution^3), so the removed volume error is bounded by
         // surfaceArea * resolution for an exactly-known solid.
@@ -694,7 +709,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(grid);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel flat sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -722,7 +737,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(grid);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel ball sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -746,7 +761,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(sdf);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf flat sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -772,7 +787,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(sdf);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf ball sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -838,7 +853,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double surfaceArea = 8.0 * Math.PI * CirclePathRadius * SweepRadius
                 + 4.0 * Math.PI * CirclePathRadius * SweepToolLength;
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel flat circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -865,7 +880,7 @@ namespace MillSimSharp.Tests.Simulation
             double error = Math.Abs(removedVolume - analyticVolume);
 
             double surfaceArea = BoundingBoxSurfaceArea(bounds);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel ball circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -891,7 +906,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double surfaceArea = 8.0 * Math.PI * CirclePathRadius * SweepRadius
                 + 4.0 * Math.PI * CirclePathRadius * SweepToolLength;
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf flat circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -918,7 +933,7 @@ namespace MillSimSharp.Tests.Simulation
             double error = Math.Abs(removedVolume - analyticVolume);
 
             double surfaceArea = BoundingBoxSurfaceArea(bounds);
-            double bound = surfaceArea * resolution;
+            double bound = VolumeErrorBound(surfaceArea, resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf ball circle res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -985,7 +1000,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(grid);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel bull-nose sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -1010,7 +1025,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(sdf);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf bull-nose sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -1036,7 +1051,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(grid);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel taper sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -1062,7 +1077,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(sdf);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf taper sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -1103,7 +1118,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(grid);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"voxel 5-axis tilted sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 
@@ -1138,7 +1153,7 @@ namespace MillSimSharp.Tests.Simulation
 
             double removedVolume = MeasureRemovedVolume(sdf);
             double error = Math.Abs(removedVolume - analyticVolume);
-            double bound = BoundingBoxSurfaceArea(bounds) * resolution;
+            double bound = VolumeErrorBound(BoundingBoxSurfaceArea(bounds), resolution, analyticVolume);
             TestContext.Progress.WriteLine(
                 $"sdf 5-axis tilted sweep res={resolution}: removed={removedVolume:F2}, analytic={analyticVolume:F2}, error={error:F3}, bound={bound:F3}");
 

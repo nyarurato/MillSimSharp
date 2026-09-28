@@ -374,19 +374,23 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(removed, Is.EqualTo(sphereVolume).Within(surfaceLayer));
         }
 
-        [Test]
-        public void FromVoxelGrid_VolumeHelpers_AgreeWithinSurfaceLayer()
+        [TestCase(1.0f)]
+        [TestCase(0.5f)]
+        public void FromVoxelGrid_VolumeHelpers_MatchVoxelCounts(float resolution)
         {
+            // FromVoxelGrid maps every voxel's material state to the sign of the corresponding SDF
+            // sample (a material cell adjacent to air gets -(1 - 0.5) * resolution, so it stays
+            // negative), so the counts and volumes must match exactly, not just within a surface
+            // layer.
             var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
-            var grid = new VoxelGrid(bbox, 1.0f);
+            var grid = new VoxelGrid(bbox, resolution);
             grid.RemoveVoxelsInSphere(Vector3.Zero, 5f);
 
             var sdf = SDFGrid.FromVoxelGrid(grid);
 
-            double difference = Math.Abs(sdf.GetRemovedVolume() - grid.GetRemovedVolume());
-            double surfaceLayer = 4.0 * Math.PI * 25.0 * grid.Resolution;
-            Assert.That(difference, Is.LessThanOrEqualTo(surfaceLayer),
-                "SDF and voxel volume estimates may differ only in the surface layer");
+            Assert.That(sdf.CountMaterialSamples(), Is.EqualTo(grid.CountMaterialVoxels()));
+            Assert.That(sdf.GetMaterialVolume(), Is.EqualTo(grid.GetMaterialVolume()));
+            Assert.That(sdf.GetRemovedVolume(), Is.EqualTo(grid.GetRemovedVolume()));
         }
     }
 }
