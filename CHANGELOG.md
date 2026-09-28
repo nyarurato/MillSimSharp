@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ToolpathExecutor.ExecuteNextSteps` retries a throwing command instead of skipping it, and a failed final command is no longer reported as completed.
 - Viewer G-code parser: invalid, unsupported-plane or fractional I/J arcs (`G90.1`, `G0.1`, ...) are ignored without moving the tool, the last chord lands exactly on the commanded end, and unsupported G-code blocks (e.g. `G28`) no longer run as the previous modal motion.
-- Straight moves with a small orientation change sweep the end pose as well: the exact-swept-solid shortcut is only used when the orientation is effectively constant (drift below 1e-4 mm).
+- Straight moves only use the exact-swept-solid shortcut when the orientation is effectively constant (drift below 1e-4 mm) and the motion is exactly perpendicular to the tool axis; small orientation changes or slight axial motion now sample poses, so material covered only by the end pose is removed.
 - `VoxelGrid` / `SDFGrid` reject grids beyond `int.MaxValue` voxels / samples; `SimulationSettings.ComputeSteps` uses the configured step and chord-error values as given (no hidden floors) and fails explicitly when the required step count exceeds `int.MaxValue`.
 - Mesh vertex merging scales with the voxel resolution, so fine grids (for example 0.0004 mm) no longer collapse distinct vertices into degenerate triangles.
 - `ToolOrientation.FromAxisTowardSpindle` returns the actual shortest rotation, and tiny or huge (but finite non-zero) axes are accepted by it and `ToolCollisionDetector`.

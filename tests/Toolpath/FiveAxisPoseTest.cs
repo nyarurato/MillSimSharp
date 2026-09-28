@@ -337,6 +337,40 @@ namespace MillSimSharp.Tests.Toolpath
                 "the probe must remain material without the orientation change");
         }
 
+        [Test]
+        public void ShallowAxialMove_RemovesMaterialAtTheRaisedEndPose()
+        {
+            // The old perpendicularity tolerance admitted a 9 um axial rise over this 1000 mm
+            // move. Its swept predicate kept the tool at the start height and missed the top of
+            // the tool at the end, even though the end pose is inside this small stock region.
+            const float resolution = 0.001f;
+            var bounds = new BoundingBox(
+                new Vector3(999.9f, -0.05f, 10.003f),
+                new Vector3(1000.1f, 0.05f, 10.008f));
+            var tool = new EndMill(2f, 10f, isBallEnd: false);
+            var probe = new Vector3(1000f, 0f, 10.005f);
+
+            var raisedGrid = new VoxelGrid(bounds, resolution);
+            var raisedSimulator = new CutterSimulator(raisedGrid);
+            raisedSimulator.Settings.MaxLinearStep = 1000f;
+            raisedSimulator.CutLinearWithOrientation(
+                Vector3.Zero, new Vector3(1000f, 0f, 0.009f), tool,
+                ToolOrientation.Default, ToolOrientation.Default);
+
+            Assert.That(raisedGrid.GetVoxelAtWorld(probe), Is.False,
+                "the raised end pose must cut material above the start-height sweep");
+
+            var levelGrid = new VoxelGrid(bounds, resolution);
+            var levelSimulator = new CutterSimulator(levelGrid);
+            levelSimulator.Settings.MaxLinearStep = 1000f;
+            levelSimulator.CutLinearWithOrientation(
+                Vector3.Zero, new Vector3(1000f, 0f, 0f), tool,
+                ToolOrientation.Default, ToolOrientation.Default);
+
+            Assert.That(levelGrid.GetVoxelAtWorld(probe), Is.True,
+                "the probe must remain material when the tool stays at the start height");
+        }
+
         [TestCase(1.0f, true)]
         [TestCase(1.0f, false)]
         public void FiveAxis_DefaultOrientation_MatchesThreeAxisGeometry(float resolution, bool isBallEnd)

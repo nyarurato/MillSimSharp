@@ -71,7 +71,9 @@ namespace MillSimSharp.Simulation
 
             if (distance > 1e-6f &&
                 orientationDrift <= 1e-4f &&
-                MathF.Abs(Vector3.Dot(Vector3.Transform(Vector3.UnitZ, qStart), delta)) <= 1e-5f * distance)
+                // The swept predicate keeps the tool's axial coordinate fixed relative to start.
+                // Any axial motion, however small relative to the move length, needs pose sampling.
+                Vector3.Dot(Vector3.Transform(Vector3.UnitZ, qStart), delta) == 0f)
             {
                 // Exact swept solid for a straight move that is perpendicular to the tool axis.
                 Vector3 axisTowardSpindle = Vector3.Transform(Vector3.UnitZ, qStart);
