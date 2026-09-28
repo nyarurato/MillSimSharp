@@ -119,6 +119,23 @@ namespace MillSimSharp.Tests.Geometry
         }
 
         [Test]
+        public void UnboundSdf_SyncFromVoxelGrid_StillWorks()
+        {
+            // Unbinding stops the event subscription but must not forget the sync source, so edits
+            // made while unbound can be synchronized without rebinding.
+            var grid = CreateGrid();
+            var sdf = SDFGrid.FromVoxelGrid(grid);
+            sdf.BindToVoxelGrid(grid);
+            sdf.UnbindFromVoxelGrid();
+
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 3f);
+
+            sdf.SyncFromVoxelGrid();
+
+            AssertAllDistancesEqual(SDFGrid.FromVoxelGrid(grid), sdf);
+        }
+
+        [Test]
         public void UnbindRebind_WithoutSync_KeepsValues()
         {
             var grid = CreateGrid();

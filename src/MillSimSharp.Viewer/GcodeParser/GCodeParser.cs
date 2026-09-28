@@ -163,8 +163,7 @@ namespace MillSimSharp.Viewer
                     // into a linear move), and an arc with an impossible radius is ignored as well.
                     bool valid = (hasI || hasJ || hasR)
                         && EmitArc(commands, moveMotion == 2,
-                            new Vector3((float)x, (float)y, (float)z),
-                            new Vector3((float)nx, (float)ny, (float)nz),
+                            x, y, z, nx, ny, nz,
                             i, j, r, hasR, feed, arcSegmentAngleDegrees);
 
                     if (!valid)
@@ -213,15 +212,16 @@ namespace MillSimSharp.Viewer
 
         private static bool EmitArc(
             List<IToolpathCommand> commands, bool clockwise,
-            Vector3 start, Vector3 end,
+            double startX, double startY, double startZ,
+            double endX, double endY, double endZ,
             double i, double j, double r, bool useRadius, double feed, float arcSegmentAngleDegrees)
         {
             double cx, cy;
 
             if (useRadius)
             {
-                double dx = end.X - start.X;
-                double dy = end.Y - start.Y;
+                double dx = endX - startX;
+                double dy = endY - startY;
                 double distance = Math.Sqrt(dx * dx + dy * dy);
                 if (distance < 1e-9) return false;
 
@@ -230,8 +230,8 @@ namespace MillSimSharp.Viewer
 
                 double hSquared = r * r - distance * distance / 4.0;
                 double h = hSquared > 0 ? Math.Sqrt(hSquared) : 0;
-                double mx = (start.X + end.X) / 2.0;
-                double my = (start.Y + end.Y) / 2.0;
+                double mx = (startX + endX) / 2.0;
+                double my = (startY + endY) / 2.0;
 
                 // Left normal of the chord direction.
                 double perpX = -dy / distance;
@@ -247,24 +247,25 @@ namespace MillSimSharp.Viewer
             }
             else
             {
-                cx = start.X + i;
-                cy = start.Y + j;
+                cx = startX + i;
+                cy = startY + j;
 
                 // I/J arcs use the start radius as the circle radius. The commanded end must lie
                 // on that circle within the G-code rounding tolerance; otherwise the block is
-                // ignored (no command emitted, position unchanged). Mismatches are common when a
-                // postprocessor rounds I/J or the end coordinates.
+                // ignored (no command emitted, position unchanged). The check uses the parser's
+                // double-precision coordinates: converting to float first would misjudge valid
+                // arcs far from the origin.
                 double startRadius = Math.Sqrt(
-                    (start.X - cx) * (start.X - cx) + (start.Y - cy) * (start.Y - cy));
+                    (startX - cx) * (startX - cx) + (startY - cy) * (startY - cy));
                 double endRadius = Math.Sqrt(
-                    (end.X - cx) * (end.X - cx) + (end.Y - cy) * (end.Y - cy));
+                    (endX - cx) * (endX - cx) + (endY - cy) * (endY - cy));
                 double tolerance = Math.Max(1e-4, 1e-3 * startRadius);
                 if (Math.Abs(endRadius - startRadius) > tolerance) return false;
             }
 
-            double startAngle = Math.Atan2(start.Y - cy, start.X - cx);
-            double endAngle = Math.Atan2(end.Y - cy, end.X - cx);
-            double radius = Math.Sqrt((start.X - cx) * (start.X - cx) + (start.Y - cy) * (start.Y - cy));
+            double startAngle = Math.Atan2(startY - cy, startX - cx);
+            double endAngle = Math.Atan2(endY - cy, endX - cx);
+            double radius = Math.Sqrt((startX - cx) * (startX - cx) + (startY - cy) * (startY - cy));
             if (radius < 1e-9) return false;
 
             double sweep = endAngle - startAngle;
@@ -283,6 +284,8 @@ namespace MillSimSharp.Viewer
             float stepRadians = MathF.Max(arcSegmentAngleDegrees, 0.1f) * MathF.PI / 180f;
             int segments = Math.Max(1, (int)Math.Ceiling(Math.Abs(sweep) / stepRadians));
 
+            var end = new Vector3((float)endX, (float)endY, (float)endZ);
+
             for (int n = 1; n <= segments; n++)
             {
                 // The final chord lands exactly on the commanded end point: for I/J arcs this
@@ -300,7 +303,7 @@ namespace MillSimSharp.Viewer
                     target = new Vector3(
                         (float)(cx + radius * Math.Cos(angle)),
                         (float)(cy + radius * Math.Sin(angle)),
-                        (float)(start.Z + (end.Z - start.Z) * t));
+                        (float)(startZ + (endZ - startZ) * t));
                 }
                 commands.Add(new G1Move(target, (float)feed));
             }

@@ -27,7 +27,8 @@ namespace MillSimSharp.Geometry
         private readonly BoundingBox _bounds;
         private readonly float _narrowBandWidth;
         private readonly float[,,] _distances;
-        private VoxelGrid? _boundVoxelGrid;
+        private VoxelGrid? _sourceVoxelGrid;
+        private VoxelGrid? _subscribedVoxelGrid;
 
         /// <summary>
         /// Gets the resolution (voxel size) in millimeters.
@@ -87,7 +88,8 @@ namespace MillSimSharp.Geometry
                 bounds.Min + new Vector3(_sizeX, _sizeY, _sizeZ) * resolution);
             _narrowBandWidth = narrowBandWidth * resolution;
             _distances = new float[_sizeX, _sizeY, _sizeZ];
-            _boundVoxelGrid = null;
+            _sourceVoxelGrid = null;
+            _subscribedVoxelGrid = null;
 
             FillSolidBlock();
         }
@@ -139,7 +141,8 @@ namespace MillSimSharp.Geometry
             _bounds = bounds;
             _narrowBandWidth = narrowBandWidth * resolution;
             _distances = new float[_sizeX, _sizeY, _sizeZ];
-            _boundVoxelGrid = voxelGrid;
+            _sourceVoxelGrid = voxelGrid;
+            _subscribedVoxelGrid = null;
         }
 
         /// <summary>
@@ -201,7 +204,8 @@ namespace MillSimSharp.Geometry
         /// before the call) are not synchronized. Use <see cref="SyncFromVoxelGrid"/> for a full
         /// rebuild. Direct carving into the SDF (for example <see cref="RemoveSphere"/>) is allowed
         /// while bound, but any region rebuilt from a later voxel change overwrites those edits;
-        /// call <see cref="UnbindFromVoxelGrid"/> to keep SDF-native edits.
+        /// call <see cref="UnbindFromVoxelGrid"/> to keep SDF-native edits. The grid is also
+        /// remembered as the sync source for <see cref="SyncFromVoxelGrid"/>.
         /// </para>
         /// </summary>
         /// <exception cref="ArgumentException">Thrown when the grid is not compatible with this SDF grid.</exception>
@@ -209,10 +213,11 @@ namespace MillSimSharp.Geometry
         {
             if (grid == null) throw new ArgumentNullException(nameof(grid));
             EnsureCompatible(grid);
-            if (_boundVoxelGrid != null)
+            if (_subscribedVoxelGrid != null)
                 UnbindFromVoxelGrid();
 
-            _boundVoxelGrid = grid;
+            _sourceVoxelGrid = grid;
+            _subscribedVoxelGrid = grid;
             grid.VoxelsChanged += OnVoxelGridChanged;
         }
 
@@ -240,19 +245,21 @@ namespace MillSimSharp.Geometry
 
         /// <summary>
         /// Unbinds from the source VoxelGrid: future voxel changes no longer update this SDF and
-        /// direct SDF edits are preserved. Rebinding does not resynchronize existing values; call
-        /// <see cref="SyncFromVoxelGrid"/> when a full rebuild is wanted.
+        /// direct SDF edits are preserved. The source grid is remembered, so
+        /// <see cref="SyncFromVoxelGrid"/> can still rebuild the field from it later. Rebinding does
+        /// not resynchronize existing values either.
         /// </summary>
         public void UnbindFromVoxelGrid()
         {
-            if (_boundVoxelGrid == null) return;
-            _boundVoxelGrid.VoxelsChanged -= OnVoxelGridChanged;
-            _boundVoxelGrid = null;
+            if (_subscribedVoxelGrid == null) return;
+            _subscribedVoxelGrid.VoxelsChanged -= OnVoxelGridChanged;
+            _subscribedVoxelGrid = null;
         }
 
         /// <summary>
         /// Rebuilds the whole field from the source voxel grid (the grid passed to
-        /// <see cref="FromVoxelGrid"/> or <see cref="BindToVoxelGrid"/>).
+        /// <see cref="FromVoxelGrid"/> or <see cref="BindToVoxelGrid"/>, kept after
+        /// <see cref="UnbindFromVoxelGrid"/>).
         /// <para>
         /// Use this after edits made while unbound, or to discard direct SDF carving, so that every
         /// sample is derived from the current voxel state. Incremental binding only synchronizes
@@ -263,7 +270,7 @@ namespace MillSimSharp.Geometry
         /// voxel grid (created with the native constructor and never bound).</exception>
         public void SyncFromVoxelGrid()
         {
-            var voxelGrid = _boundVoxelGrid
+            var voxelGrid = _sourceVoxelGrid
                 ?? throw new InvalidOperationException(
                     "This SDF grid has no source voxel grid. Use SDFGrid.FromVoxelGrid or BindToVoxelGrid first.");
 
@@ -273,8 +280,8 @@ namespace MillSimSharp.Geometry
 
         private void OnVoxelGridChanged(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
         {
-            if (_boundVoxelGrid == null) return;
-            RebuildRegion(_boundVoxelGrid, minX, minY, minZ, maxX, maxY, maxZ);
+            if (_subscribedVoxelGrid == null) return;
+            RebuildRegion(_subscribedVoxelGrid, minX, minY, minZ, maxX, maxY, maxZ);
         }
 
         /// <summary>

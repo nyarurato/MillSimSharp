@@ -83,13 +83,21 @@ namespace MillSimSharp.Simulation
                 throw new ArgumentException("Tool axis must be finite.", nameof(axisTowardSpindle));
             }
 
-            float length = axisTowardSpindle.Length();
-            if (length < 1e-6f)
+            // Normalize in double precision: squaring large float components would overflow and
+            // tiny non-zero axes must still be accepted.
+            double length = Math.Sqrt(
+                (double)axisTowardSpindle.X * axisTowardSpindle.X +
+                (double)axisTowardSpindle.Y * axisTowardSpindle.Y +
+                (double)axisTowardSpindle.Z * axisTowardSpindle.Z);
+            if (!(length > 0.0))
             {
                 throw new ArgumentException("Tool axis must be a non-zero vector.", nameof(axisTowardSpindle));
             }
 
-            return axisTowardSpindle / length;
+            return new Vector3(
+                (float)(axisTowardSpindle.X / length),
+                (float)(axisTowardSpindle.Y / length),
+                (float)(axisTowardSpindle.Z / length));
         }
     }
 }

@@ -8,15 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ToolOrientation.FromAxisTowardSpindle(axis)` for IJK-style pose input (canonical orientation with roll `C = 0`).
-- `SDFGrid.SyncFromVoxelGrid()` rebuilds the field from its source voxel grid.
+- `ToolOrientation.FromAxisTowardSpindle(axis)` for IJK-style pose input (shortest-rotation orientation; any finite non-zero axis is accepted).
+- `SDFGrid.SyncFromVoxelGrid()` rebuilds the field from its source voxel grid (also after `UnbindFromVoxelGrid`).
 - `ChunkedVoxelMeshBuilder` per-chunk API (`UpdateChunks`, `GetChunkMesh`, `GetChunkCoordinates`) for incremental rendering.
 
 ### Changed
 
 - **Zero-size bounds are rejected** by `VoxelGrid` and `SDFGrid` (`ArgumentException`); an unconfigured `MillSimulation` stock now fails fast instead of building a degenerate grid.
 - **STL export writes geometric facet normals** instead of copied vertex normals; degenerate triangles get a zero normal.
-- **`CoordinateTransform.InterpolateOrientation` uses shortest-rotation slerp**, matching the simulator pose path (the midpoint of 350° → 10° is now 0°, not 180°).
+- **`CoordinateTransform.InterpolateOrientation` uses shortest-rotation slerp**, matching the simulator pose path (the midpoint of 350° → 10° is now 0°, not 180°). The returned Euler values may be an equivalent representation with different angles (e.g. 350° → -10°).
 - Voxel mesh output is deterministic: the same grid always yields identical vertex arrays and STL bytes (the vertex order may differ from previous releases).
 - Documented material-state and lifecycle contracts: `FromVoxelGrid` = one-time snapshot, `BindToVoxelGrid` = future changes only, `UnbindFromVoxelGrid` keeps SDF-native edits; `MillSimulation.Reset()` replaces the grid / simulator / executor (tool kept, subscriptions not migrated); executor `Reset` / `LoadCommands` do not restore stock.
 - Documented accuracy and collision scope in `docs/Accuracy.md`: voxel-center sampling, pose-sampling error, narrow band clamping, and single-pose, cutting-edge-only collision checks (no holder / fixture / target part).
@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `ToolpathExecutor.ExecuteNextSteps` no longer skips a command that throws: the cursor advances only after success and a failed last command is not reported as completed.
-- Viewer G-code parser: inconsistent I/J arcs are ignored without moving the tool, and the last chord lands exactly on the commanded end (previously the tool position and the emitted arc could jump apart).
+- Viewer G-code parser: inconsistent I/J arcs are ignored without moving the tool, valid arcs far from the origin are no longer misjudged (the radius check uses double precision), and the last chord lands exactly on the commanded end (previously the tool position and the emitted arc could jump apart).
+- `ToolOrientation.FromAxisTowardSpindle` now returns the actual shortest rotation (the previous construction added an unnecessary roll, e.g. 98.4° instead of 90°), and tool axes are normalized robustly: tiny (but non-zero) and very large finite axes are accepted by `FromAxisTowardSpindle` and `ToolCollisionDetector.IntersectsMaterial` as documented.
 
 ## [0.2.1] - 2026-09-22
 

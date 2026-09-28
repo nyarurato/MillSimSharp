@@ -90,6 +90,24 @@ namespace MillSimSharp.Tests.Simulation
         }
 
         [Test]
+        public void IntersectsMaterial_TinyOrHugeAxis_IsNormalized()
+        {
+            // Review regression: finite non-zero axes must be accepted. The previous float
+            // normalization rejected tiny axes and overflowed for huge components.
+            var bbox = new BoundingBox(new Vector3(-2, -2, 6), new Vector3(2, 2, 9));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            var shank = new FlatEndMillGeometry(2f, 10f);
+
+            bool unit = ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, Vector3.UnitZ);
+            bool tiny = ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, new Vector3(0, 0, 1e-7f));
+            bool huge = ToolCollisionDetector.IntersectsMaterial(grid, shank, Vector3.Zero, new Vector3(0, 0, 1e20f));
+
+            Assert.That(unit, Is.True);
+            Assert.That(tiny, Is.EqualTo(unit));
+            Assert.That(huge, Is.EqualTo(unit));
+        }
+
+        [Test]
         public void IntersectsMaterial_ZeroOrNonFiniteAxis_Throws()
         {
             var grid = new VoxelGrid(StockBounds, 1.0f);

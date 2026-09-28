@@ -25,6 +25,12 @@ namespace MillSimSharp.Tests.Toolpath
             return bbox.Min + new Vector3((ix + 0.5f) * resolution, (iy + 0.5f) * resolution, (iz + 0.5f) * resolution);
         }
 
+        private static float RotationAngleDegrees(ToolOrientation orientation)
+        {
+            Quaternion q = orientation.GetQuaternion();
+            return 2f * MathF.Acos(Math.Clamp(MathF.Abs(q.W), -1f, 1f)) * 180f / MathF.PI;
+        }
+
         [Test]
         public void ToolOrientation_Quaternion_MatchesAxisDirections()
         {
@@ -105,6 +111,11 @@ namespace MillSimSharp.Tests.Toolpath
                 Assert.That(roundTrip.X, Is.EqualTo(axis.X).Within(1e-5f), $"X for {axis}");
                 Assert.That(roundTrip.Y, Is.EqualTo(axis.Y).Within(1e-5f), $"Y for {axis}");
                 Assert.That(roundTrip.Z, Is.EqualTo(axis.Z).Within(1e-5f), $"Z for {axis}");
+
+                // The rotation must be the shortest one: angle = acos(u . +Z).
+                float expectedAngle = MathF.Acos(Math.Clamp(axis.Z, -1f, 1f)) * 180f / MathF.PI;
+                Assert.That(RotationAngleDegrees(orientation), Is.EqualTo(expectedAngle).Within(0.05f),
+                    $"shortest rotation angle for {axis}");
             }
 
             // Hand-derived case: a 45 degree tilt around X has the canonical A = 45, B = C = 0.
@@ -113,6 +124,49 @@ namespace MillSimSharp.Tests.Toolpath
             Assert.That(tilted.A, Is.EqualTo(45f).Within(1e-3f));
             Assert.That(tilted.B, Is.EqualTo(0f).Within(1e-3f));
             Assert.That(tilted.C, Is.EqualTo(0f).Within(1e-3f));
+        }
+
+        [Test]
+        public void Orientation_FromAxis_UsesShortestRotation()
+        {
+            // Review regression: (sqrt(1/2), -sqrt(1/2), 0) returned the right axis but with a
+            // 98.4 degree rotation; the shortest rotation is 90 degrees.
+            Vector3 axis = Vector3.Normalize(new Vector3(1, -1, 0));
+
+            ToolOrientation orientation = ToolOrientation.FromAxisTowardSpindle(axis);
+
+            Assert.That(RotationAngleDegrees(orientation), Is.EqualTo(90f).Within(0.01f));
+
+            Vector3 roundTrip = orientation.GetAxisTowardSpindle();
+            Assert.That(roundTrip.X, Is.EqualTo(axis.X).Within(1e-5f));
+            Assert.That(roundTrip.Y, Is.EqualTo(axis.Y).Within(1e-5f));
+            Assert.That(roundTrip.Z, Is.EqualTo(axis.Z).Within(1e-5f));
+        }
+
+        [Test]
+        public void Orientation_FromAxis_TinyAndHugeAxes_AreNormalized()
+        {
+            // Review regression: finite non-zero axes must be accepted. The previous float
+            // normalization rejected tiny axes and overflowed for huge components.
+            var axes = new[]
+            {
+                new Vector3(1e-7f, 0, 0),
+                new Vector3(1e-45f, 0, 0), // subnormal but non-zero
+                new Vector3(1e20f, 0, 0),
+                new Vector3(0, 1e20f, 0),
+            };
+
+            foreach (Vector3 axis in axes)
+            {
+                ToolOrientation orientation = ToolOrientation.FromAxisTowardSpindle(axis);
+                Vector3 roundTrip = orientation.GetAxisTowardSpindle();
+                var expected = Vector3.Normalize(
+                    new Vector3(MathF.Sign(axis.X), MathF.Sign(axis.Y), MathF.Sign(axis.Z)));
+
+                Assert.That(roundTrip.X, Is.EqualTo(expected.X).Within(1e-5f), $"X for {axis}");
+                Assert.That(roundTrip.Y, Is.EqualTo(expected.Y).Within(1e-5f), $"Y for {axis}");
+                Assert.That(roundTrip.Z, Is.EqualTo(expected.Z).Within(1e-5f), $"Z for {axis}");
+            }
         }
 
         [Test]

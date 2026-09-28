@@ -59,7 +59,7 @@ sdfGrid.RemoveFiniteCylinder(start, end, radius);
 
 - `FromVoxelGrid` は **one-time snapshot** です。以後の `VoxelGrid` の変更は SDF に反映されません（ソース grid は `SyncFromVoxelGrid` 用に記憶されます）。
 - `BindToVoxelGrid` は **以後の変更の購読のみ**で、既存値は同期しません。バインド前に発生したボクセル変更は `SyncFromVoxelGrid()`（全領域再構築）を呼ぶまで反映されません。
-- bound SDF への直接 carve（`RemoveSphere` など）は許容されますが、ボクセル変更がトリガーする再構築が同じ領域に及ぶと上書きされます。SDF-native の編集を維持するには `UnbindFromVoxelGrid()` で解除してください。再バインドしても既存値は同期されないため、必要な場合は `SyncFromVoxelGrid()` を呼びます。
+- bound SDF への直接 carve（`RemoveSphere` など）は許容されますが、ボクセル変更がトリガーする再構築が同じ領域に及ぶと上書きされます。SDF-native の編集を維持するには `UnbindFromVoxelGrid()` で解除してください。解除後もソース grid は記憶されるため、`SyncFromVoxelGrid()` で再バインドなしに全領域を再構築できます。
 
 ### 内部実装
 

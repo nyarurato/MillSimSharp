@@ -166,12 +166,14 @@ namespace MillSimSharp.Toolpath
         /// Creates an orientation from the direction pointing from the physical tool tip toward the
         /// spindle (tip -> spindle), as provided by IJK-style pose input.
         /// <para>
-        /// The result is the canonical minimum rotation from the default spindle axis (+Z) to the
-        /// given direction, expressed in the existing ZYX (C -> B -> A) Euler convention with
-        /// C = 0: <c>B = asin(x)</c>, <c>A = atan2(-y, z)</c>. Machine-specific Euler conventions,
-        /// rotary unwind and tool-axis roll stay outside the core; roll does not change material
-        /// removal because tool cutting geometries are solids of revolution. For the antipodal
-        /// direction (0, 0, -1) the rotation is pinned to 180 degrees around X
+        /// The result is the <b>shortest rotation</b> from the default spindle axis (+Z) to the
+        /// given direction, expressed in the existing ZYX (C -> B -> A) Euler convention. The roll
+        /// component C is generally non-zero for general directions (the shortest rotation is
+        /// roll-free about the target axis). Any finite non-zero vector is accepted and normalized
+        /// internally; machine-specific Euler conventions, rotary unwind and tool-axis roll stay
+        /// outside the core, and roll does not change material removal because tool cutting
+        /// geometries are solids of revolution. For the antipodal direction (0, 0, -1), where the
+        /// shortest rotation is not unique, the rotation is pinned to 180 degrees around X
         /// (A = +/-180, B = C = 0).
         /// </para>
         /// </summary>
@@ -188,20 +190,34 @@ namespace MillSimSharp.Toolpath
                 throw new ArgumentException("Tool axis must be finite.", nameof(axisTowardSpindle));
             }
 
-            float length = axisTowardSpindle.Length();
-            if (length < 1e-6f)
+            // Normalize in double precision: squaring large float components would overflow
+            // (for example 1e20 squared) and tiny non-zero axes must still be accepted.
+            double length = Math.Sqrt(
+                (double)axisTowardSpindle.X * axisTowardSpindle.X +
+                (double)axisTowardSpindle.Y * axisTowardSpindle.Y +
+                (double)axisTowardSpindle.Z * axisTowardSpindle.Z);
+            if (!(length > 0.0))
             {
                 throw new ArgumentException("Tool axis must be a non-zero vector.", nameof(axisTowardSpindle));
             }
 
-            Vector3 u = axisTowardSpindle / length;
+            Vector3 u = new Vector3(
+                (float)(axisTowardSpindle.X / length),
+                (float)(axisTowardSpindle.Y / length),
+                (float)(axisTowardSpindle.Z / length));
 
-            // ZYX decomposition with roll C = 0: u = (sin B, -cos B sin A, cos B cos A).
-            float bRad = MathF.Asin(Math.Clamp(u.X, -1f, 1f));
-            float aRad = MathF.Atan2(-u.Y, u.Z);
+            // Shortest rotation from +Z to u: rotation axis Z x u, angle acos(u.Z); the quaternion
+            // is normalize((Z x u, 1 + u.Z)).
+            float dot = Math.Clamp(u.Z, -1f, 1f);
+            if (1f + dot < 1e-12f)
+            {
+                // Antipodal: the shortest rotation is not unique; pin it to 180 degrees around X.
+                return new ToolOrientation(180, 0, 0);
+            }
 
-            const float radiansToDegrees = 180f / MathF.PI;
-            return new ToolOrientation(aRad * radiansToDegrees, bRad * radiansToDegrees, 0f);
+            Vector3 cross = Vector3.Cross(Vector3.UnitZ, u);
+            Quaternion q = Quaternion.Normalize(new Quaternion(cross.X, cross.Y, cross.Z, 1f + dot));
+            return FromQuaternion(q);
         }
 
         /// <summary>

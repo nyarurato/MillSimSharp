@@ -151,6 +151,20 @@ namespace MillSimSharp.Tests.Viewer
                 "The CCW half circle must not take the (5,5) route");
         }
 
+        [Test]
+        public void Parse_Arc_IJ_LargeCoordinates_ConsistentRadius_IsAccepted()
+        {
+            // Review regression: a valid half circle far from the origin was ignored because the
+            // radius check ran on float-converted endpoints (the rounding exceeded the tolerance).
+            // Center (10000.01, 0), radius 0.01.
+            var points = ParseArcTargets("G3 X10000.02 Y0 I0.01 J0\n",
+                new Vector3(10000, 0, 0), segmentAngleDegrees: 5f);
+
+            Assert.That(points, Is.Not.Empty, "a valid I/J arc far from the origin must not be ignored");
+            Assert.That(points[^1].X, Is.EqualTo(10000.02f).Within(0.001f));
+            Assert.That(points[^1].Y, Is.EqualTo(0f).Within(0.001f));
+        }
+
         // ---------------------------------------------------------------------
         // R-format arcs: positive R = minor arc, negative R = major arc
         // ---------------------------------------------------------------------
