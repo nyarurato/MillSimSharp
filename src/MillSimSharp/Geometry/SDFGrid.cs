@@ -519,6 +519,45 @@ namespace MillSimSharp.Geometry
             return Vector3.UnitY; // Default normal if gradient is zero
         }
 
+        /// <summary>
+        /// Counts the samples that contain material (signed distance below zero).
+        /// The count is center-sampled and therefore resolution-limited.
+        /// </summary>
+        /// <returns>Material sample count.</returns>
+        public int CountMaterialSamples()
+        {
+            int count = 0;
+            for (int z = 0; z < _sizeZ; z++)
+                for (int y = 0; y < _sizeY; y++)
+                    for (int x = 0; x < _sizeX; x++)
+                        if (_distances[x, y, z] < 0f) count++;
+
+            return count;
+        }
+
+        /// <summary>
+        /// Gets the material volume in cubic millimeters (material sample count times the sample
+        /// volume). The value is center-sampled and therefore resolution-limited, matching
+        /// <see cref="VoxelGrid.GetMaterialVolume"/>.
+        /// </summary>
+        /// <returns>Material volume in mm^3.</returns>
+        public double GetMaterialVolume()
+        {
+            return CountMaterialSamples() * (double)_resolution * _resolution * _resolution;
+        }
+
+        /// <summary>
+        /// Gets the air (non-material) volume inside the effective bounds in cubic millimeters.
+        /// The value is center-sampled and therefore resolution-limited, matching
+        /// <see cref="VoxelGrid.GetRemovedVolume"/>.
+        /// </summary>
+        /// <returns>Removed volume in mm^3.</returns>
+        public double GetRemovedVolume()
+        {
+            long total = (long)_sizeX * _sizeY * _sizeZ;
+            return (total - CountMaterialSamples()) * (double)_resolution * _resolution * _resolution;
+        }
+
         private void ClampRegion(ref int minX, ref int minY, ref int minZ, ref int maxX, ref int maxY, ref int maxZ)
         {
             minX = Math.Max(0, minX);

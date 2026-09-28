@@ -271,5 +271,26 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(grid.Dimensions, Is.EqualTo((1290, 1290, 1290)));
             Assert.That(grid.CountMaterialVoxels(), Is.EqualTo(2146689000));
         }
+
+        [Test]
+        public void VolumeHelpers_MatchVoxelCounts()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(10, 10, 10));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 3f);
+
+            int material = grid.CountMaterialVoxels();
+            Assert.That(grid.GetMaterialVolume(), Is.EqualTo(material).Within(1e-9),
+                "at resolution 1 the volume equals the material voxel count");
+            Assert.That(grid.GetRemovedVolume(), Is.EqualTo(1000 - material).Within(1e-9));
+            Assert.That(grid.GetMaterialVolume() + grid.GetRemovedVolume(), Is.EqualTo(1000.0).Within(1e-9),
+                "material and removed volumes must cover the effective bounds");
+
+            var fine = new VoxelGrid(bbox, 0.5f);
+            fine.RemoveVoxelsInSphere(Vector3.Zero, 3f);
+            Assert.That(fine.GetMaterialVolume(),
+                Is.EqualTo(fine.CountMaterialVoxels() * 0.125).Within(1e-9),
+                "each voxel has a volume of resolution^3");
+        }
     }
 }

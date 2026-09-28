@@ -672,26 +672,12 @@ namespace MillSimSharp.Tests.Simulation
 
         private static double MeasureRemovedVolume(VoxelGrid grid)
         {
-            var (sx, sy, sz) = grid.Dimensions;
-            long total = (long)sx * sy * sz;
-            long removed = total - grid.CountMaterialVoxels();
-            double cellVolume = (double)grid.Resolution * grid.Resolution * grid.Resolution;
-            return removed * cellVolume;
+            return grid.GetRemovedVolume();
         }
 
         private static double MeasureRemovedVolume(SDFGrid sdf)
         {
-            // SDFGrid has no public removed-sample count, so the test counts the air samples itself.
-            var (sx, sy, sz) = sdf.Dimensions;
-            long material = 0;
-            for (int z = 0; z < sz; z++)
-                for (int y = 0; y < sy; y++)
-                    for (int x = 0; x < sx; x++)
-                        if (sdf.GetDistance(x, y, z) < 0f) material++;
-
-            long removed = (long)sx * sy * sz - material;
-            double cellVolume = (double)sdf.Resolution * sdf.Resolution * sdf.Resolution;
-            return removed * cellVolume;
+            return sdf.GetRemovedVolume();
         }
 
         [TestCase(1.0f)]

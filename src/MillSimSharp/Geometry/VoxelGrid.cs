@@ -730,6 +730,28 @@ namespace MillSimSharp.Geometry
         }
 
         /// <summary>
+        /// Gets the material volume in cubic millimeters (material voxel count times the voxel
+        /// volume). The value is center-sampled and therefore resolution-limited, matching
+        /// <see cref="SDFGrid.GetMaterialVolume"/>.
+        /// </summary>
+        /// <returns>Material volume in mm^3.</returns>
+        public double GetMaterialVolume()
+        {
+            return CountMaterialVoxels() * (double)_resolution * _resolution * _resolution;
+        }
+
+        /// <summary>
+        /// Gets the air (non-material) volume inside the effective bounds in cubic millimeters.
+        /// The value is center-sampled and therefore resolution-limited, matching
+        /// <see cref="SDFGrid.GetRemovedVolume"/>.
+        /// </summary>
+        /// <returns>Removed volume in mm^3.</returns>
+        public double GetRemovedVolume()
+        {
+            return (_totalVoxels - CountMaterialVoxels()) * (double)_resolution * _resolution * _resolution;
+        }
+
+        /// <summary>
         /// Get list of occupied voxel coordinates.
         /// </summary>
         public List<(int x, int y, int z)> GetOccupiedVoxels()

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - IJK-style pose input `ToolOrientation.FromAxisTowardSpindle`, `SDFGrid.SyncFromVoxelGrid()`, and a per-chunk `ChunkedVoxelMeshBuilder` API (`UpdateChunks` / `GetChunkMesh` / `GetChunkCoordinates`).
+- `VoxelGrid` / `SDFGrid` volume helpers: `GetMaterialVolume()` and `GetRemovedVolume()`, plus `SDFGrid.CountMaterialSamples()`. All counts and volumes are center-sampled and therefore resolution-limited.
 
 ### Changed
 

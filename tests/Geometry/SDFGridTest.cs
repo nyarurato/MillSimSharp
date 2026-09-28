@@ -346,5 +346,47 @@ namespace MillSimSharp.Tests.Geometry
             Assert.That(sdf.Bounds.Min, Is.EqualTo(voxelGrid.Bounds.Min));
             Assert.That(sdf.Bounds.Max, Is.EqualTo(voxelGrid.Bounds.Max));
         }
+
+        [Test]
+        public void VolumeHelpers_MatchSampleSigns()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
+            var sdf = new SDFGrid(bbox, 1.0f);
+
+            Assert.That(sdf.CountMaterialSamples(), Is.EqualTo(8000),
+                "a native SDF starts as all material");
+            Assert.That(sdf.GetRemovedVolume(), Is.EqualTo(0.0));
+
+            sdf.RemoveSphere(Vector3.Zero, 3f);
+
+            int material = sdf.CountMaterialSamples();
+            double removed = sdf.GetRemovedVolume();
+
+            Assert.That(material, Is.LessThan(8000));
+            Assert.That(sdf.GetMaterialVolume(), Is.EqualTo(material).Within(1e-9));
+            Assert.That(sdf.GetMaterialVolume() + removed, Is.EqualTo(8000.0).Within(1e-9),
+                "material and removed volumes must cover the effective bounds");
+
+            // The removed volume is the center-sampled sphere volume; the error is bounded by the
+            // surface layer (surface area times one sample size).
+            double sphereVolume = 4.0 / 3.0 * Math.PI * 27.0;
+            double surfaceLayer = 4.0 * Math.PI * 9.0 * sdf.Resolution;
+            Assert.That(removed, Is.EqualTo(sphereVolume).Within(surfaceLayer));
+        }
+
+        [Test]
+        public void FromVoxelGrid_VolumeHelpers_AgreeWithinSurfaceLayer()
+        {
+            var bbox = BoundingBox.FromCenterAndSize(Vector3.Zero, new Vector3(20, 20, 20));
+            var grid = new VoxelGrid(bbox, 1.0f);
+            grid.RemoveVoxelsInSphere(Vector3.Zero, 5f);
+
+            var sdf = SDFGrid.FromVoxelGrid(grid);
+
+            double difference = Math.Abs(sdf.GetRemovedVolume() - grid.GetRemovedVolume());
+            double surfaceLayer = 4.0 * Math.PI * 25.0 * grid.Resolution;
+            Assert.That(difference, Is.LessThanOrEqualTo(surfaceLayer),
+                "SDF and voxel volume estimates may differ only in the surface layer");
+        }
     }
 }
