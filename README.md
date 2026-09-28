@@ -28,7 +28,7 @@ MillSimSharp simulates CNC milling operations using both voxel-based representat
 
 ## Documentation
 
-- [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md) - release notes (latest: **0.2.1**)
+- [CHANGELOG.md](https://github.com/nyarurato/MillSimSharp/blob/master/CHANGELOG.md) - release notes (latest: **0.2.2**)
 - [docs/SDF.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/SDF.md) - SDF internals: algorithms, precision and CSG behaviour (Japanese)
 - [docs/Accuracy.md](https://github.com/nyarurato/MillSimSharp/blob/master/docs/Accuracy.md) - accuracy model: resolution, pose sampling, mesh reconstruction and collision scope (Japanese)
 - [samples/README.md](https://github.com/nyarurato/MillSimSharp/blob/master/samples/README.md) - sample project walkthroughs
